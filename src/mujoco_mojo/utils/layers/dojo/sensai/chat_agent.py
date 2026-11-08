@@ -12,7 +12,6 @@ from pydantic_ai.models import Model
 
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.log import get_logger
-from mujoco_mojo.utils.statusing import JobStatus
 
 from .column_manifest_agent import column_manifest_agent
 from .deps import SensAIDeps
@@ -30,7 +29,8 @@ Always call the matching tool rather than guessing from conversation history - d
 state changes between turns. Execute plot edits and profile CRUD immediately; never ask for \
 confirmation. Keep your reply to 1-3 sentences, markdown allowed (bold, lists), no JSON or \
 code blocks. If a specialist reports nothing is loaded (e.g. no job or plot config), say so \
-plainly instead of inventing details.
+plainly instead of inventing details. When a specialist gives numbers or trial numbers, repeat \
+them exactly.
 
 Questions about how to use MuJoCo Mojo itself (installing it, writing the generate or \
 runtime scripts, running jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the \
@@ -72,18 +72,16 @@ def _delegate_model(ctx: RunContext[SensAIDeps]) -> Model | None:
 
 
 @chat_agent.tool
-async def ask_job_status_agent(
-    ctx: RunContext[SensAIDeps], request: str
-) -> JobStatus | None:
+async def ask_job_status_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
     Forward a job-status request to the job-status agent and return its answer.
 
     Args:
         ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `job_status_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.
-        request: The request to hand off, in natural language (e.g. "how far along is the job?" or "what happened on trial 12?").
+        request: The request to hand off, in natural language (e.g. "how far along is the job?", "which trials are running?" or "which trial took the longest?").
 
     Returns:
-        The current job status, or None if no job is loaded.
+        The answer, in words, with the numbers and trial numbers from the job's status. Say it as it is: do not round or change them.
 
     """
     result = await job_status_agent.run(

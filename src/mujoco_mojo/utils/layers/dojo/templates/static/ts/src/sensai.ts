@@ -3,36 +3,56 @@ import type { AlpineMagics } from "./types/global";
 import {
   EditorView,
   EditorState,
-  json,
   syntaxHighlighting,
   classHighlighter,
 } from "./lib/codemirror";
+import { codeLanguage } from "./lib/code-language";
 import { addCopyButton } from "./lib/code-block";
+import { renderMath } from "./lib/math";
 import { renderMarkdown } from "./lib/markdown";
 import {
   MAX_TABS,
   blankTab,
+  bubbleStyle,
   chatRequestBody,
   composerSize,
   createSseParser,
   enabledFromSettings,
+  fullBubbleHeight,
+  groupExchanges,
   headerTooltip,
   historyFileName,
   isAtBottom,
   lastUserIndex,
+  loadOpen,
   loadPinned,
   loadSensAITabs,
   messageLayout,
+  promptScrollTop,
+  rememberedScroll,
   resultContent,
   revealStep,
+  saveOpen,
   saveSensAITabs,
   savePinned,
   tabsExport,
   titleFromMessage,
+  BUBBLE_SETTLE_MS,
+  SCROLL_HOLD_MS,
+  type Exchange,
   type SensAIMessage,
   type SensAITab,
   type SseEvent,
 } from "./lib/sensai";
+import {
+  DEFAULT_PLACEHOLDER,
+  HOLD_MS,
+  advance,
+  pickNext,
+  startTyper,
+  visibleText,
+  type Typer,
+} from "./lib/sensai-placeholder";
 import { pickNextActiveOnClose } from "./lib/tab-session";
 
 interface SensAIConfig {
@@ -61,6 +81,15 @@ function sensai() {
     thinkingLabel: null as string | null,
     enabled: null as boolean | null,
     input: "",
+    // the input's placeholder, which types out examples of what to ask while the
+    // window is open (see lib/sensai-placeholder.ts)
+    placeholder: DEFAULT_PLACEHOLDER,
+    _typer: null as Typer | null,
+    _typerTimer: null as number | null,
+    // ends the hold that keeps the list at a chat's place while its contents settle, when there is one
+    _holdStop: null as (() => void) | null,
+    // the place it holds the list at
+    _holdPlace: null as number | null,
     atBottom: true,
     hasNewResponse: false,
     _revealQueue: "",
@@ -76,6 +105,11 @@ function sensai() {
     // the open chat's messages, which is what the message list shows
     get messages(): SensAIMessage[] {
       return this.activeTab?.messages ?? [];
+    },
+
+    // the open chat as questions with their answers, which is how the list shows it
+    get exchanges(): Exchange[] {
+      return groupExchanges(this.messages);
     },
 
     // whether message `i` is the latest one the user sent, which starts open
@@ -118,6 +152,13 @@ function sensai() {
         this.enabled = false;
       }
 
+      // the window is as it was left, unless SensAI is turned off, when it is
+      // neither shown nor animated (the saved choice is kept for when it is on)
+      if (this.enabled !== false && loadOpen()) {
+        this.open = true;
+        this._showWindow();
+      }
+
       // keeps this FAB in sync with dojo.sensai.enabled if the user flips it
       // in the settings panel without reloading the page - see settings-panel.ts's
       // _applySettingsWrite for the dispatch side.
@@ -130,18 +171,66 @@ function sensai() {
 
     toggle() {
       this.open = !this.open;
-      if (this.open) {
-        this.hasNewResponse = false;
-        this._scrollToBottom();
-        // dispatch after next tick so the panel is back in layout flow and scrollHeights are valid
-        void (this as unknown as AlpineMagics).$nextTick(() => {
-          window.dispatchEvent(new CustomEvent("sensai-remeasure"));
-        });
+      saveOpen(this.open);
+      if (this.open) this._showWindow();
+      else {
+        this._stopHold();
+        this._stopPlaceholder();
       }
     },
 
     close() {
       this.open = false;
+      saveOpen(false);
+      this._stopHold();
+      this._stopPlaceholder();
+    },
+
+    // what happens when the window comes up, from a click or from being left open
+    _showWindow() {
+      this.hasNewResponse = false;
+      this._scrollToLastPrompt();
+      this._startPlaceholder();
+      // dispatch after next tick so the panel is back in layout flow and scrollHeights are valid
+      void (this as unknown as AlpineMagics).$nextTick(() => {
+        window.dispatchEvent(new CustomEvent("sensai-remeasure"));
+      });
+    },
+
+    // called by Alpine when the component is removed from the page
+    destroy() {
+      this._stopHold();
+      this._stopPlaceholder();
+    },
+
+    // ---- the placeholder ----
+
+    // the default text shows first and stays a moment, then the examples take
+    // turns. nothing runs while the window is closed, and someone who asks the
+    // browser for less motion gets the default text and no animation
+    _startPlaceholder() {
+      if (this._typerTimer !== null) return;
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+      this._typer = startTyper();
+      this.placeholder = visibleText(this._typer);
+      this._schedulePlaceholderStep(HOLD_MS);
+    },
+
+    _schedulePlaceholderStep(delay: number) {
+      this._typerTimer = window.setTimeout(() => {
+        if (!this._typer) return;
+        const next = advance(this._typer, (previous) => pickNext(previous));
+        this._typer = next.typer;
+        this.placeholder = visibleText(next.typer);
+        this._schedulePlaceholderStep(next.delay);
+      }, delay);
+    },
+
+    _stopPlaceholder() {
+      if (this._typerTimer !== null) window.clearTimeout(this._typerTimer);
+      this._typerTimer = null;
+      this._typer = null;
+      this.placeholder = DEFAULT_PLACEHOLDER;
     },
 
     // what a click elsewhere on the page, or Escape, does: close the window,
@@ -167,25 +256,87 @@ function sensai() {
     switchTab(id: string) {
       if (id === this.activeId || !this.tabs.some((t) => t.id === id)) return;
       const from = this.activeTab;
-      if (from) from.draft = this.input;
+      if (from) {
+        from.draft = this.input;
+        // where its list is now, which it gets back when it is shown again. every
+        // chat is shown in the same list, so nothing else would keep it
+        const list = (this as unknown as AlpineMagics).$refs["messages"];
+        if (list) from.scrollTop = this._holdPlace ?? list.scrollTop;
+      }
       this.renamingId = null;
       this.activeId = id;
       this._showActiveTab();
     },
 
     // what changes when another chat comes to the front: its unsent text goes
-    // in the box, it is no longer unread, and its messages are laid out afresh
+    // in the box, it is no longer unread, its messages are laid out afresh, and
+    // the list is put back where that chat left it. it does not scroll to
+    // anything of its own accord: a chat is where it was left
     _showActiveTab() {
+      // the old chat's hold goes at once: its contents are about to be replaced, and it
+      // would put the list back at the old place against the new ones
+      this._stopHold();
       const tab = this.activeTab;
       this.input = tab?.draft ?? "";
       if (tab) tab.unread = false;
       this.atBottom = true;
       this.hasNewResponse = false;
       this._saveTabs();
-      this._scrollToBottom();
-      void (this as unknown as AlpineMagics).$nextTick(() => {
+      const magics = this as unknown as AlpineMagics;
+      void magics.$nextTick(() => {
         window.dispatchEvent(new CustomEvent("sensai-remeasure"));
+        // after the messages have laid themselves out, which changes the height of the list
+        void magics.$nextTick(() => this._restoreScroll());
       });
+    },
+
+    // puts the list where the open chat left it (the top for one that was never
+    // scrolled), and keeps it there while the chat's contents take their final height
+    _restoreScroll() {
+      const list = (this as unknown as AlpineMagics).$refs["messages"];
+      if (!list) return;
+      const place = rememberedScroll(this.activeTab);
+      this._putListAt(list, place);
+      this._holdListAt(list, place);
+    },
+
+    // moves the list to `place` and says whether that is the bottom, which the scroll
+    // button goes by
+    _putListAt(list: HTMLElement, place: number) {
+      list.scrollTop = place;
+      this.atBottom = isAtBottom(list.scrollHeight, list.scrollTop, list.clientHeight);
+    },
+
+    // a chat's contents are made when it is shown and go on taking their final height for a
+    // moment (code editors correct their estimate of themselves a frame later, math is
+    // typeset once KaTeX has loaded), and every change above `place` moves what it points
+    // at, so the list is put back at `place` whenever the contents change size. it is let
+    // go when the user takes hold of it, when something else scrolls it, or after
+    // SCROLL_HOLD_MS, whichever is first
+    _holdListAt(list: HTMLElement, place: number) {
+      if (typeof ResizeObserver === "undefined") return;
+      const observer = new ResizeObserver(() => {
+        if (this._holdStop !== null && list.scrollTop !== place) this._putListAt(list, place);
+      });
+      for (const child of Array.from(list.children)) observer.observe(child);
+      this._holdPlace = place;
+      const release = () => this._stopHold();
+      // the ways a person scrolls: the wheel, a finger, the scroll bar, and the keys (which reach the
+      // list from whatever inside it has focus)
+      const userEvents = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+      for (const name of userEvents) list.addEventListener(name, release, { passive: true });
+      const timer = window.setTimeout(release, SCROLL_HOLD_MS);
+      this._holdStop = () => {
+        observer.disconnect();
+        for (const name of userEvents) list.removeEventListener(name, release);
+        window.clearTimeout(timer);
+        this._holdStop = null;
+        this._holdPlace = null;
+      };
+    },
+
+    _stopHold() {
+      this._holdStop?.();
     },
 
     // closes a chat, stopping its request if one is running or waiting. the
@@ -254,7 +405,7 @@ function sensai() {
       this.queue.push(tab.id);
       const finished = this._drain();
       await (this as unknown as AlpineMagics).$nextTick();
-      this._scrollToBottom();
+      this._scrollToLastPrompt();
       await finished;
     },
 
@@ -288,7 +439,7 @@ function sensai() {
       this.thinkingLabel = null;
       const controller = new AbortController();
       this._abort = controller;
-      if (tab.id === this.activeId) this._scrollToBottom();
+      if (tab.id === this.activeId) this._scrollToLastPrompt();
 
       try {
         const pending = tab.messages[tab.messages.length - 1];
@@ -440,7 +591,9 @@ function sensai() {
       const size = composerSize(el.scrollHeight, getComputedStyle(el).lineHeight);
       el.style.height = size.height;
       el.style.overflowY = size.overflowY;
-      if (wasAtBottom && msgEl) {
+      // a chat that has just been shown is held at its own place, which this must not undo: a different
+      // draft in the box than the chat before had is what brings it here
+      if (wasAtBottom && msgEl && this._holdStop === null) {
         msgEl.scrollTop = msgEl.scrollHeight;
       }
     },
@@ -451,6 +604,7 @@ function sensai() {
     },
 
     scrollToBottom() {
+      this._stopHold();
       const el = (this as unknown as AlpineMagics).$refs["messages"];
       if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
       this.atBottom = true;
@@ -461,11 +615,47 @@ function sensai() {
       saveSensAITabs(this.tabs, this.activeId);
     },
 
-    _scrollToBottom() {
+    // where the window scrolls by itself (a message sent, a reply arriving, a
+    // chat shown): the last prompt goes to the top of the list with the reply
+    // below it, so an answer is read from its start. the browser stops at the
+    // end of the list, so a short reply leaves the prompt lower down; the
+    // button still goes to the very end (scrollToBottom)
+    _scrollToLastPrompt() {
       void (this as unknown as AlpineMagics).$nextTick(() => {
         const el = (this as unknown as AlpineMagics).$refs["messages"];
-        if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+        if (!el) return;
+        const prompts = el.querySelectorAll<HTMLElement>('[data-role="user"]');
+        this._scrollListTo(el, prompts[prompts.length - 1]);
       });
+    },
+
+    // what clicking a question does besides opening it: takes the list up to where
+    // its exchange begins, which is the point when it is pinned at the top and the
+    // list is far down its answer. a click that ends a selection of its text is
+    // left alone
+    showExchange(from: HTMLElement) {
+      const list = (this as unknown as AlpineMagics).$refs["messages"];
+      const exchange = from.closest<HTMLElement>(".sensai-exchange");
+      if (!list || !exchange || window.getSelection()?.toString()) return;
+      this._scrollListTo(list, exchange);
+    },
+
+    // scrolls the list so `prompt` is at its top (or to the end of the list when
+    // there is none). a question pinned at the top is not where it began, so the
+    // top of the exchange it is in is used when there is one
+    _scrollListTo(list: HTMLElement, prompt: HTMLElement | undefined) {
+      this._stopHold();
+      const exchange = prompt?.closest<HTMLElement>(".sensai-exchange") ?? null;
+      const where = exchange ?? prompt;
+      // the list has no padding of its own above (a question that sticks to the top
+      // has to be flush with it), so the space above a question is its exchange's.
+      // the question is put at the very top, which is also where it sticks, so it
+      // does not move when it goes from scrolling to stuck
+      const lead = exchange ? parseFloat(getComputedStyle(exchange).paddingTop) || 0 : 0;
+      const top = where
+        ? promptScrollTop(list.getBoundingClientRect().top, list.scrollTop, where.getBoundingClientRect().top) + lead
+        : list.scrollHeight;
+      list.scrollTo({ top, behavior: "smooth" });
     },
 
     // Reveals streamingContent a few characters at a time on a fixed interval,
@@ -487,7 +677,7 @@ function sensai() {
         const step = revealStep(this._revealQueue.length);
         this.streamingContent += this._revealQueue.slice(0, step);
         this._revealQueue = this._revealQueue.slice(step);
-        if (this.open && this.atBottom) this._scrollToBottom();
+        if (this.open && this.atBottom) this._scrollToLastPrompt();
       }, 16);
     },
 
@@ -549,7 +739,8 @@ function initSensAICodeBlocks(container: HTMLElement): void {
         // reads in dark mode too and follows the toggle with no reconfiguring here
         syntaxHighlighting(classHighlighter),
       ];
-      if (lang === "json") extensions.unshift(json());
+      const language = codeLanguage(lang);
+      if (language) extensions.unshift(language);
       new EditorView({
         state: EditorState.create({ doc: code, extensions }),
         parent: el,
@@ -563,6 +754,7 @@ function initSensAICodeBlocks(container: HTMLElement): void {
 
 window.renderMarkdown = renderMarkdown;
 window.initSensAICodeBlocks = initSensAICodeBlocks;
+window.initSensAIMath = renderMath;
 
 // ---------------------------------------------------------------------------
 // per-message collapse/expand state
@@ -571,6 +763,8 @@ window.initSensAICodeBlocks = initSensAICodeBlocks;
 interface SensAIMsgState {
   open: boolean;
   single: boolean;
+  settled: boolean;
+  fullHeight: number;
   _role: string;
 }
 
@@ -581,8 +775,65 @@ function sensaiMsgData(role: string, isLastUser = false) {
   return {
     open: role !== "user" || isLastUser,
     single: false,
+    // opening and closing animate between pixel heights (see bubbleStyle in
+    // lib/sensai.ts): the height the bubble opens to, and whether the change is over
+    settled: true,
+    fullHeight: 0,
     copied: false,
     _role: role,
+    get bubbleStyle(): string {
+      return bubbleStyle({
+        single: this.single,
+        open: this.open,
+        settled: this.settled,
+        fullHeight: this.fullHeight,
+      });
+    },
+    // the header's button: opens a closed bubble and closes an open one
+    toggle() {
+      if (!this.single) this.setOpen(!this.open);
+    },
+    // clicking a closed bubble opens it; an open one is left as it is (setOpen
+    // does nothing when the bubble is already as asked)
+    expand() {
+      if (!this.single) this.setOpen(true);
+    },
+    // opens or closes the bubble, animating the change
+    setOpen(next: boolean) {
+      const self = this as unknown as SensAIMsgState & AlpineMagics;
+      if (next === self.open) return;
+      const bubble = self.$refs["bubble"];
+      if (next) {
+        self.fullHeight = bubble ? fullBubbleHeight(bubble) : 0;
+        self.settled = false;
+        self.open = true;
+        // once it has opened it has no height limit, so what it holds can grow
+        window.setTimeout(() => {
+          if (self.open) self.settled = true;
+        }, BUBBLE_SETTLE_MS);
+      } else {
+        // an open bubble has no height limit, which cannot be animated from: give
+        // it its height in pixels and let the browser see that, then close it
+        if (bubble && self.settled) {
+          bubble.style.maxHeight = `${fullBubbleHeight(bubble)}px`;
+          void bubble.offsetHeight;
+        }
+        self.settled = false;
+        self.open = false;
+      }
+    },
+    // what is done to a message once it is on the page: its code blocks become
+    // editors, it is measured, and its math is typeset (which waits for KaTeX the
+    // first time), after which it is measured again since math is taller than its
+    // source
+    hydrate(isLastUser = false) {
+      const self = this as unknown as SensAIMsgState & AlpineMagics & { measure(last: boolean): void };
+      initSensAICodeBlocks(self.$el);
+      self.measure(isLastUser);
+      void renderMath(self.$el).then((typeset) => {
+        if (typeset) self.measure(isLastUser);
+      });
+    },
     // copies a message's own text (the markdown of a reply, not its rendering)
     async copy(text: string) {
       const ok = await (Alpine.store("dojo") as DojoStore).copyText(text, "Message copied");
@@ -608,6 +859,7 @@ function sensaiMsgData(role: string, isLastUser = false) {
       );
       self.single = layout.single;
       self.open = layout.open;
+      self.settled = true;
     },
   };
 }

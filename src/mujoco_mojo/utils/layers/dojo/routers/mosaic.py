@@ -50,6 +50,7 @@ from .. import shared
 from ..plot_config import PlotConfig as _PlotConfig
 from ..plot_config import PlotProfile as _PlotProfile
 from ..plot_config import PlotProfileTab as _PlotProfileTab
+from ..trial_log import find_log_file, parse_log_file
 
 logger = get_logger(__name__)
 
@@ -1395,37 +1396,6 @@ async def get_trial_media_file(trial_id: str, filename: str) -> FileResponse:
     )
 
 
-_DEFAULT_LOG_ENTRY = {
-    "timestamp": 0,
-    "level": "Invalid Level",
-    "pathname": "",
-    "lineno": None,
-    "message": "",
-}
-
-
-def _parse_log_file(log_path: Path) -> list[dict[str, Any]]:
-    """
-    Parses a `mojo.log` file of newline-delimited JSON log entries.
-
-    Lines that aren't valid JSON (e.g. output from a library that doesn't use
-    our JSON formatter) are appended to the message of the preceding entry.
-    Entries missing fields are filled in with defaults.
-    """
-    entries: list[dict[str, Any]] = []
-    with log_path.open(encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            line = raw_line.rstrip("\n")
-            if not line:
-                continue
-            try:
-                entries.append({**_DEFAULT_LOG_ENTRY, **json.loads(line)})
-            except json.JSONDecodeError:
-                if entries:
-                    entries[-1]["message"] += f"\n{line}"
-    return entries
-
-
 def _chart_data(dist: stochas.AnyDist) -> dict[str, Any]:
     """
     Return chart data for the distribution tooltip.
@@ -1748,17 +1718,10 @@ async def get_trial_logs(trial_id: str) -> dict[str, Any]:
     Looks for `mojo.log` first; if absent, falls back to the first `*.log`
     file (by name) found in the trial directory.
     """
-    trial_dir = _resolve_trial_dir(trial_id)
-    if not trial_dir.is_dir():
+    log_path = find_log_file(_resolve_trial_dir(trial_id))
+    if log_path is None:
         return {"filename": None, "entries": []}
 
-    log_path = trial_dir / "mojo.log"
-    if not log_path.is_file():
-        candidates = sorted(trial_dir.glob("*.log"))
-        if not candidates:
-            return {"filename": None, "entries": []}
-        log_path = candidates[0]
-
     loop = asyncio.get_running_loop()
-    entries = await loop.run_in_executor(None, _parse_log_file, log_path)
+    entries = await loop.run_in_executor(None, parse_log_file, log_path)
     return {"filename": log_path.name, "entries": entries}

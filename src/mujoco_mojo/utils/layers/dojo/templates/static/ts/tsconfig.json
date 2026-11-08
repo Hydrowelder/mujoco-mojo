@@ -4,6 +4,8 @@
     "outDir": "../js",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // @codemirror/legacy-modes types its parsers with the old @codemirror/streamparser package, whose StringStream is a second, incompatible declaration of the one in @codemirror/language; this points it at the real one (the parsers import nothing at run time)
+    "paths": { "@codemirror/streamparser": ["./node_modules/@codemirror/language"] },
     "target": "ES2020",
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "noEmit": true,

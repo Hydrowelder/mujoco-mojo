@@ -37,6 +37,7 @@ export const STORAGE_KEY = "sensai-messages";
 export const TABS_KEY = "sensai-tabs";
 export const ACTIVE_TAB_KEY = "sensai-active-tab";
 export const PINNED_KEY = "sensai-pinned";
+export const OPEN_KEY = "sensai-open";
 
 // how many chats can be open at once, so the saved history stays a size the
 // browser's storage can hold
@@ -58,6 +59,23 @@ export interface SensAITab {
   unread?: boolean;
   // false once the user renamed it, so a first message no longer retitles it
   autoTitled?: boolean;
+  // how far this chat's list was scrolled when it was last in view, so it comes back
+  // to the same place
+  scrollTop?: number;
+}
+
+// how long the list is held at the place a chat is put back to. what is in a chat
+// (code editors, which correct their estimate of their own height a frame after they
+// are made, and math, which is typeset once KaTeX has loaded) goes on taking its
+// final height after the chat is shown, and each change above that place moves what it
+// points at
+export const SCROLL_HOLD_MS = 1500;
+
+// where to put a chat's list when it comes back into view: where it was left, or the
+// top for a chat that was never scrolled or whose saved value is not a usable number
+export function rememberedScroll(tab: { scrollTop?: unknown } | undefined): number {
+  const value = tab?.scrollTop;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 // how many earlier messages a request carries along as context
@@ -258,22 +276,43 @@ export function saveSensAITabs(tabs: SensAITab[], activeId: string): void {
   }
 }
 
-// whether the window was pinned open last time, so the choice survives going
-// to another page; unpinned when nothing is saved or storage cannot be read
-export function loadPinned(): boolean {
+// a yes-or-no choice kept in storage as "1" or "0": false when nothing is saved
+// or storage cannot be read, and a failed write is ignored
+function loadFlag(key: string): boolean {
   try {
-    return localStorage.getItem(PINNED_KEY) === "1";
+    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-export function savePinned(pinned: boolean): void {
+function saveFlag(key: string, value: boolean): void {
   try {
-    localStorage.setItem(PINNED_KEY, pinned ? "1" : "0");
+    localStorage.setItem(key, value ? "1" : "0");
   } catch {
     /* ignore */
   }
+}
+
+// whether the window was pinned open last time, so the choice survives going
+// to another page; unpinned when nothing is saved or storage cannot be read
+export function loadPinned(): boolean {
+  return loadFlag(PINNED_KEY);
+}
+
+export function savePinned(pinned: boolean): void {
+  saveFlag(PINNED_KEY, pinned);
+}
+
+// whether the window was open last time, so it is as it was left when a page is
+// loaded or another page is opened; closed when nothing is saved or storage
+// cannot be read
+export function loadOpen(): boolean {
+  return loadFlag(OPEN_KEY);
+}
+
+export function saveOpen(open: boolean): void {
+  saveFlag(OPEN_KEY, open);
 }
 
 // the chat history file: the export time and each message with its time,
@@ -329,6 +368,80 @@ export function isAtBottom(
   clientHeight: number,
 ): boolean {
   return scrollHeight - scrollTop - clientHeight < 30;
+}
+
+// how far to scroll the message list so something's top edge is at the top of
+// the list: its distance below the list's top edge, plus how far the list is
+// already scrolled. the browser stops at the end of the list, so something with
+// little below it ends up lower than the top
+export function promptScrollTop(listTop: number, listScrollTop: number, promptTop: number): number {
+  return Math.max(0, promptTop - listTop + listScrollTop);
+}
+
+// a question and the answer to it. a chat is shown as one of these after another
+// so that a question can stick to the top of the list while its own answer is
+// read and be pushed off by the next question, which `position: sticky` does
+// within the box that holds the question and its answer. `start` is the place
+// of its first message in the chat, and `last` marks the final one, which also
+// holds what is shown while a request runs
+export interface Exchange {
+  start: number;
+  messages: SensAIMessage[];
+  last: boolean;
+}
+
+// each message from the user begins an exchange. a reply with no question before
+// it (a chat that begins with one) is an exchange of its own
+export function groupExchanges(messages: SensAIMessage[]): Exchange[] {
+  const groups: Exchange[] = [];
+  messages.forEach((message, i) => {
+    const current = groups[groups.length - 1];
+    if (message.role === "user" || !current) {
+      groups.push({ start: i, messages: [message], last: false });
+    } else {
+      current.messages.push(message);
+    }
+  });
+  const final = groups[groups.length - 1];
+  if (final) final.last = true;
+  return groups;
+}
+
+// how long a bubble takes to open or close, as long as its transition (the
+// class that sets it is `duration-300`), plus a little to be sure it is over
+export const BUBBLE_MS = 300;
+export const BUBBLE_SETTLE_MS = BUBBLE_MS + 50;
+
+const COLLAPSED_HEIGHT = "3.5rem";
+const FADE =
+  "-webkit-mask-image: linear-gradient(to bottom, black 65%, transparent 100%); mask-image: linear-gradient(to bottom, black 65%, transparent 100%)";
+
+// the style of a bubble that can open and close. a single line has none. closed
+// it is a short, faded height; open it has no limit. while it is changing it is
+// the height of the whole bubble, in pixels, on the open side too: a change to
+// or from `none` cannot animate, and one to or from a huge height only seems to
+// start moving at the very end, which is why opening used to look instant while
+// closing took its time. `settled` is whether the change is over
+export function bubbleStyle(state: {
+  single: boolean;
+  open: boolean;
+  settled: boolean;
+  fullHeight: number;
+}): string {
+  if (state.single) return "";
+  if (!state.open) return `max-height: ${COLLAPSED_HEIGHT}; ${FADE}`;
+  if (state.settled || state.fullHeight <= 0) return "max-height: none";
+  return `max-height: ${state.fullHeight}px`;
+}
+
+// the height of a bubble's whole content, borders included, even while it is
+// clipped to less
+export function fullBubbleHeight(el: {
+  scrollHeight: number;
+  offsetHeight: number;
+  clientHeight: number;
+}): number {
+  return el.scrollHeight + (el.offsetHeight - el.clientHeight);
 }
 
 // the composer grows with its text up to six lines, then scrolls

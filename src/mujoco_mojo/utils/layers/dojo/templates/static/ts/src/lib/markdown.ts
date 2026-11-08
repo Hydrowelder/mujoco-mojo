@@ -8,7 +8,7 @@
 // raw html and the contents of inline code are shown as written, and a link or
 // image is only kept when its address is one of the kinds in isSafeUrl.
 
-import { Marked, type Tokens } from "marked";
+import { Marked, type Tokens, type TokenizerAndRendererExtension } from "marked";
 
 import { escapeHtml } from "./html";
 
@@ -20,7 +20,54 @@ function isSafeUrl(href: string): boolean {
   return /^(?:https?:|mailto:|#|\/)/i.test(href);
 }
 
+// math is written $x^2$ in a line and $$...$$ on lines of its own. like a code
+// block it leaves an inert placeholder, which carries the TeX url-encoded and,
+// for anything that cannot load the typesetter, the source as its text (escaped,
+// so nothing in it can become markup): renderMath in lib/math.ts typesets it
+function mathPlaceholder(tex: string, display: boolean, source: string): string {
+  const kind = display ? "sensai-math sensai-math-display" : "sensai-math";
+  return `<span class="${kind}" data-tex="${encodeURIComponent(tex)}" data-display="${display}">${escapeHtml(source)}</span>`;
+}
+
+// math in the middle of a line. `$$...$$` is display math wherever it is; a single
+// `$` follows the rule that keeps prices out of it: the opening one has no space
+// after it, the closing one none before it and no digit after it, so that
+// "from $5 to $10" is not math, and a line cannot hold an unfinished one
+const inlineMath: TokenizerAndRendererExtension = {
+  name: "inlineMath",
+  level: "inline",
+  start: (src) => src.indexOf("$"),
+  tokenizer(src) {
+    const display = /^\$\$([\s\S]+?)\$\$/.exec(src);
+    if (display?.[1]?.trim()) {
+      return { type: "inlineMath", raw: display[0], text: display[1].trim(), display: true };
+    }
+    const inline = /^\$(?!\s)((?:[^$\\\n]|\\.)+?)(?<!\s)\$(?!\d)/.exec(src);
+    if (inline?.[1]) return { type: "inlineMath", raw: inline[0], text: inline[1], display: false };
+    return undefined;
+  },
+  renderer: (token) => mathPlaceholder(String(token["text"]), token["display"] === true, token.raw),
+};
+
+// display math on lines of its own, which may have blank lines and lines that
+// look like a list or a heading inside it, so it is taken before a paragraph can
+// split it. it has to begin a line, and end its last line
+const blockMath: TokenizerAndRendererExtension = {
+  name: "blockMath",
+  level: "block",
+  start: (src) => src.search(/^\$\$[ \t]*$|^\$\$[^\n]*\$\$[ \t]*$/m),
+  tokenizer(src) {
+    const found = /^\$\$[ \t]*\n?([\s\S]+?)\n?[ \t]*\$\$[ \t]*(?:\n|$)/.exec(src);
+    if (found?.[1]?.trim()) {
+      return { type: "blockMath", raw: found[0], text: found[1].trim(), display: true };
+    }
+    return undefined;
+  },
+  renderer: (token) => `<p>${mathPlaceholder(String(token["text"]), true, token.raw.trim())}</p>\n`,
+};
+
 const sensaiMarked = new Marked({
+  extensions: [blockMath, inlineMath],
   renderer: {
     code({ text, lang }: Tokens.Code): string {
       const encoded = encodeURIComponent(text);

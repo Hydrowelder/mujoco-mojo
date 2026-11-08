@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  OPEN_KEY,
   PINNED_KEY,
   ACTIVE_TAB_KEY,
   STORAGE_KEY,
@@ -17,13 +18,23 @@ import {
   headerTooltip,
   historyFileName,
   isAtBottom,
+  promptScrollTop,
+  rememberedScroll,
+  SCROLL_HOLD_MS,
   lastUserIndex,
+  BUBBLE_MS,
+  BUBBLE_SETTLE_MS,
+  bubbleStyle,
+  fullBubbleHeight,
+  groupExchanges,
   loadMessages,
+  loadOpen,
   loadPinned,
   loadSensAITabs,
   messageLayout,
   resultContent,
   revealStep,
+  saveOpen,
   savePinned,
   saveSensAITabs,
   tabsExport,
@@ -622,6 +633,166 @@ describe("enabledFromSettings", () => {
   });
 });
 
+describe("groupExchanges", () => {
+  const user = (content: string, ts = 0) => msg({ role: "user", content, ts });
+  const reply = (content: string, ts = 0) => msg({ role: "assistant", content, ts });
+
+  it("is nothing for an empty chat", () => {
+    expect(groupExchanges([])).toEqual([]);
+  });
+
+  it("puts a question and its answer together, and the next question in a new exchange", () => {
+    const messages = [user("q1"), reply("a1"), user("q2"), reply("a2")];
+
+    const groups = groupExchanges(messages);
+
+    expect(groups.map((g) => g.messages.map((m) => m.content))).toEqual([["q1", "a1"], ["q2", "a2"]]);
+    expect(groups.map((g) => g.start)).toEqual([0, 2]);
+  });
+
+  it("holds the very messages it was given, not copies", () => {
+    const messages = [user("q"), reply("a")];
+
+    expect(groupExchanges(messages)[0]!.messages[1]).toBe(messages[1]);
+  });
+
+  it("marks only the last exchange", () => {
+    const groups = groupExchanges([user("q1"), reply("a1"), user("q2")]);
+
+    expect(groups.map((g) => g.last)).toEqual([false, true]);
+  });
+
+  it("is one exchange holding every answer after a question", () => {
+    const [group, ...rest] = groupExchanges([user("q"), reply("a"), reply("b")]);
+
+    expect(rest).toEqual([]);
+    expect(group!.messages).toHaveLength(3);
+  });
+
+  it("gives a question with no answer yet an exchange of its own, and the last mark", () => {
+    const groups = groupExchanges([user("q1"), user("q2")]);
+
+    expect(groups.map((g) => [g.start, g.messages.length, g.last])).toEqual([[0, 1, false], [1, 1, true]]);
+  });
+
+  it("makes an answer with no question before it an exchange of its own", () => {
+    const groups = groupExchanges([reply("hello"), user("q"), reply("a")]);
+
+    expect(groups.map((g) => g.start)).toEqual([0, 1]);
+    expect(groups[0]!.messages.map((m) => m.content)).toEqual(["hello"]);
+  });
+});
+
+describe("bubbleStyle", () => {
+  const state = (over: Partial<Parameters<typeof bubbleStyle>[0]>) => ({
+    single: false,
+    open: true,
+    settled: true,
+    fullHeight: 300,
+    ...over,
+  });
+
+  it("has none for a single line", () => {
+    expect(bubbleStyle(state({ single: true }))).toBe("");
+    expect(bubbleStyle(state({ single: true, open: false }))).toBe("");
+  });
+
+  it("is short and faded when closed, whatever else is the case", () => {
+    for (const settled of [true, false]) {
+      const style = bubbleStyle(state({ open: false, settled }));
+      expect(style).toContain("max-height: 3.5rem");
+      expect(style).toContain("mask-image: linear-gradient");
+    }
+  });
+
+  it("has no height limit once it is open and the change is over", () => {
+    expect(bubbleStyle(state({ open: true, settled: true }))).toBe("max-height: none");
+  });
+
+  it("is the whole height in pixels while it is opening, so it animates to what is shown", () => {
+    expect(bubbleStyle(state({ open: true, settled: false, fullHeight: 302 }))).toBe("max-height: 302px");
+  });
+
+  it("has no limit for a height it does not know, and not a limit of zero", () => {
+    expect(bubbleStyle(state({ open: true, settled: false, fullHeight: 0 }))).toBe("max-height: none");
+  });
+
+  it("is not faded while it is open", () => {
+    expect(bubbleStyle(state({ open: true, settled: false }))).not.toContain("mask");
+  });
+});
+
+describe("fullBubbleHeight", () => {
+  it("is the content's height plus the borders", () => {
+    // 300 of content in a box clipped to 56, with a border of 1 on each side
+    expect(fullBubbleHeight({ scrollHeight: 300, offsetHeight: 58, clientHeight: 56 })).toBe(302);
+  });
+
+  it("is just the content's height with no border", () => {
+    expect(fullBubbleHeight({ scrollHeight: 120, offsetHeight: 56, clientHeight: 56 })).toBe(120);
+  });
+});
+
+describe("how long a bubble takes to open", () => {
+  it("is waited for a little longer than its transition lasts", () => {
+    expect(BUBBLE_MS).toBe(300);
+    expect(BUBBLE_SETTLE_MS).toBeGreaterThan(BUBBLE_MS);
+  });
+});
+
+describe("how long a chat's list is held at its place", () => {
+  it("is long enough for KaTeX to load and code editors to measure themselves, and short enough not to fight the user", () => {
+    expect(SCROLL_HOLD_MS).toBeGreaterThanOrEqual(1000);
+    expect(SCROLL_HOLD_MS).toBeLessThanOrEqual(3000);
+  });
+});
+
+describe("rememberedScroll", () => {
+  it("is where the chat's list was left", () => {
+    expect(rememberedScroll({ scrollTop: 480 })).toBe(480);
+    expect(rememberedScroll({ scrollTop: 0.5 })).toBe(0.5);
+  });
+
+  it("is the top for a chat that was never scrolled", () => {
+    expect(rememberedScroll({})).toBe(0);
+    expect(rememberedScroll({ scrollTop: 0 })).toBe(0);
+    expect(rememberedScroll(undefined)).toBe(0);
+  });
+
+  it("is the top for a saved value that cannot be used", () => {
+    for (const bad of [-20, Number.NaN, Number.POSITIVE_INFINITY, "300", null, {}, [5]]) {
+      expect(rememberedScroll({ scrollTop: bad }), `${typeof bad} ${JSON.stringify(bad)}`).toBe(0);
+    }
+  });
+
+  it("comes back with a chat that was saved and loaded", () => {
+    localStorage.clear();
+    const tab = { id: "t1", title: "Chat 1", messages: [], scrollTop: 612 };
+    localStorage.setItem(TABS_KEY, JSON.stringify([tab]));
+    localStorage.setItem(ACTIVE_TAB_KEY, "t1");
+
+    expect(rememberedScroll(loadSensAITabs().tabs[0])).toBe(612);
+  });
+});
+
+describe("promptScrollTop", () => {
+  it("is how far the prompt is below the top of the list", () => {
+    // the list starts at 100 on the screen, the prompt at 400, nothing scrolled
+    expect(promptScrollTop(100, 0, 400)).toBe(300);
+  });
+
+  it("adds what the list has already scrolled", () => {
+    // the same prompt after the list scrolled 50 up: it is at 350 now
+    expect(promptScrollTop(100, 50, 350)).toBe(300);
+    expect(promptScrollTop(100, 50, 350)).toBe(promptScrollTop(100, 0, 400));
+  });
+
+  it("is never negative", () => {
+    expect(promptScrollTop(100, 0, 40)).toBe(0);
+    expect(promptScrollTop(100, 20, 40)).toBe(0);
+  });
+});
+
 describe("isAtBottom", () => {
   it("counts as the bottom within thirty pixels of the end", () => {
     expect(isAtBottom(1000, 600, 400)).toBe(true); // 0 away
@@ -713,6 +884,46 @@ describe("lastUserIndex", () => {
   it("is -1 with no message from the user", () => {
     expect(lastUserIndex([])).toBe(-1);
     expect(lastUserIndex([msg({ role: "assistant" })])).toBe(-1);
+  });
+});
+
+describe("open", () => {
+  it("is closed when nothing was saved", () => {
+    expect(loadOpen()).toBe(false);
+  });
+
+  it("is remembered once opened, and forgotten once closed", () => {
+    saveOpen(true);
+    expect(loadOpen()).toBe(true);
+    saveOpen(false);
+    expect(loadOpen()).toBe(false);
+  });
+
+  it("is kept apart from the pin", () => {
+    saveOpen(true);
+    expect(loadPinned()).toBe(false);
+    savePinned(true);
+    saveOpen(false);
+    expect(loadPinned()).toBe(true);
+    expect(loadOpen()).toBe(false);
+  });
+
+  it("stores a flag a person could read in the browser's storage tab", () => {
+    saveOpen(true);
+    expect(localStorage.getItem(OPEN_KEY)).toBe("1");
+    saveOpen(false);
+    expect(localStorage.getItem(OPEN_KEY)).toBe("0");
+  });
+
+  it("treats anything but the saved flag as closed", () => {
+    localStorage.setItem(OPEN_KEY, "true");
+    expect(loadOpen()).toBe(false);
+  });
+
+  it("survives storage that cannot be read or written", () => {
+    stubStorage({ read: true, write: () => true });
+    expect(loadOpen()).toBe(false);
+    expect(() => saveOpen(true)).not.toThrow();
   });
 });
 

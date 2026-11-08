@@ -5,8 +5,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { renderMarkdown } from "./lib/markdown";
+import { BUBBLE_SETTLE_MS, SCROLL_HOLD_MS } from "./lib/sensai";
+import {
+  DEFAULT_PLACEHOLDER,
+  ERASE_MS,
+  GAP_MS,
+  HOLD_MS,
+  PLACEHOLDER_EXAMPLES,
+  TYPE_MS,
+} from "./lib/sensai-placeholder";
 import {
   ACTIVE_TAB_KEY,
+  OPEN_KEY,
   PINNED_KEY,
   STORAGE_KEY,
   TABS_KEY,
@@ -24,6 +34,16 @@ type SensAI = {
   tabs: SensAITab[];
   activeId: string;
   input: string;
+  placeholder: string;
+  destroy(): void;
+  _startPlaceholder(): void;
+  scrollToBottom(): void;
+  resize(el: HTMLElement): void;
+  _scrollToLastPrompt(): void;
+  onScroll(el: HTMLElement): void;
+  showExchange(from: HTMLElement): void;
+  exchanges: Array<{ start: number; messages: SensAIMessage[]; last: boolean }>;
+  atBottom: boolean;
   maxTabs: number;
   runningId: string | null;
   queue: string[];
@@ -138,10 +158,10 @@ afterEach(() => {
 // lets the promises and the stream the component is waiting on settle
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-async function boot(): Promise<SensAI> {
+async function boot(refs: Record<string, unknown> = {}): Promise<SensAI> {
   const s = make();
   s.$watch = () => undefined;
-  s.$refs = {};
+  s.$refs = refs;
   s.$nextTick = (cb?: () => void) => {
     cb?.();
     return Promise.resolve();
@@ -796,34 +816,72 @@ describe("the code blocks of a reply", () => {
     expect(container.querySelector(".cm-editor")!.contains(button)).toBe(false);
   });
 
-  it("marks the parts of JSON with token classes, which the stylesheet colors", () => {
-    const container = reply('```json\n{"a": 1, "b": "x", "c": true, "d": null, "e": [1.5]}\n```\n');
-
-    const classes = new Set(
+  // the token classes CodeMirror gave the code of a rendered block
+  const tokenClasses = (container: HTMLElement) =>
+    new Set(
       [...container.querySelectorAll(".cm-line [class]")]
         .flatMap((el) => [...el.classList])
         .filter((name) => name.startsWith("tok-")),
     );
+
+  const JSON_BLOCK = '```json\n{"a": 1, "b": "x", "c": true, "d": null, "e": [1.5]}\n```\n';
+  const PYTHON_BLOCK =
+    "```python\n# say hi\nimport mujoco_mojo as mojo\n\n@decorator\nclass Box(Base):\n" +
+    '    def run(self, n=3):\n        """doc"""\n        return f"hi {n}" + str(n) if n > 1 else None\n```\n';
+  const SHELL_BLOCK = '```bash\n# go\nmujoco-mojo run monte-carlo --n-trial 10 -w "out dir" | tee log.txt\nexport A=1\n```\n';
+
+  it("marks the parts of JSON with token classes, which the stylesheet colors", () => {
+    const classes = tokenClasses(reply(JSON_BLOCK));
 
     for (const expected of ["tok-propertyName", "tok-string", "tok-number", "tok-bool", "tok-punctuation"]) {
       expect(classes, expected).toContain(expected);
     }
   });
 
-  it("leaves no token class a block can produce without a color in the stylesheet", () => {
-    const container = reply('```json\n{"a": 1, "b": "x", "c": true, "d": null, "e": [1.5]}\n```\n');
+  it("marks the parts of Python with token classes", () => {
+    const classes = tokenClasses(reply(PYTHON_BLOCK));
+
+    // a comment, keywords, a decorator, the names a def and a class define, an operator, a number, a string
+    for (const expected of ["tok-comment", "tok-keyword", "tok-meta", "tok-definition", "tok-operator", "tok-number", "tok-string"]) {
+      expect(classes, expected).toContain(expected);
+    }
+  });
+
+  it("marks the parts of a shell command with token classes", () => {
+    const classes = tokenClasses(reply(SHELL_BLOCK));
+
+    // a comment, an option, a number, a string, a keyword
+    for (const expected of ["tok-comment", "tok-propertyName", "tok-number", "tok-string", "tok-keyword"]) {
+      expect(classes, expected).toContain(expected);
+    }
+  });
+
+  it("colors the same Python whichever way the fence names the language", () => {
+    const named = (name: string) => [...tokenClasses(reply(`\`\`\`${name}\ndef f():\n    return 1\n\`\`\`\n`))].sort();
+
+    expect(named("python")).toContain("tok-keyword");
+    expect(named("py")).toEqual(named("python"));
+    expect(named("Python")).toEqual(named("python"));
+  });
+
+  it("leaves a language it has no colors for as plain text", () => {
+    expect(tokenClasses(reply('```toml\nname = "x"\n```\n')).size).toBe(0);
+    expect(tokenClasses(reply('```\nname = "x"\n```\n')).size).toBe(0);
+  });
+
+  it("leaves no token class a block can produce without a color in the stylesheet, except plain names", () => {
     // the Jinja templates sit beside static/, not under it
     const css = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+    // names of variables and commands are meant to be the theme's ordinary text color
+    const plain = new Set(["tok-variableName"]);
 
-    const classes = new Set(
-      [...container.querySelectorAll(".cm-line [class]")]
-        .flatMap((el) => [...el.classList])
-        .filter((name) => name.startsWith("tok-")),
-    );
-
-    expect(classes.size).toBeGreaterThan(0);
-    for (const name of classes) {
-      expect(css, name).toMatch(new RegExp(`\\.sensai-cm-block \\.${name}\\b[^{]*\\{[^}]*color:`));
+    for (const block of [JSON_BLOCK, PYTHON_BLOCK, SHELL_BLOCK]) {
+      const classes = tokenClasses(reply(block));
+      expect(classes.size).toBeGreaterThan(0);
+      for (const name of classes) {
+        if (plain.has(name)) continue;
+        expect(css, name).toMatch(new RegExp(`\\.sensai-cm-block \\.${name}\\b[^{]*\\{[^}]*color:`));
+      }
     }
   });
 });
@@ -855,3 +913,1449 @@ describe("the SensAI window's header and tabs", () => {
   });
 });
 
+describe("the SensAI input's placeholder", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // how long it takes to type out `text`: the first character shows at once
+  const typing = (text: string) => (text.length - 1) * TYPE_MS;
+
+  it("is the default text until the window is opened", async () => {
+    const s = await boot();
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    vi.advanceTimersByTime(60_000);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("shows the default text for a moment when the window opens, and then starts to backspace it", async () => {
+    const s = await boot();
+    s.toggle();
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    vi.advanceTimersByTime(HOLD_MS - 1);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    vi.advanceTimersByTime(1);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER.slice(0, -1));
+  });
+
+  it("empties the box, and then types an example drawn from the list", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const s = await boot();
+    s.toggle();
+
+    vi.advanceTimersByTime(HOLD_MS + (DEFAULT_PLACEHOLDER.length - 1) * ERASE_MS);
+    expect(s.placeholder).toBe("");
+
+    vi.advanceTimersByTime(GAP_MS);
+    expect(s.placeholder).toBe(PLACEHOLDER_EXAMPLES[0]!.slice(0, 1));
+
+    vi.advanceTimersByTime(typing(PLACEHOLDER_EXAMPLES[0]!));
+    expect(s.placeholder).toBe(PLACEHOLDER_EXAMPLES[0]);
+  });
+
+  it("holds the example, then backspaces it and moves on to a different one", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const s = await boot();
+    s.toggle();
+    const [one, two] = [PLACEHOLDER_EXAMPLES[0]!, PLACEHOLDER_EXAMPLES[1]!];
+
+    vi.advanceTimersByTime(HOLD_MS + (DEFAULT_PLACEHOLDER.length - 1) * ERASE_MS + GAP_MS + typing(one));
+    vi.advanceTimersByTime(HOLD_MS - 1);
+    expect(s.placeholder).toBe(one);
+
+    vi.advanceTimersByTime(1 + (one.length - 1) * ERASE_MS);
+    expect(s.placeholder).toBe("");
+    vi.advanceTimersByTime(GAP_MS + typing(two));
+    expect(s.placeholder).toBe(two);
+  });
+
+  it("goes on drawing from the list, and never shows the same example twice in a row", async () => {
+    const s = await boot();
+    s.toggle();
+    const seen: string[] = [];
+
+    for (let ms = 0; ms < 120_000; ms += 10) {
+      vi.advanceTimersByTime(10);
+      if (PLACEHOLDER_EXAMPLES.includes(s.placeholder) && seen.at(-1) !== s.placeholder) {
+        seen.push(s.placeholder);
+      }
+    }
+
+    expect(seen.length).toBeGreaterThan(5);
+    expect(new Set(seen).size).toBeGreaterThan(3);
+    // a repeat would need a screen emptied in between, so it shows as a repeat in `seen` only if none was skipped
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+  });
+
+  it("stops when the window closes, and goes back to the default text", async () => {
+    const s = await boot();
+    s.toggle();
+    vi.advanceTimersByTime(HOLD_MS + 200);
+    expect(s.placeholder).not.toBe(DEFAULT_PLACEHOLDER);
+
+    s.toggle();
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(60_000);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+  });
+
+  it("stops when the window is closed by its own button or by a click elsewhere", async () => {
+    const s = await boot();
+    s.toggle();
+    s.close();
+    expect(vi.getTimerCount()).toBe(0);
+
+    s.toggle();
+    s.dismiss();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+  });
+
+  it("goes on while the window is pinned open through a click elsewhere", async () => {
+    const s = await boot();
+    s.toggle();
+    s.pinned = true;
+
+    s.dismiss();
+    vi.advanceTimersByTime(HOLD_MS + 200);
+
+    expect(s.open).toBe(true);
+    expect(s.placeholder).not.toBe(DEFAULT_PLACEHOLDER);
+  });
+
+  it("starts again from the default text when the window opens again", async () => {
+    const s = await boot();
+    s.toggle();
+    vi.advanceTimersByTime(HOLD_MS + 1000);
+    s.toggle();
+
+    s.toggle();
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER.slice(0, -1));
+  });
+
+  it("never runs two animations at once", async () => {
+    const s = await boot();
+    s.toggle();
+    const running = vi.getTimerCount();
+
+    s._startPlaceholder();
+    s._startPlaceholder();
+
+    expect(vi.getTimerCount()).toBe(running);
+  });
+
+  it("is stopped when Alpine removes the component", async () => {
+    const s = await boot();
+    s.toggle();
+
+    s.destroy();
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+  });
+
+  it("stays the default text with no animation for someone who asks for less motion", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduce") }));
+    const s = await boot();
+
+    s.toggle();
+    vi.advanceTimersByTime(60_000);
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("animates when the browser does not report the preference", async () => {
+    vi.stubGlobal("matchMedia", undefined);
+    const s = await boot();
+
+    s.toggle();
+    vi.advanceTimersByTime(HOLD_MS);
+
+    expect(s.placeholder).toBe(DEFAULT_PLACEHOLDER.slice(0, -1));
+  });
+
+  it("is what the input shows, not fixed text in the page", () => {
+    const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+    const at = template.indexOf('x-ref="inputArea"');
+    const tag = template.slice(template.lastIndexOf("<textarea", at), template.indexOf("</textarea>", at));
+
+    expect(tag).toContain(':placeholder="placeholder"');
+    expect(tag).not.toMatch(/\splaceholder="/);
+  });
+});
+
+// a message list with the positions the test gives it: happy-dom does no layout,
+// so each element reports where the test says it is on the screen. `scrollTop`
+// is how far the list has scrolled and `end` is the height of all its content
+function messageList(options: { prompts: number[]; listTop?: number; scrollTop?: number; end?: number; promptHeight?: number }) {
+  const list = document.createElement("div");
+  list.getBoundingClientRect = () => ({ top: options.listTop ?? 100 }) as DOMRect;
+  list.scrollTop = options.scrollTop ?? 0;
+  Object.defineProperty(list, "scrollHeight", { value: options.end ?? 900 });
+  list.scrollTo = vi.fn();
+  for (const top of options.prompts) {
+    const reply = document.createElement("div");
+    reply.dataset["role"] = "assistant";
+    reply.getBoundingClientRect = () => ({ top: top - 50 }) as DOMRect;
+    const prompt = document.createElement("div");
+    prompt.dataset["role"] = "user";
+    prompt.getBoundingClientRect = () => ({ top, bottom: top + (options.promptHeight ?? 40) }) as DOMRect;
+    list.append(reply, prompt);
+  }
+  return list;
+}
+
+describe("a chat remembers where its list was", () => {
+  // the list as it is while a chat is open: the browser reports its height and how far it is scrolled
+  function listAt(scrollTop: number, scrollHeight = 2000, clientHeight = 400) {
+    const list = document.createElement("div");
+    let top = scrollTop;
+    const log: string[] = [];
+    Object.defineProperty(list, "scrollTop", {
+      get: () => top,
+      set: (value: number) => {
+        log.push(`scrollTop = ${value}`);
+        top = value;
+      },
+    });
+    Object.defineProperty(list, "scrollHeight", { value: scrollHeight });
+    Object.defineProperty(list, "clientHeight", { value: clientHeight });
+    list.scrollTo = vi.fn();
+    return { list, log, get now() { return top; } };
+  }
+
+  // a window with two chats, the first open and its list at `scrollTop`
+  async function twoChats(scrollTop: number, list = listAt(scrollTop)) {
+    const s = await boot();
+    s.newTab();
+    s.switchTab(first(s).id);
+    s.$refs = { messages: list.list };
+    list.log.length = 0;
+    return { s, ...list, list };
+  }
+
+  it("is recorded on the chat that is left, and the list goes to the other one's own place", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+    second(s).scrollTop = 120;
+
+    s.switchTab(second(s).id);
+
+    expect(first(s).scrollTop).toBe(750);
+    expect(view.now).toBe(120);
+  });
+
+  it("brings each chat back to where it was, however many times they are swapped", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+
+    s.switchTab(second(s).id);
+    // the user scrolls the second chat, which comes with the wheel (or a finger, the bar, a key)
+    view.list.dispatchEvent(new Event("wheel"));
+    view.list.scrollTop = 300;
+    s.switchTab(first(s).id);
+    expect(view.now).toBe(750);
+    s.switchTab(second(s).id);
+    expect(view.now).toBe(300);
+  });
+
+  it("puts a chat that was never scrolled at its top", async () => {
+    const view = listAt(900);
+    const { s } = await twoChats(900, view);
+
+    s.switchTab(second(s).id);
+
+    expect(second(s).scrollTop).toBeUndefined();
+    expect(view.now).toBe(0);
+  });
+
+  it("does not scroll to anything of its own accord, smoothly or otherwise", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+    first(s).messages.push({ role: "user", content: "a question", ts: 1 }, { role: "assistant", content: "an answer", ts: 2 });
+
+    s.switchTab(second(s).id);
+    s.switchTab(first(s).id);
+
+    expect(view.list.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("puts the list back at once and not by scrolling to it", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+    second(s).scrollTop = 120;
+
+    s.switchTab(second(s).id);
+
+    expect(view.log).toEqual(["scrollTop = 120"]);
+  });
+
+  it("does so after the messages have laid themselves out, since that changes the height of the list", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+    second(s).scrollTop = 120;
+    // Alpine runs what it is asked to do on the next tick after the work already waiting, in order, and a
+    // message lays itself out on a tick of its own that the remeasure event asks for
+    const waiting: Array<() => void> = [];
+    s.$nextTick = (callback?: () => void) => {
+      if (callback) waiting.push(callback);
+      return Promise.resolve();
+    };
+    const laidOut = () => void s.$nextTick(() => view.log.push("messages laid out"));
+    window.addEventListener("sensai-remeasure", laidOut);
+
+    s.switchTab(second(s).id);
+    for (let callback = waiting.shift(); callback; callback = waiting.shift()) callback();
+    window.removeEventListener("sensai-remeasure", laidOut);
+
+    // the log has each thing done to the list: the messages' layout, and the list put at a place
+    expect(view.log).toEqual(["messages laid out", "scrollTop = 120"]);
+  });
+
+  describe("and whether it is at the bottom, which the scroll button goes by", () => {
+    it("is not when the chat was left higher up", async () => {
+      const view = listAt(750);
+      const { s } = await twoChats(750, view);
+      second(s).scrollTop = 100;
+
+      s.switchTab(second(s).id);
+
+      expect(s.atBottom).toBe(false);
+    });
+
+    it("is when the chat was left at the end", async () => {
+      const view = listAt(750);
+      const { s } = await twoChats(750, view);
+      // 2000 high, 400 showing: the end is at 1600, and within 30 of it counts
+      second(s).scrollTop = 1580;
+
+      s.switchTab(second(s).id);
+
+      expect(s.atBottom).toBe(true);
+    });
+
+    it("is not for a chat that was never scrolled and is taller than the window", async () => {
+      const view = listAt(750);
+      const { s } = await twoChats(750, view);
+
+      s.switchTab(second(s).id);
+
+      expect(s.atBottom).toBe(false);
+    });
+
+    it("is for a chat shorter than the window", async () => {
+      const view = listAt(0, 300, 400);
+      const { s } = await twoChats(0, view);
+
+      s.switchTab(second(s).id);
+
+      expect(s.atBottom).toBe(true);
+    });
+  });
+
+  it("is saved with the chats, so it is kept when the page is loaded again", async () => {
+    const view = listAt(640);
+    const { s } = await twoChats(640, view);
+
+    s.switchTab(second(s).id);
+
+    const saved = JSON.parse(localStorage.getItem(TABS_KEY)!) as SensAITab[];
+    expect(saved.find((tab) => tab.id === first(s).id)!.scrollTop).toBe(640);
+  });
+
+  it("is found again after a chat that has been saved is loaded, and ignored when it cannot be used", async () => {
+    const view = listAt(0);
+    const s = await boot();
+    s.$refs = { messages: view.list };
+    s.newTab();
+    first(s).scrollTop = "far down" as unknown as number;
+    s.switchTab(first(s).id);
+    s.switchTab(second(s).id);
+    view.log.length = 0;
+
+    s.switchTab(first(s).id);
+
+    expect(view.now).toBe(0);
+  });
+
+  it("is the next chat's own place when the open one is closed", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+    second(s).scrollTop = 250;
+
+    s.closeTab(first(s).id);
+
+    expect(s.tabs).toHaveLength(1);
+    expect(view.now).toBe(250);
+  });
+
+  it("is the top for the empty chat that replaces the last one closed", async () => {
+    const view = listAt(900);
+    const s = await boot();
+    s.$refs = { messages: view.list };
+
+    s.closeTab(first(s).id);
+
+    expect(view.now).toBe(0);
+    expect(view.list.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("is left alone when a chat that is not open is closed", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+
+    s.closeTab(second(s).id);
+
+    expect(view.log).toEqual([]);
+  });
+
+  it("is not changed by what is done in a chat that is already open", async () => {
+    const view = listAt(750);
+    const { s } = await twoChats(750, view);
+
+    s.switchTab(first(s).id);
+
+    expect(view.log).toEqual([]);
+    expect(first(s).scrollTop).toBeUndefined();
+  });
+
+  describe("and is held there while the chat's contents take their final height", () => {
+    // a stand-in for ResizeObserver, which the test fires by hand
+    class FakeObserver {
+      static all: FakeObserver[] = [];
+      observed: Element[] = [];
+      disconnected = false;
+      constructor(readonly callback: () => void) {
+        FakeObserver.all.push(this);
+      }
+      observe(element: Element) {
+        this.observed.push(element);
+      }
+      unobserve() {}
+      disconnect() {
+        this.disconnected = true;
+      }
+    }
+    const latest = () => FakeObserver.all[FakeObserver.all.length - 1]!;
+
+    beforeEach(() => {
+      FakeObserver.all = [];
+      vi.stubGlobal("ResizeObserver", FakeObserver);
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // the first chat open with its list at 750 and two exchanges in it, and the second chat remembered at 120
+    async function held() {
+      const view = listAt(750);
+      view.list.append(document.createElement("div"), document.createElement("div"));
+      const { s } = await twoChats(750, view);
+      second(s).scrollTop = 120;
+      s.switchTab(second(s).id);
+      return { s, view, observer: latest() };
+    }
+
+    it("puts the list back at its place whenever the contents change size, which moves where it points", async () => {
+      const { view, observer } = await held();
+      expect(view.now).toBe(120);
+
+      // the browser moves the list (a clamp, or its own correction) as an editor takes its height
+      view.list.scrollTop = 300;
+      observer.callback();
+
+      expect(view.now).toBe(120);
+    });
+
+    it("does not touch the list when it is already at its place", async () => {
+      const { view, observer } = await held();
+      view.log.length = 0;
+
+      observer.callback();
+
+      expect(view.log).toEqual([]);
+    });
+
+    it("watches what is in the list, each exchange, since that is what changes size", async () => {
+      const { view, observer } = await held();
+
+      expect(observer.observed).toEqual([...view.list.children]);
+      expect(observer.observed).toHaveLength(2);
+    });
+
+    it("works out again whether the list is at the bottom, which the scroll button goes by", async () => {
+      const { s, view, observer } = await held();
+      expect(s.atBottom).toBe(false);
+
+      // the place is 120 of 2000, so wherever the list was moved to, it is put back and is not at the end
+      view.list.scrollTop = 1590;
+      s.atBottom = true;
+      observer.callback();
+
+      expect(s.atBottom).toBe(false);
+    });
+
+    it.each(["wheel", "touchstart", "pointerdown", "keydown"])("lets go when the user takes hold of the list: %s", async (name) => {
+      const { view, observer } = await held();
+
+      view.list.dispatchEvent(new Event(name));
+
+      expect(observer.disconnected).toBe(true);
+      // a callback that was already on its way does nothing
+      view.list.scrollTop = 300;
+      observer.callback();
+      expect(view.now).toBe(300);
+    });
+
+    it("does not let go for events that are not the user's", async () => {
+      const { view, observer } = await held();
+
+      view.list.dispatchEvent(new Event("scroll"));
+      view.list.dispatchEvent(new Event("click"));
+
+      expect(observer.disconnected).toBe(false);
+    });
+
+    it("lets go after its time, and not before", async () => {
+      const { observer } = await held();
+
+      vi.advanceTimersByTime(SCROLL_HOLD_MS - 1);
+      expect(observer.disconnected).toBe(false);
+      vi.advanceTimersByTime(1);
+
+      expect(observer.disconnected).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("has no timer or listener left behind when it lets go", async () => {
+      const { view, observer } = await held();
+      const removed: string[] = [];
+      const remove = view.list.removeEventListener.bind(view.list);
+      view.list.removeEventListener = ((name: string, ...rest: [EventListenerOrEventListenerObject]) => {
+        removed.push(name);
+        remove(name, ...rest);
+      }) as typeof view.list.removeEventListener;
+
+      view.list.dispatchEvent(new Event("wheel"));
+
+      expect(observer.disconnected).toBe(true);
+      expect(removed.sort()).toEqual(["keydown", "pointerdown", "touchstart", "wheel"]);
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it("lets the first go when the chats are swapped again, and holds the new place", async () => {
+      const { s, view, observer } = await held();
+      first(s).scrollTop = 750;
+
+      s.switchTab(first(s).id);
+
+      expect(observer.disconnected).toBe(true);
+      expect(latest()).not.toBe(observer);
+      expect(latest().disconnected).toBe(false);
+      expect(view.now).toBe(750);
+    });
+
+    describe("when another chat is shown while the list is still being held", () => {
+      // Alpine runs what it is asked to do on the next tick, so the list is put at its place a moment
+      // after the chat is shown: nothing is done until the test lets the ticks run
+      const deferred = (s: SensAI) => {
+        const waiting: Array<() => void> = [];
+        s.$nextTick = (callback?: () => void) => {
+          if (callback) waiting.push(callback);
+          return Promise.resolve();
+        };
+        return () => {
+          for (let callback = waiting.shift(); callback; callback = waiting.shift()) callback();
+        };
+      };
+
+      it("records the place that is held, not where the list happens to be while its contents settle", async () => {
+        const { s, view } = await held();
+        // the contents are still taking their height, and the browser has clamped the list
+        view.list.scrollTop = 40;
+
+        s.switchTab(first(s).id);
+
+        expect(second(s).scrollTop).toBe(120);
+      });
+
+      it("records where the list is when it is not being held", async () => {
+        const { s, view } = await held();
+        view.list.dispatchEvent(new Event("wheel"));
+        view.list.scrollTop = 333;
+
+        s.switchTab(first(s).id);
+
+        expect(second(s).scrollTop).toBe(333);
+      });
+
+      it("ends the old hold at once, before the new chat's place is put back", async () => {
+        const { s, observer } = await held();
+        const run = deferred(s);
+
+        s.switchTab(first(s).id);
+
+        // nothing has run yet, so only showing the chat can have ended it
+        expect(observer.disconnected).toBe(true);
+        run();
+        expect(latest()).not.toBe(observer);
+      });
+
+      it("does the same when the open chat is closed and the next is shown", async () => {
+        const { s, observer } = await held();
+        const run = deferred(s);
+
+        s.closeTab(second(s).id);
+
+        expect(observer.disconnected).toBe(true);
+        run();
+        expect(latest()).not.toBe(observer);
+        expect(latest().disconnected).toBe(false);
+      });
+    });
+
+    it("lets go when anything else scrolls the list", async () => {
+      for (const scroll of [
+        (s: SensAI) => s.scrollToBottom(),
+        (s: SensAI) => s._scrollToLastPrompt(),
+      ]) {
+        FakeObserver.all = [];
+        const { s, observer } = await held();
+
+        scroll(s);
+
+        expect(observer.disconnected).toBe(true);
+      }
+    });
+
+    it("lets go when the window is closed or removed", async () => {
+      const ways = [
+        (s: SensAI) => s.close(),
+        (s: SensAI) => s.destroy(),
+        // the window's button, which closes it when it is open
+        (s: SensAI) => {
+          s.open = true;
+          s.toggle();
+        },
+      ];
+      for (const end of ways) {
+        const { s, observer } = await held();
+
+        end(s);
+
+        expect(observer.disconnected).toBe(true);
+      }
+    });
+
+    describe("while the composer grows with a draft that is different from the last chat's", () => {
+      const composer = () => {
+        const box = document.createElement("textarea");
+        Object.defineProperty(box, "scrollHeight", { value: 40 });
+        return box;
+      };
+
+      beforeEach(() => {
+        vi.stubGlobal("getComputedStyle", () => ({ lineHeight: "20px" }) as CSSStyleDeclaration);
+      });
+
+      it("does not pin the list to the bottom, which would undo the place", async () => {
+        const { s, view } = await held();
+        s.atBottom = true;
+        view.log.length = 0;
+
+        s.resize(composer());
+
+        expect(view.log).toEqual([]);
+        expect(view.now).toBe(120);
+      });
+
+      it("still pins it to the bottom otherwise, as it always did", async () => {
+        const { s, view, observer } = await held();
+        view.list.dispatchEvent(new Event("wheel"));
+        expect(observer.disconnected).toBe(true);
+        s.atBottom = true;
+        view.log.length = 0;
+
+        s.resize(composer());
+
+        expect(view.log).toEqual(["scrollTop = 2000"]);
+      });
+    });
+
+    it("still puts the list back where a chat was when this browser has no ResizeObserver", async () => {
+      vi.stubGlobal("ResizeObserver", undefined);
+      const view = listAt(750);
+      const { s } = await twoChats(750, view);
+      second(s).scrollTop = 120;
+
+      expect(() => s.switchTab(second(s).id)).not.toThrow();
+
+      expect(view.now).toBe(120);
+      expect(FakeObserver.all).toEqual([]);
+    });
+  });
+
+  it("needs no list yet to switch chats", async () => {
+    const s = await boot();
+    s.newTab();
+
+    expect(() => s.switchTab(first(s).id)).not.toThrow();
+  });
+});
+
+describe("where the SensAI window scrolls by itself", () => {
+  // the list's top padding, as the browser would report it (happy-dom reports none)
+  beforeEach(() => {
+    vi.stubGlobal("getComputedStyle", () => ({ paddingTop: "12px", lineHeight: "20px" }) as CSSStyleDeclaration);
+  });
+
+  it("puts the last prompt at the very top of the list, whatever padding the list reports", async () => {
+    const s = await boot();
+    const list = messageList({ prompts: [200, 500], scrollTop: 40 });
+    s.$refs = { messages: list };
+
+    s._scrollToLastPrompt();
+
+    // 500 - 100 + 40: the last prompt, not the earlier one
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 440, behavior: "smooth" });
+    expect(list.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a question inside an exchange", () => {
+    // the list has no padding above, so the room above a question is its exchange's, and the
+    // question is put at the very top: the place it sticks, so it does not move as it sticks
+    const inExchange = (padding: string, exchangeTop = -200, scrollTop = 600) => {
+      // only the exchange has the padding, so reading it from any other element gives a wrong answer
+      vi.stubGlobal(
+        "getComputedStyle",
+        (el: Element) => ({ paddingTop: el.classList.contains("sensai-exchange") ? padding : "99px" }) as CSSStyleDeclaration,
+      );
+      const list = messageList({ prompts: [], scrollTop });
+      const exchange = document.createElement("div");
+      exchange.className = "sensai-exchange";
+      exchange.getBoundingClientRect = () => ({ top: exchangeTop }) as DOMRect;
+      const question = document.createElement("div");
+      question.dataset["role"] = "user";
+      question.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+      exchange.append(question);
+      list.append(exchange);
+      return list;
+    };
+
+    it("is put where the exchange begins plus the exchange's own padding, so the question is flush with the top", async () => {
+      const s = await boot();
+      const list = inExchange("12px");
+      s.$refs = { messages: list };
+
+      s._scrollToLastPrompt();
+
+      // -200 - 100 + 600 to reach the exchange, and 12 more to reach the question inside its padding
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 312, behavior: "smooth" });
+    });
+
+    it("is put where the exchange begins when the exchange has no padding", async () => {
+      const s = await boot();
+      const list = inExchange("");
+      s.$refs = { messages: list };
+
+      s._scrollToLastPrompt();
+
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 300, behavior: "smooth" });
+    });
+
+    it("never goes above the start of the list", async () => {
+      const s = await boot();
+      const list = inExchange("12px", -50, 0);
+      s.$refs = { messages: list };
+
+      s._scrollToLastPrompt();
+
+      // the exchange is at -50 - 100 + 0 = -150, so 0, and then the padding
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 12, behavior: "smooth" });
+    });
+  });
+
+  it("goes to the end of the list while there is no prompt yet", async () => {
+    const s = await boot();
+    const list = messageList({ prompts: [], end: 777 });
+    s.$refs = { messages: list };
+
+    s._scrollToLastPrompt();
+
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 777, behavior: "smooth" });
+  });
+
+  it("does nothing before the list is on the page", async () => {
+    const s = await boot();
+
+    expect(() => s._scrollToLastPrompt()).not.toThrow();
+  });
+
+  it("does that when a message is sent", async () => {
+    const s = await boot();
+    const list = messageList({ prompts: [300], scrollTop: 0 });
+    s.$refs = { messages: list };
+
+    const done = ask(s, "hello");
+    await settle();
+    calls[0]!.reply.answer("hi");
+    await done;
+
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 200, behavior: "smooth" });
+  });
+
+  it("does that for a message that has to wait its turn, which no request has started yet", async () => {
+    const s = await boot();
+    const running = ask(s, "first");
+    await settle();
+    s.newTab();
+    const list = messageList({ prompts: [300] });
+    s.$refs = { messages: list };
+
+    const queued = ask(s, "second");
+    await settle();
+
+    expect(s.isQueued(s.activeId)).toBe(true);
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 200, behavior: "smooth" });
+
+    calls[0]!.reply.answer("one");
+    await settle();
+    calls[1]!.reply.answer("two");
+    await Promise.all([running, queued]);
+  });
+
+  it("does that when the window opens", async () => {
+    const s = await boot();
+    const list = messageList({ prompts: [300] });
+    s.$refs = { messages: list };
+
+    s.toggle();
+
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 200, behavior: "smooth" });
+  });
+
+  it("leaves the scroll button going to the very end of the list", async () => {
+    const s = await boot();
+    const list = messageList({ prompts: [300, 600], end: 1500 });
+    s.$refs = { messages: list };
+    s.atBottom = false;
+    s.hasNewResponse = true;
+
+    s.scrollToBottom();
+
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 1500, behavior: "smooth" });
+    expect(s.atBottom).toBe(true);
+    expect(s.hasNewResponse).toBe(false);
+  });
+
+  it("is told which messages are the user's by the page", () => {
+    const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+    const at = template.indexOf('x-data="sensaiMsgData(');
+    const tag = template.slice(template.lastIndexOf("<div", at), template.indexOf(">", template.indexOf(":class=", at)));
+
+    expect(tag).toContain(':data-role="msg.role"');
+  });
+});
+
+describe("the SensAI window being left open or closed", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("getComputedStyle", () => ({ paddingTop: "12px", lineHeight: "20px" }) as CSSStyleDeclaration);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // the server's answer to the page's question of whether SensAI is turned on
+  const config = (reply: () => Promise<unknown>) =>
+    vi.stubGlobal("fetch", (url: string) => (url === "/sensai/config" ? reply() : Promise.reject(new Error(url))));
+
+  it("starts closed when nothing was saved", async () => {
+    const s = await boot();
+
+    expect(s.open).toBe(false);
+    expect(localStorage.getItem(OPEN_KEY)).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("saves that it is open when it is opened, and closed when it is closed", async () => {
+    const s = await boot();
+
+    s.toggle();
+    expect(localStorage.getItem(OPEN_KEY)).toBe("1");
+    s.toggle();
+    expect(localStorage.getItem(OPEN_KEY)).toBe("0");
+  });
+
+  it("saves closed when its own button or a click elsewhere closes it", async () => {
+    const s = await boot();
+
+    s.toggle();
+    s.close();
+    expect(localStorage.getItem(OPEN_KEY)).toBe("0");
+
+    s.toggle();
+    s.dismiss();
+    expect(localStorage.getItem(OPEN_KEY)).toBe("0");
+  });
+
+  it("stays saved as open when it is pinned and a click elsewhere does not close it", async () => {
+    const s = await boot();
+    s.toggle();
+    s.pinned = true;
+
+    s.dismiss();
+
+    expect(s.open).toBe(true);
+    expect(localStorage.getItem(OPEN_KEY)).toBe("1");
+  });
+
+  it("comes back open on the next page when it was left open", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+
+    const s = await boot();
+
+    expect(s.open).toBe(true);
+  });
+
+  it("comes back closed on the next page when it was left closed", async () => {
+    localStorage.setItem(OPEN_KEY, "0");
+
+    const s = await boot();
+
+    expect(s.open).toBe(false);
+  });
+
+  it("is shown as it would be if it had just been opened", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+    const list = messageList({ prompts: [300] });
+    const remeasured = vi.fn();
+    window.addEventListener("sensai-remeasure", remeasured);
+
+    const s = await boot({ messages: list });
+    window.removeEventListener("sensai-remeasure", remeasured);
+
+    // scrolled to the last prompt, laid out afresh, and its placeholder is animated
+    expect(list.scrollTo).toHaveBeenCalledWith({ top: 200, behavior: "smooth" });
+    expect(remeasured).toHaveBeenCalledTimes(1);
+    expect(s.hasNewResponse).toBe(false);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(s.placeholder).not.toBe(DEFAULT_PLACEHOLDER);
+  });
+
+  it("does not run the placeholder when it comes back closed", async () => {
+    localStorage.setItem(OPEN_KEY, "0");
+
+    await boot();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stays closed, and still, when SensAI is turned off, and keeps what was saved", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+    config(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ enabled: false }) }));
+
+    const s = await boot();
+
+    expect(s.open).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(localStorage.getItem(OPEN_KEY)).toBe("1");
+  });
+
+  it("stays closed when the server cannot say whether SensAI is turned on", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+    config(() => Promise.reject(new TypeError("network down")));
+
+    const s = await boot();
+
+    expect(s.open).toBe(false);
+  });
+
+  it("opens when the server answers without saying, as it does for a SensAI that is on", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+    config(() => Promise.resolve({ ok: false }));
+
+    const s = await boot();
+
+    expect(s.open).toBe(true);
+  });
+
+  it("comes back pinned and open together", async () => {
+    localStorage.setItem(OPEN_KEY, "1");
+    localStorage.setItem(PINNED_KEY, "1");
+
+    const s = await boot();
+
+    expect(s.pinned).toBe(true);
+    expect(s.open).toBe(true);
+  });
+
+  it("is the same for the next page that is opened", async () => {
+    const first = await boot();
+    first.toggle();
+
+    const next = await boot();
+
+    expect(next.open).toBe(true);
+    next.close();
+    expect((await boot()).open).toBe(false);
+  });
+
+  it("starts closed, without failing, when storage cannot be read", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("storage refused a read");
+      },
+      setItem: () => {
+        throw new Error("storage refused a write");
+      },
+      removeItem: () => undefined,
+      clear: () => undefined,
+    });
+
+    const s = await boot();
+    expect(() => s.toggle()).not.toThrow();
+
+    expect(s.open).toBe(true);
+  });
+});
+
+// the template's tags up to `marker`, outermost first, as what each tag loops over or
+// shows (its x-for or x-if) or its class, to see what a part of the page sits inside
+function ancestorsOf(template: string, marker: string): string[] {
+  const stack: string[] = [];
+  const tag = /<(\/?)(div|template)\b([^>]*(?:"[^"]*"[^>]*)*)>/g;
+  const upTo = template.slice(0, template.indexOf(marker));
+  for (const [, closing, , attrs] of upTo.matchAll(tag)) {
+    if (closing) stack.pop();
+    else {
+      const name = /x-for="([^"]*)"/.exec(attrs!)?.[1] ?? /x-if="([^"]*)"/.exec(attrs!)?.[1] ?? /class="([^"]*)"/.exec(attrs!)?.[1] ?? "";
+      stack.push(name);
+    }
+  }
+  return stack;
+}
+
+describe("a question that sticks to the top of the list", () => {
+  const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+
+  const chat = (s: SensAI, questions: string[]) => {
+    for (const [i, question] of questions.entries()) {
+      first(s).messages.push(
+        { role: "user", content: question, ts: i * 2 },
+        { role: "assistant", content: `answer ${i}`, ts: i * 2 + 1 },
+      );
+    }
+  };
+
+  describe("the exchanges the list is made of", () => {
+    it("are one for each question with its answer", async () => {
+      const s = await boot();
+      chat(s, ["one", "two"]);
+
+      expect(s.exchanges.map((g) => [g.start, g.messages.map((m) => m.content), g.last])).toEqual([
+        [0, ["one", "answer 0"], false],
+        [2, ["two", "answer 1"], true],
+      ]);
+    });
+
+    it("are none for an empty chat", async () => {
+      expect((await boot()).exchanges).toEqual([]);
+    });
+
+    it("are those of the chat that is open", async () => {
+      const s = await boot();
+      chat(s, ["in the first chat"]);
+      s.newTab();
+      second(s).messages.push({ role: "user", content: "in the second chat", ts: 9 });
+
+      expect(s.exchanges.map((g) => g.messages[0]!.content)).toEqual(["in the second chat"]);
+      s.switchTab(first(s).id);
+      expect(s.exchanges.map((g) => g.messages[0]!.content)).toEqual(["in the first chat"]);
+    });
+  });
+
+  describe("in the page", () => {
+    it("is the question's own message, sticking to the top, and not a bar over the list", () => {
+      const at = template.indexOf("x-data=\"sensaiMsgData(");
+      const tag = template.slice(template.lastIndexOf("<div", at), template.indexOf(">", template.indexOf(":class=", at)));
+
+      expect(tag).toMatch(/msg\.role === 'user' \? '[^']*\bsticky\b[^']*\btop-0\b/);
+      expect(template).not.toContain("pinnedPrompt");
+      expect(template).not.toContain("showPinnedPrompt");
+    });
+
+    it("covers what scrolls under it, across the whole width of the list", () => {
+      const at = template.indexOf("x-data=\"sensaiMsgData(");
+      const tag = template.slice(template.lastIndexOf("<div", at), template.indexOf(">", template.indexOf(":class=", at)));
+      const user = /msg\.role === 'user' \? '([^']*)'/.exec(tag)![1]!;
+
+      // the panel's own color from its top edge (see the style of .sensai-question), and as wide as the
+      // list including its padding at the sides
+      expect(user).toContain("sensai-question");
+      expect(user).not.toContain("bg-surface");
+      expect(user).toContain("-mx-3");
+      expect(user).toContain("px-3");
+      // room under the bubble for the fade, which the style sets to two rem, and no gap added by the
+      // list's own spacing on top of it
+      expect(user).toContain("pb-8");
+      expect(user).toContain("mb-0");
+      // above the copy buttons inside the answers, which sit at 2
+      expect(user).toMatch(/\bz-10\b/);
+    });
+
+    it("is for a question only: an answer scrolls", () => {
+      const at = template.indexOf("x-data=\"sensaiMsgData(");
+      const tag = template.slice(template.lastIndexOf("<div", at), template.indexOf(">", template.indexOf(":class=", at)));
+
+      expect(/: 'items-start'/.exec(tag)).not.toBeNull();
+      expect(tag).not.toMatch(/: '[^']*sticky/);
+    });
+
+    it("sits in a box holding only its own answer, which is what pushes it off when the next question comes", () => {
+      expect(ancestorsOf(template, 'x-data="sensaiMsgData(').slice(-3)).toEqual([
+        "group in exchanges",
+        "sensai-exchange space-y-3 pt-3",
+        "(msg, i) in group.messages",
+      ]);
+    });
+
+    it("keeps what shows while a request runs in the last exchange, so its question stays pinned as the reply streams", () => {
+      for (const marker of ['x-show="streaming && isRunning(activeId)"', 'x-show="isRunning(activeId) && !streaming"', 'x-show="isQueued(activeId)"']) {
+        expect(ancestorsOf(template, marker).slice(-4), marker).toEqual([
+          "group in exchanges",
+          "sensai-exchange space-y-3 pt-3",
+          "group.last",
+          "space-y-3",
+        ]);
+      }
+    });
+
+    it("takes the list up to the question when it is clicked, as well as opening it", () => {
+      expect(template).toContain(`@click="expand(); if (msg.role === 'user') showExchange($el)"`);
+    });
+  });
+
+  describe("clicking it", () => {
+    // a list with an exchange in it, whose top is where the test says
+    const exchangeIn = (exchangeTop: number, options: Parameters<typeof messageList>[0] = { prompts: [] }) => {
+      const list = messageList(options);
+      const exchange = document.createElement("div");
+      exchange.className = "sensai-exchange";
+      exchange.getBoundingClientRect = () => ({ top: exchangeTop }) as DOMRect;
+      const bubble = document.createElement("div");
+      exchange.append(bubble);
+      list.append(exchange);
+      return { list, exchange, bubble };
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal("getComputedStyle", () => ({ paddingTop: "12px" }) as CSSStyleDeclaration);
+    });
+
+    it("takes the list up to where its exchange begins", async () => {
+      // scrolled 600 down, with the exchange's top 200 above the top of the list (at 100)
+      const s = await boot();
+      const { list, bubble } = exchangeIn(-200, { prompts: [], scrollTop: 600 });
+      s.$refs = { messages: list };
+
+      s.showExchange(bubble);
+
+      // -200 - 100 + 600 to reach the exchange, and 12 more to reach the question inside its padding
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 312, behavior: "smooth" });
+      expect(list.scrollTo).toHaveBeenCalledTimes(1);
+    });
+
+    it("is left alone when it ends a selection of the question's text", async () => {
+      vi.stubGlobal("getSelection", () => ({ toString: () => "some of the text" }));
+      const s = await boot();
+      const { list, bubble } = exchangeIn(-200, { prompts: [], scrollTop: 600 });
+      s.$refs = { messages: list };
+
+      s.showExchange(bubble);
+
+      expect(list.scrollTo).not.toHaveBeenCalled();
+    });
+
+    it("scrolls when nothing is selected", async () => {
+      vi.stubGlobal("getSelection", () => ({ toString: () => "" }));
+      const s = await boot();
+      const { list, bubble } = exchangeIn(-200, { prompts: [], scrollTop: 600 });
+      s.$refs = { messages: list };
+
+      s.showExchange(bubble);
+
+      expect(list.scrollTo).toHaveBeenCalledTimes(1);
+    });
+
+    it("does nothing for a message that is not in an exchange, or before the list is there", async () => {
+      const s = await boot();
+      const loose = document.createElement("div");
+      const list = messageList({ prompts: [] });
+      s.$refs = { messages: list };
+
+      s.showExchange(loose);
+      expect(list.scrollTo).not.toHaveBeenCalled();
+
+      s.$refs = {};
+      expect(() => s.showExchange(loose)).not.toThrow();
+    });
+
+    it("scrolls to where the exchange begins even when the question is pinned at the top, which is not where it is", async () => {
+      // the list's top is at 100: the pinned question is drawn there, while its exchange began far above
+      const s = await boot();
+      const { list, exchange } = exchangeIn(-500, { prompts: [], scrollTop: 700 });
+      const pinned = document.createElement("div");
+      pinned.dataset["role"] = "user";
+      pinned.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+      exchange.prepend(pinned);
+      s.$refs = { messages: list };
+
+      s._scrollToLastPrompt();
+
+      // -500 - 100 + 700 + 12: the exchange, and not the pinned question (which would be 700 + 12)
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 112, behavior: "smooth" });
+    });
+  });
+});
+
+describe("opening and closing a message", () => {
+  type Msg = {
+    open: boolean;
+    single: boolean;
+    settled: boolean;
+    fullHeight: number;
+    bubbleStyle: string;
+    toggle(): void;
+    expand(): void;
+    setOpen(next: boolean): void;
+    measure(isLastUser?: boolean): void;
+    $refs: Record<string, unknown>;
+    $el: Element;
+  };
+
+  // the bubble, as the browser would report it: 300 of content with a border of 1, clipped to 56
+  // while it is closed, and a log of what was done to it and in what order
+  function bubble(log: string[] = []) {
+    return {
+      scrollHeight: 300,
+      clientHeight: 56,
+      get offsetHeight() {
+        log.push("reflow");
+        return 58;
+      },
+      style: {
+        set maxHeight(value: string) {
+          log.push(`max-height ${value}`);
+        },
+      },
+    };
+  }
+
+  // `ref` is the bubble the message finds by its ref, or null for a message with none
+  function message(role: string, isLastUser = false, ref: unknown = bubble()): Msg {
+    const m = (window as unknown as { sensaiMsgData(r: string, l: boolean): Msg }).sensaiMsgData(role, isLastUser);
+    m.$refs = ref === null ? {} : { bubble: ref };
+    return m;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("starts open for an answer and for the latest question, and closed for an earlier one", () => {
+    expect(message("assistant").open).toBe(true);
+    expect(message("user", true).open).toBe(true);
+    expect(message("user", false).open).toBe(false);
+  });
+
+  it("starts settled, so an open message has no height limit and nothing animates on first showing", () => {
+    const m = message("assistant");
+    m.single = false;
+
+    expect(m.settled).toBe(true);
+    expect(m.bubbleStyle).toBe("max-height: none");
+  });
+
+  it("opens to the height of its whole content, in pixels, so it animates as it grows", () => {
+    const m = message("user", false);
+
+    m.expand();
+
+    expect(m.open).toBe(true);
+    expect(m.settled).toBe(false);
+    // 300 of content and 2 of border
+    expect(m.fullHeight).toBe(302);
+    expect(m.bubbleStyle).toBe("max-height: 302px");
+  });
+
+  it("has no height limit again once the opening is over, so what it holds can grow", () => {
+    const m = message("user", false);
+    m.expand();
+
+    vi.advanceTimersByTime(BUBBLE_SETTLE_MS - 1);
+    expect(m.bubbleStyle).toBe("max-height: 302px");
+    vi.advanceTimersByTime(1);
+
+    expect(m.settled).toBe(true);
+    expect(m.bubbleStyle).toBe("max-height: none");
+  });
+
+  it("closes by giving the browser its height in pixels to start from, and then the short height", () => {
+    const log: string[] = [];
+    const m = message("assistant", false, bubble(log));
+
+    m.toggle();
+
+    // the height is set and the browser made to see it before the style changes to the closed one
+    // (measuring it read the height once already, which is the first entry)
+    expect(log.slice(log.indexOf("max-height 302px"))).toEqual(["max-height 302px", "reflow"]);
+    expect(m.open).toBe(false);
+    expect(m.bubbleStyle).toContain("max-height: 3.5rem");
+  });
+
+  it("closes without that step when it is still opening, because it already has a pixel height", () => {
+    const log: string[] = [];
+    const m = message("user", false, bubble(log));
+    m.expand();
+    const before = log.length;
+
+    m.toggle();
+
+    // nothing was set on the bubble and the browser was not made to catch up
+    expect(log.slice(before)).toEqual([]);
+    expect(m.open).toBe(false);
+  });
+
+  it("is not left open by an opening that was closed before it finished", () => {
+    const m = message("user", false);
+    m.expand();
+    m.toggle();
+
+    vi.advanceTimersByTime(BUBBLE_SETTLE_MS * 2);
+
+    expect(m.open).toBe(false);
+    expect(m.settled).toBe(false);
+    expect(m.bubbleStyle).toContain("max-height: 3.5rem");
+  });
+
+  it("measures its height afresh each time it opens", () => {
+    const tall = bubble();
+    const m = message("user", false, tall);
+    m.expand();
+    vi.advanceTimersByTime(BUBBLE_SETTLE_MS);
+    m.toggle();
+
+    tall.scrollHeight = 500;
+    m.expand();
+
+    expect(m.fullHeight).toBe(502);
+  });
+
+  it("is left alone when asked to be as it already is", () => {
+    const log: string[] = [];
+    const open = message("assistant", false, bubble(log));
+    const closed = message("user", false, bubble(log));
+    closed.single = false;
+
+    open.setOpen(true);
+    closed.setOpen(false);
+
+    // an open bubble stays settled with no limit, a closed one stays as it was, and neither was measured
+    expect(open.settled).toBe(true);
+    expect(open.bubbleStyle).toBe("max-height: none");
+    expect(closed.bubbleStyle).toContain("max-height: 3.5rem");
+    expect(log).toEqual([]);
+    vi.advanceTimersByTime(BUBBLE_SETTLE_MS * 2);
+    expect(open.bubbleStyle).toBe("max-height: none");
+  });
+
+  it("toggles open and closed", () => {
+    const m = message("user", false);
+
+    m.toggle();
+    expect(m.open).toBe(true);
+    m.toggle();
+    expect(m.open).toBe(false);
+  });
+
+  it("is opened by a click only when it is closed, and a click on an open one leaves it open", () => {
+    const m = message("assistant");
+
+    m.expand();
+
+    expect(m.open).toBe(true);
+    expect(m.settled).toBe(true);
+  });
+
+  it("does nothing, and has no style, for a single line", () => {
+    const m = message("user", false);
+    m.single = true;
+
+    m.toggle();
+    m.expand();
+
+    expect(m.open).toBe(false);
+    expect(m.bubbleStyle).toBe("");
+  });
+
+  it("opens with no height limit when there is no bubble to measure", () => {
+    const m = message("user", false, null);
+
+    expect(() => m.expand()).not.toThrow();
+
+    expect(m.open).toBe(true);
+    expect(m.bubbleStyle).toBe("max-height: none");
+  });
+
+  it("is settled again when it is measured, whatever it was doing", () => {
+    vi.stubGlobal("getComputedStyle", () => ({ lineHeight: "20px" }) as CSSStyleDeclaration);
+    const m = message("user", false);
+    m.expand();
+    const content = document.createElement("p");
+    Object.defineProperty(content, "scrollHeight", { value: 200 });
+    m.$el = document.createElement("div");
+    m.$el.append(content);
+
+    m.measure(false);
+
+    expect(m.settled).toBe(true);
+    expect(m.single).toBe(false);
+    expect(m.open).toBe(false);
+  });
+
+  it("is in the page: the header toggles it, the bubble opens on a click and is measured and styled by the component, with no fixed limit left", () => {
+    const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+
+    for (const handler of ["@mousedown.prevent", "@keydown.enter.prevent", "@keydown.space.prevent"]) {
+      expect(template).toContain(`${handler}="toggle()"`);
+    }
+    expect(template).toContain('x-ref="bubble"');
+    expect(template).toContain(':style="bubbleStyle"');
+    expect(template).toContain("transition-[max-height] duration-300");
+    expect(template).not.toContain("max-h-[10000px]");
+    expect(template).not.toContain("max-h-14");
+    expect(template).not.toMatch(/open = !open/);
+  });
+});

@@ -22,8 +22,10 @@ from mujoco_mojo.meta import REPO_URL
 from mujoco_mojo.utils.log import get_logger
 
 __all__ = [
+    "FAILED_COMPLETIONS",
     "JOB_STATUS_FNAME",
     "REQUIREMENTS_FNAME",
+    "TIMED_COMPLETIONS",
     "TRIAL_STATUS_FNAME",
     "Completion",
     "ExecutionMode",
@@ -91,10 +93,10 @@ class Completion(StrEnum):
     """An unhandled exception was raised while processing the trial. Distinct from `FAILURE`: the run broke, it did not merely miss its requirements."""
 
 
-_FAILED_COMPLETIONS = {Completion.FAILURE, Completion.TERMINATED}
+FAILED_COMPLETIONS = {Completion.FAILURE, Completion.TERMINATED}
 """Completion states counted as requirement failures (the trial ran, but requirements were not met)."""
 
-_TIMED_COMPLETIONS = {Completion.SUCCESS} | _FAILED_COMPLETIONS
+TIMED_COMPLETIONS = {Completion.SUCCESS} | FAILED_COMPLETIONS
 """Completion states whose durations feed `average_trial_duration` and throughput estimates. Errored trials are excluded because a run that crashed (possibly instantly) says nothing about how long a real trial takes."""
 
 
@@ -261,6 +263,16 @@ class TrialStatus(MojoBaseModel):
         )
         solving = self.solving.td if self.solving.td is not None else timedelta()
         return pending + generating + solving
+
+    @property
+    def ended(self) -> datetime | None:
+        """When the latest finished step of this trial ended, or `None` if no step has finished. For a trial that has completed, this is when it finished."""
+        ends = [
+            step.started + timedelta(seconds=step.elapsed)
+            for step in (self.pending, self.generating, self.solving)
+            if step.started is not None and step.elapsed is not None
+        ]
+        return max(ends, default=None)
 
 
 def _json_value(value: object) -> object:
@@ -494,7 +506,7 @@ class JobStatus(MojoBaseModel):
             timed_durations = [
                 s.td.total_seconds()
                 for s in self._cache.values()
-                if s.completion in _TIMED_COMPLETIONS
+                if s.completion in TIMED_COMPLETIONS
             ]
             if timed_durations:
                 avg_sec = sum(timed_durations) / len(timed_durations)
@@ -539,12 +551,7 @@ class JobStatus(MojoBaseModel):
         with self._lock:
             statuses = list(self._cache.values())
 
-        ends = [
-            step.started + timedelta(seconds=step.elapsed)
-            for status in statuses
-            for step in (status.pending, status.generating, status.solving)
-            if step.started is not None and step.elapsed is not None
-        ]
+        ends = [end for status in statuses if (end := status.ended) is not None]
         return max(ends, default=None)
 
     def total_runtimes(
@@ -681,7 +688,7 @@ class JobStatus(MojoBaseModel):
     @property
     def failed_trial_nums(self) -> list[int]:
         """Trials that completed but failed one or more requirements (`FAILURE` or `TERMINATED`)."""
-        return self.get_trial_nums_with_status(*_FAILED_COMPLETIONS)
+        return self.get_trial_nums_with_status(*FAILED_COMPLETIONS)
 
     @computed_field
     @property
@@ -704,7 +711,7 @@ class JobStatus(MojoBaseModel):
             timed_durations = [
                 s.td.total_seconds()
                 for s in self._cache.values()
-                if s.completion in _TIMED_COMPLETIONS and s.td is not None
+                if s.completion in TIMED_COMPLETIONS and s.td is not None
             ]
 
             if timed_durations:
@@ -973,14 +980,8 @@ class JobStatus(MojoBaseModel):
                 if run_start is not None:
                     running_starts.append(run_start)
                 continue
-            step_ends = [
-                step.started + timedelta(seconds=step.elapsed)
-                for step in (s.pending, s.generating, s.solving)
-                if step.started is not None and step.elapsed is not None
-            ]
-            if not step_ends:
-                continue
-            events.append((max(step_ends), s.completion))
+            if (ended := s.ended) is not None:
+                events.append((ended, s.completion))
 
         if not events and not running_starts:
             return []
@@ -1005,7 +1006,7 @@ class JobStatus(MojoBaseModel):
         for i in range(1, n_bins + 1):
             t = start + timedelta(seconds=total_span * i / n_bins)
             n_s = sum(1 for ts, c in events if ts <= t and c == Completion.SUCCESS)
-            n_f = sum(1 for ts, c in events if ts <= t and c in _FAILED_COMPLETIONS)
+            n_f = sum(1 for ts, c in events if ts <= t and c in FAILED_COMPLETIONS)
             n_e = sum(1 for ts, c in events if ts <= t and c == Completion.ERROR)
             n_r = sum(1 for rs in running_starts if rs <= t)
             bins.append(

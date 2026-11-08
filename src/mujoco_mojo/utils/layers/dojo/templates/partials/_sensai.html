@@ -4,6 +4,69 @@
     line-height: 1.6;
   }
 
+  /* a question stuck to the top of the list. it is the panel's own color from its top edge down, so it joins the edge
+     with no seam, and over its last stretch (the bottom padding the class pb-8 gives it, two rem) it fades out and what
+     scrolls under it is blurred, across the whole width, so an answer goes under it softly and not behind an edge.
+     the fade follows an S-curve (slow at the start, quickest in the middle, slow at the end) because a straight line
+     of the same length shows where it begins and ends. the blur is made of two layers, a light one over the whole
+     stretch and a stronger one over its upper part, each easing out the same way, so it is strongest by the question
+     and has gone by the bottom. when the question is not stuck the stretch lies over empty space of the same color,
+     where there is nothing to see */
+  .sensai-question {
+    --sensai-fade: 2rem;
+    /* a solid color first, for a browser that cannot read the fade below it */
+    background: var(--color-surface);
+    background: linear-gradient(
+      to bottom,
+      var(--color-surface) calc(100% - var(--sensai-fade)),
+      color-mix(in srgb, var(--color-surface) 96%, transparent) calc(100% - var(--sensai-fade) * 0.875),
+      color-mix(in srgb, var(--color-surface) 84%, transparent) calc(100% - var(--sensai-fade) * 0.75),
+      color-mix(in srgb, var(--color-surface) 68%, transparent) calc(100% - var(--sensai-fade) * 0.625),
+      color-mix(in srgb, var(--color-surface) 50%, transparent) calc(100% - var(--sensai-fade) * 0.5),
+      color-mix(in srgb, var(--color-surface) 32%, transparent) calc(100% - var(--sensai-fade) * 0.375),
+      color-mix(in srgb, var(--color-surface) 16%, transparent) calc(100% - var(--sensai-fade) * 0.25),
+      color-mix(in srgb, var(--color-surface) 4%, transparent) calc(100% - var(--sensai-fade) * 0.125),
+      transparent 100%
+    );
+  }
+
+  .sensai-question::before,
+  .sensai-question::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: var(--sensai-fade);
+    pointer-events: none;
+  }
+
+  .sensai-question::before {
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 1) 0%, rgb(0 0 0 / 0.96) 12.5%, rgb(0 0 0 / 0.84) 25%, rgb(0 0 0 / 0.68) 37.5%, rgb(0 0 0 / 0.5) 50%, rgb(0 0 0 / 0.32) 62.5%, rgb(0 0 0 / 0.16) 75%, rgb(0 0 0 / 0.04) 87.5%, rgb(0 0 0 / 0) 100%);
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 1) 0%, rgb(0 0 0 / 0.96) 12.5%, rgb(0 0 0 / 0.84) 25%, rgb(0 0 0 / 0.68) 37.5%, rgb(0 0 0 / 0.5) 50%, rgb(0 0 0 / 0.32) 62.5%, rgb(0 0 0 / 0.16) 75%, rgb(0 0 0 / 0.04) 87.5%, rgb(0 0 0 / 0) 100%);
+  }
+
+  .sensai-question::after {
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 1) 0%, rgb(0 0 0 / 0.96) 8.1%, rgb(0 0 0 / 0.84) 16.2%, rgb(0 0 0 / 0.68) 24.4%, rgb(0 0 0 / 0.5) 32.5%, rgb(0 0 0 / 0.32) 40.6%, rgb(0 0 0 / 0.16) 48.8%, rgb(0 0 0 / 0.04) 56.9%, rgb(0 0 0 / 0) 65%);
+    mask-image: linear-gradient(to bottom, rgb(0 0 0 / 1) 0%, rgb(0 0 0 / 0.96) 8.1%, rgb(0 0 0 / 0.84) 16.2%, rgb(0 0 0 / 0.68) 24.4%, rgb(0 0 0 / 0.5) 32.5%, rgb(0 0 0 / 0.32) 40.6%, rgb(0 0 0 / 0.16) 48.8%, rgb(0 0 0 / 0.04) 56.9%, rgb(0 0 0 / 0) 65%);
+  }
+
+  /* math: KaTeX writes MathML only, which the browser draws with the math fonts it has, so there is no KaTeX
+     stylesheet. a line of math on its own is a block, centered, that scrolls sideways when it is wider than the bubble */
+  .sensai-md math {
+    font-size: 1.05em;
+  }
+
+  .sensai-md .sensai-math-display {
+    display: block;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    text-align: center;
+  }
+
   .sensai-md p:last-child {
     margin-bottom: 0;
   }
@@ -102,7 +165,8 @@
   }
 
   /* CodeMirror's classHighlighter gives each token a tok-* class */
-  .sensai-cm-block .tok-propertyName {
+  .sensai-cm-block .tok-propertyName,
+  .sensai-cm-block .tok-definition {
     color: var(--color-code-key);
   }
 
@@ -307,7 +371,7 @@
     <div class="relative flex-1 min-h-0">
       <div x-ref="messages"
            @scroll="onScroll($el)"
-           class="h-full overflow-y-auto p-3 space-y-3">
+           class="h-full overflow-y-auto px-3 pb-3">
 
         <!-- empty state -->
         <div x-show="messages.length === 0 && !isBusy(activeId)"
@@ -325,129 +389,142 @@
             results, plot configuration,<br>or how to use Mojo.</p>
         </div>
 
-        <!-- messages -->
-        <template x-for="(msg, i) in messages"
-                  :key="activeId + ':' + i">
-          <div x-data="sensaiMsgData(msg.role, isLastUserMessage(i))"
-               x-init="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
-               @sensai-remeasure.window="$nextTick(() => { initSensAICodeBlocks($el); measure(isLastUserMessage(i)); })"
-               class="flex flex-col gap-0.5"
-               :class="msg.role === 'user' ? 'items-end' : 'items-start'">
+        <!-- messages, as exchanges: a question and its answer, so the question can stick to the top while the answer is read and be pushed off by the next one -->
+        <template x-for="group in exchanges"
+                  :key="activeId + ':' + group.start">
+          <div class="sensai-exchange space-y-3 pt-3">
+            <template x-for="(msg, i) in group.messages"
+                      :key="activeId + ':' + (group.start + i)">
+              <div x-data="sensaiMsgData(msg.role, isLastUserMessage(group.start + i))"
+                   x-init="$nextTick(() => hydrate(isLastUserMessage(group.start + i)))"
+                   @sensai-remeasure.window="$nextTick(() => hydrate(isLastUserMessage(group.start + i)))"
+                   class="flex flex-col gap-0.5"
+                   :data-role="msg.role"
+                   :class="msg.role === 'user' ? 'items-end sticky top-0 z-10 sensai-question -mx-3 px-3 pb-8 mb-0' : 'items-start'">
 
-            <!-- header: full row is toggle; chevron hidden for single-line messages -->
-            <button @mousedown.prevent="if (!single) open = !open"
-                    @keydown.enter.prevent="if (!single) open = !open"
-                    @keydown.space.prevent="if (!single) open = !open"
-                    class="flex items-center gap-1.5 text-xs font-mono text-ink-muted px-1 transition-colors"
-                    :class="!single ? 'hover:text-ink-body cursor-pointer' : 'cursor-default'"
-                    :title="headerTooltip(msg.model, single, open)">
-              <span x-text="msg.role === 'user' ? 'You' : 'SensAI'"></span>
-              <span>·</span>
-              <span x-text="notifTimeAgo(msg.ts, $store.dojo.notifTick)"></span>
-              <svg x-show="!single"
-                   class="w-2.5 h-2.5 ml-0.5 transition-transform duration-200"
-                   :class="open ? '' : '-rotate-90'"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2.5"
-                      d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+                <!-- header: the name, when it was sent, and the copy button. the name and time are the toggle, and its chevron is hidden for single-line messages -->
+                <div class="flex items-center gap-1">
+                  <button @mousedown.prevent="toggle()"
+                          @keydown.enter.prevent="toggle()"
+                          @keydown.space.prevent="toggle()"
+                          class="flex items-center gap-1.5 text-xs font-mono text-ink-muted px-1 transition-colors"
+                          :class="!single ? 'hover:text-ink-body cursor-pointer' : 'cursor-default'"
+                          :title="headerTooltip(msg.model, single, open)">
+                    <span x-text="msg.role === 'user' ? 'You' : 'SensAI'"></span>
+                    <span>·</span>
+                    <span x-text="notifTimeAgo(msg.ts, $store.dojo.notifTick)"></span>
+                    <svg x-show="!single"
+                         class="w-2.5 h-2.5 ml-0.5 transition-transform duration-200"
+                         :class="open ? '' : '-rotate-90'"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2.5"
+                            d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  <!-- copy button, beside the name and time -->
+                  <button @click="copy(msg.content)"
+                          class="flex items-center px-1 py-0.5 transition-colors"
+                          :class="copied ? 'text-success-500' : 'text-ink-muted hover:text-ink-body'"
+                          :title="copied ? 'Copied' : 'Copy message'"
+                          aria-label="Copy message">
+                    <svg x-show="!copied"
+                         class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="1.75"
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <svg x-show="copied"
+                         x-cloak
+                         class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         viewBox="0 0 24 24">
+                      <path stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2.25"
+                            d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                </div>
 
-            <!-- bubble: no constraints when single-line; grows/shrinks when multi-line -->
-            <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed overflow-hidden"
-                 :class="[
-                 msg.role === 'user' ? 'font-mono' : '',
-                 msg.role === 'user'
-                   ? 'bg-accent-500 text-white'
-                   : msg.error
-                     ? 'bg-danger-50 dark:bg-danger-900/20 border border-danger-300 dark:border-danger-700/50 text-danger-700 dark:text-danger-300'
-                     : 'bg-surface border border-subtle text-ink-strong',
-                 !single ? 'transition-[max-height] duration-300 ease-out' : '',
-                 !single && open  ? 'max-h-[10000px]' : '',
-                 !single && !open ? 'max-h-14 cursor-pointer' : ''
-               ]"
-                 :style="!single && !open ? '-webkit-mask-image: linear-gradient(to bottom, black 65%, transparent 100%); mask-image: linear-gradient(to bottom, black 65%, transparent 100%)' : ''"
-                 @click="if (!single && !open) open = true">
-              <template x-if="msg.role === 'user'">
-                <p class="whitespace-pre-wrap wrap-break-word"
-                   x-text="msg.content"></p>
-              </template>
-              <template x-if="msg.role !== 'user'">
-                <div class="sensai-md wrap-break-word"
-                     x-html="renderMarkdown(msg.content)"></div>
-              </template>
-            </div>
+                <!-- bubble: no constraints when single-line; grows/shrinks when multi-line -->
+                <div x-ref="bubble"
+                     class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed overflow-hidden"
+                     :class="[
+                     msg.role === 'user' ? 'font-mono' : '',
+                     msg.role === 'user'
+                       ? 'bg-accent-500 text-white'
+                       : msg.error
+                         ? 'bg-danger-50 dark:bg-danger-900/20 border border-danger-300 dark:border-danger-700/50 text-danger-700 dark:text-danger-300'
+                         : 'bg-surface border border-subtle text-ink-strong',
+                     !single ? 'transition-[max-height] duration-300 ease-out' : '',
+                     !single && !open ? 'cursor-pointer' : ''
+                   ]"
+                     :style="bubbleStyle"
+                     @click="expand(); if (msg.role === 'user') showExchange($el)">
+                  <template x-if="msg.role === 'user'">
+                    <p class="whitespace-pre-wrap wrap-break-word"
+                       x-text="msg.content"></p>
+                  </template>
+                  <template x-if="msg.role !== 'user'">
+                    <div class="sensai-md wrap-break-word"
+                         x-html="renderMarkdown(msg.content)"></div>
+                  </template>
+                </div>
 
-            <!-- copy button: below the bubble, on the same side as it -->
-            <button @click="copy(msg.content)"
-                    class="flex items-center px-1 py-0.5 transition-colors"
-                    :class="copied ? 'text-success-500' : 'text-ink-muted hover:text-ink-body'"
-                    :title="copied ? 'Copied' : 'Copy message'"
-                    aria-label="Copy message">
-              <svg x-show="!copied"
-                   class="w-3.5 h-3.5"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="1.75"
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-              </svg>
-              <svg x-show="copied"
+              </div>
+            </template>
+
+            <!-- what shows while a request runs, in the last exchange so its question stays pinned -->
+            <template x-if="group.last">
+              <div class="space-y-3">
+              <!-- streaming bubble — shown while model is generating tokens -->
+              <div x-show="streaming && isRunning(activeId)"
                    x-cloak
-                   class="w-3.5 h-3.5"
-                   fill="none"
-                   stroke="currentColor"
-                   viewBox="0 0 24 24">
-                <path stroke-linecap="round"
-                      stroke-linejoin="round"
-                      stroke-width="2.25"
-                      d="M5 13l4 4L19 7" />
-              </svg>
-            </button>
+                   class="flex flex-col gap-0.5 items-start">
+                <div class="text-xs font-mono text-ink-muted px-1">SensAI</div>
+                <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-surface border border-subtle text-ink-strong">
+                  <p class="whitespace-pre-wrap wrap-break-word"
+                     x-text="streamingContent + '▍'"></p>
+                </div>
+              </div>
+
+              <!-- typing/thinking indicator — shown while waiting for first token -->
+              <div x-show="isRunning(activeId) && !streaming"
+                   class="flex justify-start">
+                <div class="bg-surface border border-subtle rounded-xl px-4 py-3 flex items-center gap-2">
+                  <span x-show="thinkingLabel"
+                        x-text="thinkingLabel"
+                        class="text-sm font-mono text-ink-muted"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
+                        style="animation-delay: 0ms"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
+                        style="animation-delay: 150ms"></span>
+                  <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
+                        style="animation-delay: 300ms"></span>
+                </div>
+              </div>
+
+              <!-- this chat is waiting for its turn behind another chat's request -->
+              <div x-show="isQueued(activeId)"
+                   x-cloak
+                   class="flex justify-start">
+                <div class="bg-surface border border-subtle rounded-xl px-4 py-3 text-sm font-mono text-ink-muted">
+                  Waiting for another chat to finish...
+                </div>
+              </div>
+              </div>
+            </template>
           </div>
         </template>
-
-        <!-- streaming bubble — shown while model is generating tokens -->
-        <div x-show="streaming && isRunning(activeId)"
-             x-cloak
-             class="flex flex-col gap-0.5 items-start">
-          <div class="text-xs font-mono text-ink-muted px-1">SensAI</div>
-          <div class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed bg-surface border border-subtle text-ink-strong">
-            <p class="whitespace-pre-wrap wrap-break-word"
-               x-text="streamingContent + '▍'"></p>
-          </div>
-        </div>
-
-        <!-- typing/thinking indicator — shown while waiting for first token -->
-        <div x-show="isRunning(activeId) && !streaming"
-             class="flex justify-start">
-          <div class="bg-surface border border-subtle rounded-xl px-4 py-3 flex items-center gap-2">
-            <span x-show="thinkingLabel"
-                  x-text="thinkingLabel"
-                  class="text-sm font-mono text-ink-muted"></span>
-            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
-                  style="animation-delay: 0ms"></span>
-            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
-                  style="animation-delay: 150ms"></span>
-            <span class="w-1.5 h-1.5 rounded-full bg-ink-muted animate-bounce"
-                  style="animation-delay: 300ms"></span>
-          </div>
-        </div>
-
-        <!-- this chat is waiting for its turn behind another chat's request -->
-        <div x-show="isQueued(activeId)"
-             x-cloak
-             class="flex justify-start">
-          <div class="bg-surface border border-subtle rounded-xl px-4 py-3 text-sm font-mono text-ink-muted">
-            Waiting for another chat to finish...
-          </div>
-        </div>
       </div>
 
       <!-- scroll to bottom button -->
@@ -479,7 +556,7 @@
                   @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); send() }"
                   :disabled="isBusy(activeId)"
                   rows="1"
-                  placeholder="Ask about your sim..."
+                  :placeholder="placeholder"
                   class="input-field flex-1 resize-none px-3 py-2 leading-snug text-base"></textarea>
         <button @click="send()"
                 :disabled="isBusy(activeId) || !input.trim()"

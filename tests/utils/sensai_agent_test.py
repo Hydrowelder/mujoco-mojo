@@ -10,6 +10,7 @@ import itertools
 import json
 import logging
 from collections.abc import AsyncIterator, Callable, Iterable
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -53,10 +54,12 @@ from mujoco_mojo.utils.statusing import (
     ExecutionMode,
     JobStatus,
     JobType,
+    RequirementResult,
     StepStatus,
     TrialStatus,
 )
 
+job_report = importlib.import_module("mujoco_mojo.utils.layers.dojo.sensai.job_report")
 # the package re-exports the agent under the module's own name, so the module has to be imported by path
 plot_agent_module = importlib.import_module(
     "mujoco_mojo.utils.layers.dojo.sensai.plot_config_agent"
@@ -200,23 +203,48 @@ def run_plot_agent(model: FunctionModel, deps: SensAIDeps) -> str:
     return asyncio.run(plot_config_agent.run("do it", model=model, deps=deps)).output
 
 
-def run_job_agent(model: FunctionModel, deps: SensAIDeps) -> Any:
+def run_job_agent(model: FunctionModel, deps: SensAIDeps) -> str:
     return asyncio.run(job_status_agent.run("do it", model=model, deps=deps)).output
 
 
-class TestJobDurations:
-    """The question that ran the model into the request limit was which trial took the longest: the only per-trial tool took one trial number at a time, so it would have had to look at all of them."""
+JOB_TOOLS = (
+    "get_job_summary",
+    "get_running_trials",
+    "get_recent_trials",
+    "get_trials_by_duration",
+    "get_duration_statistics",
+    "get_completion_timeline",
+    "get_requirement_results",
+    "get_errored_trials",
+    "get_trial_log",
+    "get_trial_breakdown",
+    "get_trial_details",
+    "compare_trials",
+    "get_job_configuration",
+)
+NO_JOB = "No job is currently loaded."
+NOW = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
+"""The clock the job agent's tools read in these tests."""
+
+
+class TestJobAgent:
+    """The job agent answers from what its tools work out, and says it in words: the chat agent sees only the agent's output, so its tool results have to be in it."""
 
     @staticmethod
-    def ask(deps: SensAIDeps, **args: Any) -> str:
+    def ask(deps: SensAIDeps, tool: str, **args: Any) -> str:
+        """What one tool returned to the model."""
         seen: list[Any] = []
 
         def finish(messages: list[ModelMessage]) -> ModelResponse:
             seen.extend(tool_results(messages))
-            return call("final_result")(messages)
+            return say("done")(messages)
 
-        run_job_agent(scripted(call("get_trials_by_duration", **args), finish), deps)
+        run_job_agent(scripted(call(tool, **args), finish), deps)
         return str(seen[0])
+
+    @pytest.fixture(autouse=True)
+    def clock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(job_report, "now", lambda: NOW)
 
     def job(self, tmp_path: Path) -> JobStatus:
         return make_job(
@@ -226,98 +254,454 @@ class TestJobDurations:
                 1: (9.5, Completion.ERROR),
                 2: (1.25, Completion.FAILURE),
             },
-            n_trial=4,
+            n_trial=5,
         )
 
-    def test_the_longest_trials_come_first_with_their_time_and_how_they_ended(
-        self, tmp_path: Path
+    def running_job(self, tmp_path: Path) -> JobStatus:
+        """Trial 0 finished, trial 3 began generating 90 seconds ago, trial 4 is solving, 1 and 2 wait."""
+        job = make_job(tmp_path, {0: (4.0, Completion.SUCCESS)}, n_trial=5)
+        job.update_trial(
+            TrialStatus(
+                trial_num=3,
+                generating=StepStatus(started=NOW - timedelta(seconds=90)),
+            ),
+            save=False,
+        )
+        job.update_trial(
+            TrialStatus(
+                trial_num=4,
+                step="solving",
+                generating=StepStatus(
+                    started=NOW - timedelta(seconds=40), elapsed=10.0
+                ),
+                solving=StepStatus(started=NOW - timedelta(seconds=30)),
+            ),
+            save=False,
+        )
+        return job
+
+    def test_it_offers_a_tool_for_each_question_and_no_other(self) -> None:
+        tools, _prompt = self.offered()
+
+        assert set(tools) == set(JOB_TOOLS)
+
+    @pytest.mark.parametrize(
+        ("tool", "args"),
+        [
+            ("get_job_summary", {}),
+            ("get_running_trials", {}),
+            ("get_recent_trials", {"count": 3}),
+            ("get_trials_by_duration", {"count": 3}),
+            ("get_duration_statistics", {}),
+            ("get_completion_timeline", {}),
+            ("get_requirement_results", {"requirement": "x"}),
+            ("get_errored_trials", {}),
+            ("get_trial_log", {"trial_num": 1}),
+            ("get_trial_breakdown", {}),
+            ("get_trial_details", {"trial_num": 1}),
+            ("compare_trials", {"trial_nums": [1, 2]}),
+            ("get_job_configuration", {}),
+        ],
+    )
+    def test_every_tool_says_so_when_no_job_is_loaded(
+        self, tool: str, args: dict[str, Any]
     ) -> None:
-        text = self.ask(make_deps(None, job=self.job(tmp_path)), count=2)
+        assert self.ask(make_deps(None), tool, **args) == NO_JOB
 
-        assert text.splitlines() == [
-            "Longest 2 of 3 finished trials:",
-            "  Trial 1: 9.50s (error)",
-            "  Trial 0: 4.00s (success)",
-        ]
-
-    def test_the_shortest_can_be_asked_for_instead(self, tmp_path: Path) -> None:
-        text = self.ask(make_deps(None, job=self.job(tmp_path)), count=1, longest=False)
-
-        assert text.splitlines() == [
-            "Shortest 1 of 3 finished trials:",
-            "  Trial 2: 1.25s (failure)",
-        ]
-
-    def test_a_trial_that_has_not_finished_is_not_ranked(self, tmp_path: Path) -> None:
-        text = self.ask(make_deps(None, job=self.job(tmp_path)), count=10)
-
-        assert "of 3 finished trials" in text
-        assert "Trial 3" not in text
-
-    def test_a_trial_still_running_is_not_ranked_even_with_time_logged(
-        self, tmp_path: Path
-    ) -> None:
-        """A running trial has some time recorded but has not taken that long yet, so ranking it would name the wrong trial as the slowest."""
-        job = make_job(
-            tmp_path,
-            {0: (3.0, Completion.SUCCESS), 1: (99.0, Completion.INCOMPLETE)},
+    def test_the_answer_is_the_text_the_model_wrote(self, tmp_path: Path) -> None:
+        output = run_job_agent(
+            scripted(call("get_job_summary"), say("Trial 1 was slowest at 9.50s.")),
+            make_deps(None, job=self.job(tmp_path)),
         )
 
-        text = self.ask(make_deps(None, job=job), count=5)
+        assert output == "Trial 1 was slowest at 9.50s."
 
-        assert text.splitlines() == [
-            "Longest 1 of 1 finished trials:",
-            "  Trial 0: 3.00s (success)",
-        ]
-
-    def test_ties_are_listed_by_trial_number(self, tmp_path: Path) -> None:
-        job = make_job(
-            tmp_path, {0: (2.0, Completion.SUCCESS), 1: (2.0, Completion.SUCCESS)}
-        )
-
-        shortest = self.ask(make_deps(None, job=job), count=2, longest=False)
-
-        assert shortest.splitlines()[1:] == [
-            "  Trial 0: 2.00s (success)",
-            "  Trial 1: 2.00s (success)",
-        ]
-
-    def test_a_long_list_is_cut_at_the_limit_and_a_short_one_at_one(
+    def test_the_chat_agent_is_handed_that_answer_and_not_the_job_status(
         self, tmp_path: Path
     ) -> None:
-        job = make_job(tmp_path, {n: (float(n), Completion.SUCCESS) for n in range(30)})
+        """The job agent's output used to be the whole `JobStatus`, so what its tools found (the ranking, say) never reached the chat agent, which then asked again until the request limit."""
+        handed: list[Any] = []
 
-        many = self.ask(make_deps(None, job=job), count=100)
-        none = self.ask(make_deps(None, job=job), count=0)
+        def look(messages: list[ModelMessage]) -> ModelResponse:
+            handed.extend(tool_results(messages))
+            return say("Trial 0 was the slowest.")(messages)
 
-        assert len(many.splitlines()) == 1 + 20
-        assert len(none.splitlines()) == 1 + 1
+        model = TestChatRoute.router_model(
+            [call("ask_job_status_agent", request="which trial took longest?"), look],
+            [
+                call("get_trials_by_duration", count=1),
+                say("Trial 0 took the longest: 4.00s."),
+            ],
+        )
 
-    def test_it_says_so_when_nothing_has_finished(self, tmp_path: Path) -> None:
-        job = make_job(tmp_path, {}, n_trial=3)
+        asyncio.run(
+            chat_agent.run(
+                "which trial took longest?",
+                model=model,
+                deps=make_deps(None, job=self.job(tmp_path)),
+            )
+        )
 
-        assert "No trial has finished yet" in self.ask(make_deps(None, job=job))
+        assert handed == ["Trial 0 took the longest: 4.00s."]
 
-    def test_it_says_so_when_no_job_is_loaded(self) -> None:
-        assert self.ask(make_deps(None)) == "No job is currently loaded."
+    def test_the_model_gets_the_tools_result_to_write_its_answer_from(
+        self, tmp_path: Path
+    ) -> None:
+        seen: list[Any] = []
 
-    def test_the_agents_instructions_point_at_it_for_slowest_and_fastest(self) -> None:
-        prompts: list[str] = []
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(tool_results(messages))
+            return say("done")(messages)
 
-        def look(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+        run_job_agent(
+            scripted(call("get_errored_trials"), finish),
+            make_deps(None, job=self.job(tmp_path)),
+        )
+
+        assert "1 trials errored: 1." in seen[0]
+
+    class TestDurations:
+        """The question that ran the model into the request limit was which trial took the longest: the only per-trial tool took one trial number at a time, so it would have had to look at all of them."""
+
+        @staticmethod
+        def ranked(job: JobStatus, **args: Any) -> list[str]:
+            return TestJobAgent.ask(
+                make_deps(None, job=job), "get_trials_by_duration", **args
+            ).splitlines()
+
+        def test_the_longest_completed_trials_come_first(self, tmp_path: Path) -> None:
+            job = TestJobAgent().job(tmp_path)
+
+            assert self.ranked(job, count=2) == [
+                "Longest 2 of 2 completed trials:",
+                "  Trial 0: 4.00s (success)",
+                "  Trial 2: 1.25s (failure)",
+            ]
+
+        def test_an_errored_trial_is_left_out_unless_it_is_asked_for(
+            self, tmp_path: Path
+        ) -> None:
+            job = TestJobAgent().job(tmp_path)
+
+            assert "Trial 1" not in "\n".join(self.ranked(job, count=10))
+            assert self.ranked(job, outcome="error") == [
+                "Longest 1 of 1 errored trials:",
+                "  Trial 1: 9.50s (error)",
+            ]
+
+        def test_the_shortest_can_be_asked_for_instead(self, tmp_path: Path) -> None:
+            job = TestJobAgent().job(tmp_path)
+
+            assert self.ranked(job, count=1, longest=False) == [
+                "Shortest 1 of 2 completed trials:",
+                "  Trial 2: 1.25s (failure)",
+            ]
+
+        def test_an_outcome_that_is_not_one_of_the_four_is_sent_back_to_the_model(
+            self, tmp_path: Path
+        ) -> None:
+            """The model is told which values there are and asked again, and no ranking is made."""
+            job = TestJobAgent().job(tmp_path)
+
+            note = TestJobAgent.ask(
+                make_deps(None, job=job), "get_trials_by_duration", outcome="slowest"
+            )
+
+            assert "outcome" in note
+            assert "Trial" not in note
+            for allowed in ("completed", "success", "failure", "error"):
+                assert allowed in note
+
+        def test_a_running_trial_is_not_ranked_even_with_time_logged(
+            self, tmp_path: Path
+        ) -> None:
+            """A running trial has some time recorded but has not taken that long yet, so ranking it would name the wrong trial as the slowest."""
+            job = make_job(
+                tmp_path,
+                {0: (3.0, Completion.SUCCESS), 1: (99.0, Completion.INCOMPLETE)},
+            )
+
+            assert self.ranked(job, count=5) == [
+                "Longest 1 of 1 completed trials:",
+                "  Trial 0: 3.00s (success)",
+            ]
+
+        def test_it_says_so_when_nothing_has_finished(self, tmp_path: Path) -> None:
+            job = make_job(tmp_path, {}, n_trial=3)
+
+            assert "No completed trial has finished yet" in "\n".join(self.ranked(job))
+
+    def test_the_running_trials_are_told_with_their_step_and_how_long(
+        self, tmp_path: Path
+    ) -> None:
+        text = self.ask(
+            make_deps(None, job=self.running_job(tmp_path)), "get_running_trials"
+        )
+
+        assert text.splitlines() == [
+            "Running now: 2 of 5 trials (2 waiting to start, 1 finished). Longest running first:",
+            "  Trial 3: generating for 90.00s (1m 30s), running 90.00s (1m 30s) in all",
+            "  Trial 4: solving for 30.00s, running 40.00s in all",
+        ]
+
+    def test_one_trial_is_told_with_how_long_it_has_run(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.running_job(tmp_path)),
+            "get_trial_details",
+            trial_num=4,
+        )
+
+        assert "  running for 40.00s so far, in solving for 30.00s" in text
+
+    def test_the_breakdown_separates_running_from_waiting(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.running_job(tmp_path)), "get_trial_breakdown"
+        )
+
+        assert "Running (2): 3-4" in text
+        assert "Waiting to start (2): 1-2" in text
+
+    def test_the_summary_counts_the_running_trials(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.running_job(tmp_path)), "get_job_summary"
+        )
+
+        assert "Running now: 2" in text
+        assert "Waiting to start: 2" in text
+
+    def test_a_requirement_can_be_looked_into_by_name(self, tmp_path: Path) -> None:
+        job = make_job(tmp_path, {}, n_trial=2)
+        job.update_trial(
+            TrialStatus(
+                trial_num=0,
+                completion=Completion.FAILURE,
+                requirements=[
+                    RequirementResult(name="speed", passed=False, message="too fast")
+                ],
+            ),
+            save=False,
+        )
+
+        everything = self.ask(make_deps(None, job=job), "get_requirement_results")
+        one = self.ask(
+            make_deps(None, job=job), "get_requirement_results", requirement="speed"
+        )
+
+        assert "speed: failed in 1 of 1 trials" in everything
+        assert "  too fast" in one
+
+    def test_the_configuration_is_told(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.job(tmp_path)), "get_job_configuration"
+        )
+
+        assert "Seed: 0" in text
+        assert f"Working folder: {tmp_path}" in text
+
+    def test_the_statistics_are_told(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.job(tmp_path)), "get_duration_statistics"
+        )
+
+        assert text.startswith("2 completed trials")
+
+    def logged_job(self, tmp_path: Path) -> JobStatus:
+        """Three finished trials: 0 succeeded, 1 errored (with a log that says why), 2 missed a requirement."""
+        job = make_job(tmp_path, {}, n_trial=4)
+        job.start_time = NOW - timedelta(seconds=100)
+        for trial_num, began, took, completion, requirements in (
+            (0, 100, 40.0, Completion.SUCCESS, []),
+            (1, 80, 30.0, Completion.ERROR, []),
+            (
+                2,
+                60,
+                3.0,
+                Completion.FAILURE,
+                [RequirementResult(name="speed", passed=False, message="too fast")],
+            ),
+        ):
+            job.update_trial(
+                TrialStatus(
+                    trial_num=trial_num,
+                    completion=completion,
+                    step="solving",
+                    solving=StepStatus(
+                        started=NOW - timedelta(seconds=began), elapsed=took
+                    ),
+                    requirements=requirements,
+                ),
+                save=False,
+            )
+        folder = job.trial_num_to_path(1)
+        folder.mkdir(parents=True)
+        entry = {
+            "timestamp": (NOW - timedelta(seconds=55)).timestamp() * 1000,
+            "level": "ERROR",
+            "message": "Trial 1 failed with the following error: bad mass\n"
+            "Traceback (most recent call last):\n"
+            "ValueError: bad mass",
+        }
+        (folder / "mojo.log").write_text(json.dumps(entry) + "\n")
+        return job
+
+    def test_the_most_recent_trials_are_told_with_why_they_failed(
+        self, tmp_path: Path
+    ) -> None:
+        text = self.ask(
+            make_deps(None, job=self.logged_job(tmp_path)), "get_recent_trials", count=3
+        )
+
+        assert text.splitlines() == [
+            "Most recent 3 of 3 trials, newest first:",
+            "  Trial 1: error, finished 50.00s ago, took 30.00s, ValueError: bad mass",
+            "  Trial 2: failure, finished 57.00s ago, took 3.00s, missed speed",
+            "  Trial 0: success, finished 60.00s (1m 0s) ago, took 40.00s",
+        ]
+
+    def test_only_the_recent_errors_can_be_asked_for(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.logged_job(tmp_path)),
+            "get_recent_trials",
+            outcome="error",
+        )
+
+        assert (
+            text.splitlines()[0] == "Most recent 1 of 1 errored trials, newest first:"
+        )
+
+    def test_the_timeline_is_told(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.logged_job(tmp_path)), "get_completion_timeline"
+        )
+
+        assert text.splitlines()[0] == (
+            "3 trials finished in the 50.00s the job has run, in 8 slices of 6s:"
+        )
+
+    def test_a_trials_log_is_told(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.logged_job(tmp_path)),
+            "get_trial_log",
+            trial_num=1,
+            level="error",
+        )
+
+        assert text.splitlines()[0] == (
+            "Last 1 of 1 error-or-worse log entries of trial 1, oldest first:"
+        )
+        assert "ValueError: bad mass" in text
+
+    def test_trials_are_compared(self, tmp_path: Path) -> None:
+        text = self.ask(
+            make_deps(None, job=self.logged_job(tmp_path)),
+            "compare_trials",
+            trial_nums=[0, 2],
+        )
+
+        assert text.splitlines()[:2] == [
+            "Comparing trials 0, 2:",
+            "  outcome: trial 0 success, trial 2 failure",
+        ]
+
+    def test_the_errored_trials_and_one_errored_trial_give_what_the_log_says(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(None, job=self.logged_job(tmp_path))
+
+        errored = self.ask(deps, "get_errored_trials")
+        details = self.ask(deps, "get_trial_details", trial_num=1)
+
+        assert "  ValueError: bad mass: trial 1, broke while solving" in errored
+        assert "  broke while solving: ValueError: bad mass" in details
+
+    @staticmethod
+    def offered() -> tuple[dict[str, Any], str]:
+        """The tools the model is offered, each with its parameters' schemas, and the system prompt."""
+        tools: dict[str, Any] = {}
+        prompt: list[str] = []
+
+        def look(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+            for tool in info.function_tools:
+                tools[tool.name] = tool.parameters_json_schema["properties"]
             first = messages[0]
             assert isinstance(first, ModelRequest)
-            prompts.extend(
+            prompt.extend(
                 str(part.content)
                 for part in first.parts
                 if part.part_kind == "system-prompt"
             )
-            return ModelResponse(parts=[ToolCallPart("final_result", {})])
+            return ModelResponse(parts=[TextPart("ok")])
 
         run_job_agent(FunctionModel(look), make_deps(None))
+        return tools, "\n".join(prompt)
 
-        assert "call get_trials_by_duration" in prompts[0]
-        assert "Do not look at trials one at a time" in prompts[0]
+    def test_every_parameter_says_what_to_send_and_a_text_or_number_one_gives_an_example(
+        self,
+    ) -> None:
+        tools, _prompt = self.offered()
+
+        for name, parameters in tools.items():
+            for parameter, schema in parameters.items():
+                assert schema.get("description"), (name, parameter)
+                if schema.get("type") != "boolean":
+                    assert "such as" in schema["description"], (name, parameter)
+
+    def test_the_outcome_parameters_offer_the_five_outcomes(self) -> None:
+        tools, _prompt = self.offered()
+
+        for tool in ("get_trials_by_duration", "get_recent_trials"):
+            schema = tools[tool]["outcome"]
+            assert set(schema["enum"]) == {
+                "any",
+                "completed",
+                "success",
+                "failure",
+                "error",
+            }, tool
+
+    def test_the_log_level_parameter_offers_its_three_levels(self) -> None:
+        tools, _prompt = self.offered()
+
+        assert set(tools["get_trial_log"]["level"]["enum"]) == {
+            "any",
+            "warning",
+            "error",
+        }
+
+    def test_the_prompt_shows_a_call_of_every_tool(self) -> None:
+        _tools, prompt = self.offered()
+
+        for name in JOB_TOOLS:
+            assert f"{name}(" in prompt, name
+
+    def test_the_prompt_points_at_the_ranking_for_slowest_and_fastest(self) -> None:
+        _tools, prompt = self.offered()
+
+        assert "call get_trials_by_duration once" in prompt
+        assert "do not look at trials one at a time" in prompt
+
+    def test_the_prompt_sends_the_model_to_the_logs_for_why_a_trial_errored(
+        self,
+    ) -> None:
+        """The status files keep that a trial errored, not the exception, but the trial's log has it, so the model is told to read that and not to make a cause up when there is none."""
+        _tools, prompt = self.offered()
+
+        assert "use get_errored_trials, which reads each trial's log" in prompt
+        assert "get_trial_log for the log of one trial" in prompt
+        assert "do not invent a cause" in prompt
+
+    def test_the_prompt_says_to_compare_chosen_trials_with_one_call(self) -> None:
+        _tools, prompt = self.offered()
+
+        assert "call compare_trials once with all their numbers" in prompt
+
+    def test_the_prompt_is_one_paragraph_per_rule_without_stray_backslashes(
+        self,
+    ) -> None:
+        """The prompt's line continuations are written in a Python string, where a doubled backslash would be sent to the model as one."""
+        _tools, prompt = self.offered()
+
+        assert "\\" not in prompt
 
 
 def run_guide_agent(model: FunctionModel) -> str:
@@ -2087,18 +2471,39 @@ class TestLogging:
         run_job_agent(
             scripted(
                 call("get_job_summary"),
+                call("get_running_trials"),
                 call("get_trial_breakdown"),
                 call("get_trial_details", trial_num=3),
-                call("get_trials_by_duration", count=2, longest=False),
-                call("final_result"),
+                call("get_trials_by_duration", count=2, longest=False, outcome="error"),
+                call("get_duration_statistics"),
+                call("get_requirement_results", requirement="speed"),
+                call("get_errored_trials"),
+                call("get_job_configuration"),
+                call("get_recent_trials", count=4, outcome="failure"),
+                call("get_completion_timeline"),
+                call("get_trial_log", trial_num=2, count=7, level="error"),
+                call("compare_trials", trial_nums=[1, 2]),
+                say("done"),
             ),
             make_deps(None, job=job),
         )
 
         assert "SensAI get_job_summary" in caplog.text
+        assert "SensAI get_running_trials" in caplog.text
         assert "SensAI get_trial_breakdown" in caplog.text
         assert "SensAI get_trial_details: trial 3" in caplog.text
-        assert "SensAI get_trials_by_duration: count=2 longest=False" in caplog.text
+        assert (
+            "SensAI get_trials_by_duration: count=2 longest=False outcome=error"
+            in caplog.text
+        )
+        assert "SensAI get_duration_statistics" in caplog.text
+        assert "SensAI get_requirement_results: 'speed'" in caplog.text
+        assert "SensAI get_errored_trials" in caplog.text
+        assert "SensAI get_job_configuration" in caplog.text
+        assert "SensAI get_recent_trials: count=4 outcome=failure" in caplog.text
+        assert "SensAI get_completion_timeline" in caplog.text
+        assert "SensAI get_trial_log: trial 2 count=7 level=error" in caplog.text
+        assert "SensAI compare_trials: [1, 2]" in caplog.text
 
     def test_what_the_signal_agent_looked_up_is_logged(
         self, caplog: pytest.LogCaptureFixture
