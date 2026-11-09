@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Self, cast
 
 import numpy as np
@@ -12,7 +13,7 @@ from mujoco_mojo.mjcf.orientation import (
 )
 from mujoco_mojo.mjcf.position import Pos
 from mujoco_mojo.mjcf.xml_model import XMLModel
-from mujoco_mojo.stochas import AnyDist, Distribution, NamedValue
+from mujoco_mojo.stochas import AnyDist, Distribution, NamedValue, TransactionAttempt
 from mujoco_mojo.typing import EulerSeq, Mat3, Vec3, Vec6
 from mujoco_mojo.utils.log import get_logger
 
@@ -22,6 +23,100 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Inertial"]
+
+type _OrientationInput = (
+    tuple[type[OrientationBase], list[float | AnyDist], EulerSeq | None]
+    | AnyOrientation
+    | None
+)
+"""The `orientation` argument of `Inertial.from_random`."""
+
+
+class _RejectedDraw(Exception):
+    """A random draw that does not make a physical `Inertial`. `Inertial.from_random` redraws on this and on nothing else, so any other error reaches the caller on the first attempt."""
+
+
+def _distributions(*values: Any) -> list[Distribution[Any]]:
+    """Every distribution among the `from_random` inputs, whether given whole or as a component of a tuple or list, in the order the inputs are given."""
+    found: list[Distribution[Any]] = []
+    for value in values:
+        items = value if isinstance(value, (list, tuple)) else [value]
+        found.extend(item for item in items if isinstance(item, Distribution))
+    return found
+
+
+def _attempts(mojo_model: MojoModel, max_retries: int) -> Iterator[TransactionAttempt]:
+    """
+    Yields the attempts of a transaction on `mojo_model`, which ends once one of them finishes without a `_RejectedDraw`.
+
+    The error for running out of attempts is restated here in terms of `Inertial`. Only the transaction giving up can raise it: an error raised in the caller's `with attempt:` block never travels back into this generator.
+    """
+    try:
+        yield from mojo_model.transaction(
+            retry_on=_RejectedDraw, max_retries=max_retries
+        )
+    except RuntimeError as e:
+        msg = f"Failed to generate valid Inertial after {max_retries} retries."
+        logger.error(msg)
+        raise RuntimeError(msg) from e
+
+
+def _draw(attempt: TransactionAttempt, value: Any, reset_rng: bool) -> tuple[Any, int]:
+    """
+    Samples every distribution in `value`, which is one distribution, a tuple or list that mixes distributions with plain numbers, or a plain number or array.
+
+    Each sample is registered on the model, replacing any value already registered under its name, unless the attempt is rejected. Returns what the `Inertial` is built from and how many distributions were sampled.
+    """
+
+    def sample(dist: Distribution[Any]) -> NamedValue[Any]:
+        if reset_rng:
+            return attempt.sample_dist(dist, force=True, warn=False)
+        # the attempt reseeds a distribution the first time it sees it, so go around it to keep the caller's seed
+        return attempt.base.sample_dist(dist, force=True, warn=False, reset_rng=False)
+
+    if isinstance(value, (list, tuple)):
+        resolved: list[Any] = []
+        sampled = 0
+        for item in value:
+            if isinstance(item, Distribution):
+                resolved.append(sample(item).squeeze())
+                sampled += 1
+            else:
+                resolved.append(item)
+        return np.asarray(resolved, dtype=float), sampled
+
+    if isinstance(value, Distribution):
+        return sample(value).value.squeeze(), 1
+
+    return value, 0
+
+
+def _draw_orientation(
+    attempt: TransactionAttempt, orientation: _OrientationInput, reset_rng: bool
+) -> tuple[AnyOrientation, int]:
+    """Resolves the `orientation` argument of `Inertial.from_random` into an orientation, drawing from the distributions of a `(Class, Data, EulerSeq)` tuple."""
+    if orientation is None:
+        return Quat(), 0
+
+    if isinstance(orientation, OrientationBase):
+        return orientation, 0
+
+    if isinstance(orientation, tuple):
+        ori_type, ori_data, eulerseq = orientation
+        ori_val, sampled = _draw(attempt, ori_data, reset_rng)
+
+        data_dict: dict[str, Any] = {
+            "type": ori_type.model_fields["type"].default,
+            ori_type._rotation_attr: ori_val,
+        }
+        if eulerseq:
+            data_dict["eulerseq"] = eulerseq
+
+        return cast(AnyOrientation, ori_type(**data_dict)), sampled
+
+    msg = "orientation must be None, an Orientation object, or (Class, Data) tuple."
+    logger.error(msg)
+    raise TypeError(msg)
 
 
 class Inertial(XMLModel):
@@ -51,7 +146,7 @@ class Inertial(XMLModel):
     """Diagonal inertia matrix, expressing the body inertia relative to the inertial frame. If this attribute is omitted, the next attribute becomes required."""
 
     fullinertia: Vec6 | None = None
-    """Full inertia matrix M. Since M is 3-by-3 and symmetric, it is specified using only 6 numbers in the following order: M(1,1), M(2,2), M(3,3), M(1,2), M(1,3), M(2,3). The compiler computes the eigenvalue decomposition of M and sets the frame orientation and diagonal inertia accordingly. If non-positive eigenvalues are encountered (i.e., if M is not positive definite) a compile error is generated."""
+    """Full inertia matrix M. Since M is 3-by-3 and symmetric, it is specified using only 6 numbers in the following order: M(1,1), M(2,2), M(3,3), M(1,2), M(1,3), M(2,3). The compiler computes the eigenvalue decomposition of M and sets the frame orientation and diagonal inertia accordingly. If non-positive eigenvalues are encountered (i.e., if M is not positive definite) a compile error is generated, unless boundinertia is positive, in which case the eigenvalues are bounded below by it."""
 
     @property
     def using_diag(self) -> bool:
@@ -454,129 +549,63 @@ class Inertial(XMLModel):
             logger.exception(msg)
             raise ValueError(msg)
 
-        def _seed_dist(input_val: Any) -> None:
-            """Update the seed and trial number for the distribution."""
-            if isinstance(input_val, (list, tuple)):
-                for item in input_val:
-                    if isinstance(item, Distribution):
-                        if reset_rng:
-                            item.with_seed(mojo_model.seed).with_trial_num(
-                                mojo_model.trial_num
-                            )
+        # a name can be registered once, so reusing one (or one the model already holds) is refused before anything is drawn
+        registered = set(mojo_model.dists)
+        for dist in _distributions(
+            mass,
+            pos,
+            diaginertia,
+            fullinertia,
+            orientation[1] if isinstance(orientation, tuple) else None,
+        ):
+            if dist.name in registered:
+                msg = f"{dist.name} has already been registered."
+                logger.error(msg)
+                raise KeyError(msg)
+            registered.add(dist.name)
 
-                        # register the distribution for serialization
-                        mojo_model.dists[item.name] = cast(AnyDist, item)
-            elif isinstance(input_val, Distribution):
-                if reset_rng:
-                    input_val.with_seed(mojo_model.seed).with_trial_num(
-                        mojo_model.trial_num
-                    )
-
-                # register the distribution for serialization
-                mojo_model.dists[input_val.name] = cast(AnyDist, input_val)
-
-        _seed_dist(mass)
-        _seed_dist(pos)
-        if diaginertia is not None:
-            _seed_dist(diaginertia)
-        if fullinertia is not None:
-            _seed_dist(fullinertia)
-        if isinstance(orientation, tuple):
-            _seed_dist(orientation[1])
-
-        def _resolve_and_track(input_val: Any) -> tuple[np.ndarray, list[NamedValue]]:
-            """Samples distributions and prepares NamedValues for registration."""
-            resolved_values = []
-            pending_named_values = []
-
-            # case 1: tuple/list of components [(AnyDist|float), ...]
-            if isinstance(input_val, (list, tuple)):
-                for item in input_val:
-                    if isinstance(item, Distribution):
-                        # sample raw, but create the NamedValue container
-                        nv = item.sample_to_named_value(unit_system=mojo_model.us)
-                        resolved_values.append(nv.squeeze())
-                        pending_named_values.append(nv)
-                    else:
-                        resolved_values.append(item)
-                return np.asarray(resolved_values, dtype=float), pending_named_values
-
-            # case 2: single vector-level distribution
-            if isinstance(input_val, Distribution):
-                nv = input_val.sample_to_named_value(unit_system=mojo_model.us)
-                return nv.value.squeeze(), [nv]
-
-            # case 3: raw numeric value
-            return input_val, []
-
-        attempts = 0
-        while attempts < max_retries:
-            # gather all potential random values for this attempt
-            m_val, m_nv = _resolve_and_track(mass)
-            p_val, p_nv = _resolve_and_track(pos)
-            d_val, d_nv = (
-                _resolve_and_track(diaginertia)
-                if diaginertia is not None
-                else (None, [])
-            )
-            f_val, f_nv = (
-                _resolve_and_track(fullinertia)
-                if fullinertia is not None
-                else (None, [])
-            )
-
-            resolved_ori: AnyOrientation | None = None
-            ori_nv = []
-
-            if f_val is None:
-                if orientation is None:
-                    resolved_ori = Quat()
-                elif isinstance(orientation, OrientationBase):
-                    resolved_ori = orientation
-                elif isinstance(orientation, tuple):
-                    ori_type, ori_data, extra_val = orientation
-                    ori_val, ori_nv = _resolve_and_track(ori_data)
-
-                    data_dict: dict[str, Any] = {
-                        "type": ori_type.model_fields["type"].default,
-                        ori_type._rotation_attr: ori_val,
-                    }
-                    if extra_val:
-                        data_dict["eulerseq"] = extra_val
-
-                    resolved_ori = cast(AnyOrientation, ori_type(**data_dict))
-                else:
-                    msg = "orientation must be None, an Orientation object, or (Class, Data) tuple."
-                    logger.error(msg)
-                    raise TypeError(msg)
-
-            try:
-                instance = cls(
-                    mass=float(m_val),
-                    pos=Pos(pos=p_val),
-                    orientation=resolved_ori,
-                    diaginertia=d_val,
-                    fullinertia=f_val,
+        instance: Inertial | None = None
+        for attempt in _attempts(mojo_model, max_retries):
+            with attempt:
+                mass_val, sampled = _draw(attempt, mass, reset_rng)
+                pos_val, n = _draw(attempt, pos, reset_rng)
+                sampled += n
+                diag_val, n = (
+                    _draw(attempt, diaginertia, reset_rng)
+                    if diaginertia is not None
+                    else (None, 0)
                 )
+                sampled += n
+                full_val, n = (
+                    _draw(attempt, fullinertia, reset_rng)
+                    if fullinertia is not None
+                    else (None, 0)
+                )
+                sampled += n
+                orientation_val, n = (
+                    _draw_orientation(attempt, orientation, reset_rng)
+                    if fullinertia is None
+                    else (None, 0)
+                )
+                sampled += n
 
-                # success! commiting all Namedvalues to the registry
-                all_pending = m_nv + p_nv + d_nv + f_nv + ori_nv
-                for nv in all_pending:
-                    mojo_model.named.force_update(nv, warn=False)
+                # only an invalid inertial is redrawn; an error from drawing itself is a real error
+                try:
+                    instance = cls(
+                        mass=float(mass_val),
+                        pos=Pos(pos=pos_val),
+                        orientation=orientation_val,
+                        diaginertia=diag_val,
+                        fullinertia=full_val,
+                    )
+                except ValueError as e:
+                    raise _RejectedDraw(str(e)) from e
 
-                if all_pending:
+                if sampled:
                     logger.info(
-                        f"Generated valid Inertial after {attempts + 1} attempt(s) by sampling {len(all_pending)} distribution(s)"
-                    )
-                return instance
-
-            except ValueError as e:
-                attempts += 1
-                if attempts > max_retries // 2:
-                    logger.warning(
-                        f"High rejection rate detected for Inertial sampling. Current attempt: {attempts}/{max_retries}. Latest error: {e}"
+                        f"Generated valid Inertial after {attempt.attempt_number} attempt(s) by sampling {sampled} distribution(s)"
                     )
 
-        msg = f"Failed to generate valid Inertial after {max_retries} retries."
-        logger.error(msg)
-        raise RuntimeError(msg)
+        # the attempts only run out by raising, so the loop ends with a valid inertial
+        assert instance is not None
+        return instance

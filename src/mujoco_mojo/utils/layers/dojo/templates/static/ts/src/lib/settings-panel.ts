@@ -7,6 +7,7 @@
 // everything else is inferred from plain schema shape (type/enum/writeOnly/anyOf).
 
 import { Marked } from "marked";
+import type { AlpineMagics } from "../types/global";
 
 // a dedicated instance, not the shared `marked` singleton import - Vite
 // factors `marked` into one chunk shared between this bundle (main.js) and
@@ -246,6 +247,7 @@ export interface SettingsPanelState {
   removeListItem(listPath: string, index: number): void;
   showSettingsHint(text: string): void;
   hideSettingsHint(): void;
+  listRowHint(item: SettingsListItem, list: SettingsListField): string;
   settingsFieldOutOfRange(field: SettingsField): boolean;
   settingsFieldRangeMessage(field: SettingsField): string;
   renderMarkdown(text: string): string;
@@ -519,6 +521,79 @@ export function parseSettingsSchema(
 // ---------------------------------------------------------------------------
 // lookup / serialization
 // ---------------------------------------------------------------------------
+
+// the tallest a dropdown's list gets (15rem, the `max-h-60` its markup falls back
+// to), and the least room worth opening one into
+const DROPDOWN_MAX_HEIGHT = 240;
+const DROPDOWN_MIN_ROOM = 120;
+const DROPDOWN_GAP = 2;
+
+// the style that places a dropdown's list, which is teleported to <body> and fixed to
+// the window. it opens below its trigger and stops above the hint bar, where each
+// option's docstring shows, so it never covers it. with too little room there it opens
+// above the trigger instead, measured from the window's bottom so its height need not be
+// known. `top` is set either way since `.dropdown-panel` has `top: 100%`, which would
+// otherwise carry the list off the bottom of the screen
+export function dropdownStyle(
+  trigger: { top: number; bottom: number; left: number; width: number },
+  hintTop: number,
+  viewportHeight: number,
+): string {
+  const below = hintTop - trigger.bottom - DROPDOWN_GAP * 4;
+  const above = trigger.top - DROPDOWN_GAP * 4;
+  const flip = below < DROPDOWN_MIN_ROOM && above > below;
+  const maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, flip ? above : below);
+  const side = flip
+    ? `top:auto;bottom:${viewportHeight - trigger.top + DROPDOWN_GAP}px`
+    : `top:${trigger.bottom + DROPDOWN_GAP}px`;
+  return `position:fixed;${side};left:${trigger.left}px;width:${trigger.width}px;max-height:${maxHeight}px;`;
+}
+
+// whether any of a trigger is inside the pane it scrolls in
+export function inView(
+  trigger: { top: number; bottom: number },
+  pane: { top: number; bottom: number },
+): boolean {
+  return trigger.bottom > pane.top && trigger.top < pane.bottom;
+}
+
+// a settings dropdown: whether it is open, and the style that places its list. the
+// list is fixed to the window, so it is placed again whenever the pane under it scrolls
+// or the window is resized (the template calls `place` on both), which keeps it with
+// its button. while the button is scrolled out of sight the list stays open but hidden,
+// and shows again when the button comes back
+export function settingsDropdown() {
+  return {
+    open: false,
+    panelStyle: "",
+    toggle() {
+      this.open = !this.open;
+      if (this.open) this.place();
+    },
+    place() {
+      const trigger = (this as unknown as AlpineMagics).$refs["trigger"];
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const pane = trigger.closest("[data-settings-pane]");
+      const visible = !pane || inView(rect, pane.getBoundingClientRect());
+      const hint = document.querySelector("[data-settings-hint]");
+      const viewport = document.documentElement.clientHeight;
+      this.panelStyle =
+        dropdownStyle(rect, hint?.getBoundingClientRect().top ?? viewport, viewport) +
+        (visible ? "" : "visibility:hidden;");
+    },
+  };
+}
+
+// what a row of a list shows in the hint bar: the docstring of the row's own choice
+// (a model's provider), whichever of its controls is under the mouse or being edited,
+// else the list's own description
+export function listRowHint(item: SettingsListItem, list: SettingsListField): string {
+  const choice = item.fields.find((f) => f.widget === "select");
+  return choice
+    ? (choice.enumDescriptions?.[String(choice.value)] ?? choice.description)
+    : list.description;
+}
 
 export function findSettingsField(groups: SettingsGroup[], path: string): SettingsField | null {
   for (const g of groups) {
@@ -891,7 +966,7 @@ export function createSettingsPanelState(): SettingsPanelState {
 
     renderMarkdown(text) {
       try {
-        return dojoMarked.parse(text, { async: false }) as string;
+        return dojoMarked.parse(text, { async: false });
       } catch {
         return text;
       }
@@ -940,6 +1015,8 @@ export function createSettingsPanelState(): SettingsPanelState {
     hideSettingsHint() {
       this.settingsHintText = "";
     },
+
+    listRowHint,
 
     updateField(path, value) {
       const field = findSettingsField(this.settingsSections, path);

@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from mujoco_mojo.mjcf.mujoco_attr.body import Body
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
-    from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
     from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import AnyGeom
@@ -42,7 +41,6 @@ _frame_children = (
     "sites",
     "cameras",
     "lights",
-    "composites",
     "flexcomps",
     "plugins",
     "attaches",
@@ -147,9 +145,6 @@ class Frame(XMLModel):
 
     lights: list[Light] = Field(default_factory=list, exclude_if=is_empty_list)
     """Lights wrapped by this frame."""
-
-    composites: list[Composite] = Field(default_factory=list, exclude_if=is_empty_list)
-    """Composites wrapped by this frame."""
 
     flexcomps: list[FlexComp] = Field(default_factory=list, exclude_if=is_empty_list)
     """Flexible composites wrapped by this frame."""

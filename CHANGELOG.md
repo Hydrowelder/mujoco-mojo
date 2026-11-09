@@ -1,5 +1,30 @@
 # Changelog
 
+## Version 2.8.0 (2026-11-08)
+
+- Added support for [MuJoCo 4.0.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-4-0-0-november-6-2026)
+- `reloaded` now shows your model in MuJoCo Studio, either in its own window (`-ui studio`) or in a web browser (`-ui web`), which also works over SSH. The classic viewer is still there as `-ui opengl`
+- `reloaded` now opens the browser viewer by default when your MuJoCo build can serve it, and the classic OpenGL viewer when it cannot
+- Fixed a GLFW "context in use" warning, and a possible crash, when a run that recorded video finished
+- `reloaded` now has a new terminal screen, with a status bar, a log you can copy from, and new `pause`, `step`, `speed` , and `explain` commands
+- Updated `Inertial.from_random` to use `stochas` transations instead of the more complex hand-rolled random draw method
+- The job status and runtime report now list the `--arg` and `--kwarg` values a job ran with
+- Added MuJoCo Mojo documentation to the distribution
+- Added `mujoco-mojo docs build`, `docs serve` and `docs list` to build the documentation site for your installed version, browse it locally and see which are built (similar to `cargo doc`)
+- Various improvements for SensAI
+    - Added a new guide agent for explaining how to user MuJoCo Mojo
+    - Expanded tools for job status querying
+    - Fixed bugs when using SensAI to edit plot configs
+    - Now includes tabs for multiple chats
+    - Each reply lists the tool calls that produced it, live while it works and under the reply afterward
+    - Can now show other trials in versus mode, such as the ones that failed a requirement
+    - Added the `dojo.sensai.max_requests` and `dojo.sensai.max_versus_trials` settings
+- Fixed `Visual(rgba=VisualRGBA(...))` raising a `TypeError`
+
+> [!WARNING]
+> - **Breaking:** The `viser` and `mjviser` viewers are gone. A settings file that still names one now opens the browser viewer
+> - **Breaking:** The `reloaded` install extra is gone, because everything it installed is now included with Mojo
+
 ## Version 2.7.1 (2026-10-26)
 
 - Added support for [MuJoCo 3.17.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-3-17-0-october-22-2026)

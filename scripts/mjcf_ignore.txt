@@ -48,16 +48,16 @@ default_mismatch:general.dynprm
 default_mismatch:general.gainprm
 default_mismatch:general.biasprm
 
-# bare "geom" tag name is shared by body/geom, composite/geom, spatial/geom, and
+# bare "geom" tag name is shared by body/geom, spatial/geom, and
 # default/geom in the spec; `size`/`hfield`/`mesh` required-ness differs by which one
 # is actually being merged here
 default_mismatch:geom.size
 default_mismatch:geom.hfield
 default_mismatch:geom.mesh
 
-# `composite.initial` -- spec's literal "0" default is for a different "composite" sub-element
-# merged under the same bare tag name than the one CompositeBase.initial models
-default_mismatch:composite.initial
+# the spec writes the `yield` default as the single value "0", but mojo always gives both the stretching
+# and bending thresholds, and "0 0" is the same thing
+default_mismatch:elasticity.yield
 
 # bare "connect"/"weld" tag merges equality/connect's two distinct body-pair vs.
 # site-pair variants; each variant requires the attributes the other one doesn't
@@ -77,10 +77,6 @@ default_mismatch:key.ctrl
 # spec's `plugin` attribute description differs across the several distinct elements
 # (asset/plugin vs sensor/plugin vs actuator/plugin) that share the bare "plugin" tag
 default_mismatch:plugin.plugin
-
-# composite/skin's `texcoord` literal default doesn't apply to CompositeSkin's own
-# generated-skin semantics
-default_mismatch:skin.texcoord
 
 # asset/texture's generic `builtin` default doesn't apply to the dedicated
 # TextureBuiltIn variant, which requires it

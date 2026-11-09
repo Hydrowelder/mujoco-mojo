@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
@@ -14,7 +14,7 @@ BOX_CAMERA_NAME = mojo.CameraName("box_camera")
 TRACKING_CAMERA_NAME = mojo.CameraName("tracker_cam")
 
 # toggled by profile() to A/B tracer overhead against an otherwise-identical run
-TRACERS_ENABLED = True
+TRACERS_ENABLED = False
 
 
 def perform_mock_draws(mojo_model: mojo.MojoModel) -> None:
@@ -318,7 +318,7 @@ class Handoff(mojo.UserData):
     box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue[Any], mojo.NamedValue[Any]],
     ] = Field(default_factory=dict)
     box1_bunny: mojo.GeomMesh
     box2_bunny: mojo.GeomMesh

@@ -29,6 +29,7 @@ export type {
 } from "./lib/settings-panel";
 import type { SettingsPanelState } from "./lib/settings-panel";
 import type { ColumnMetadata } from "./lib/column-metadata.generated";
+import type { VersusState } from "./lib/plot-profile";
 
 export type { ColumnMetadata, TransformType } from "./lib/column-metadata.generated";
 
@@ -149,6 +150,12 @@ export interface TrialLogsResponse {
   filename: string | null;
   entries: LogEntry[];
 }
+
+// the signals of the open trial, shared with SensAI so it can check the names it uses
+export type ColumnManifest = Pick<
+  TrialDataResponse["columns"],
+  "all" | "rotatable_vectors" | "available_quats"
+>;
 
 export interface TrialDataResponse {
   columns: {
@@ -275,6 +282,11 @@ export interface DojoStore extends SettingsPanelState {
   isPageReady: boolean;
   isFullscreen: boolean;
   overlayCount: number;
+  // set by the trial viewer, null on every other page
+  columnManifest: ColumnManifest | null;
+  // versus mode as the trial viewer has it, which SensAI sends with a message
+  // and changes through a reply; null on every other page
+  versus: VersusState | null;
   loadStartTime: number;
   isComplete: boolean;
   isMuted: boolean;
@@ -312,7 +324,8 @@ export interface DojoStore extends SettingsPanelState {
   init(): void;
   _installPlotlyLogCapture(): void;
   toast(message: string, type?: "success" | "error" | "info"): void;
-  copyText(text: string, successMsg?: string): Promise<void>;
+  // true when the text was copied (a toast says so either way)
+  copyText(text: string, successMsg?: string): Promise<boolean>;
   _setConnected(connected: boolean): void;
   checkServerHealth(): Promise<void>;
   setPageReady(val: boolean, force?: boolean): void;

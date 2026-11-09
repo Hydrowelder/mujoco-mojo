@@ -16,12 +16,70 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: dojo-eslint
+        name: Lint the Dojo frontend (ESLint)
+        # system, not node: it needs the npm dependencies installed in the ts
+        # directory (`npm install` there, see CLAUDE.md), the same as the type check
+        # and the tests, and only runs when the frontend's sources change
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts run lint
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/static/ts/(src/.*\.ts|eslint\.config\.js|tsconfig\.json|package-lock\.json)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: dojo-tsc
+        name: Type-check the Dojo frontend (tsc)
+        # system, not node, for the same reason as dojo-eslint
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts run typecheck
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/static/ts/(src/.*\.ts|tsconfig\.json|package-lock\.json)$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: dojo-vitest
+        name: Test the Dojo frontend (Vitest)
+        # before a push, not a commit, like the Python tests (act-test below). The
+        # tests also read the Jinja templates, so a template change runs them too
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts test
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/(static/ts/(src/.*\.ts|vitest\.config\.ts|tsconfig\.json|package-lock\.json)|[^/]+\.html|partials/.*\.html)$
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: local
+    hooks:
+      - id: gen-docs-models
+        name: Update the docs example models linked to MuJoCo Live
+        entry: uv run --no-project --with-editable . python scripts/gen_docs_models.py
+        # system, not python, for the same reason as gen-mjcf-tags above. This one runs
+        # before a push rather than a commit: it builds the example models (a few seconds)
+        # and the push is what publishes them to the branch the docs link to. A push stops
+        # when the hook rewrote a model, so commit the new file and push again
+        language: system
+        files: ^(src/mujoco_mojo/.*\.py|docs/user-guides/examples/vlr/vlr_example\.py|scripts/gen_docs_models\.py)$
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: local
+    hooks:
       - id: copy-docs-examples
         name: Copy Docs Examples to Examples
         entry: python scripts/copy_docs_examples_to_examples.py
         language: python
         files: ^docs/user-guides/.*\.py$
         additional_dependencies: [ruff==0.15.17]
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: gen-cli-reference
+        name: Update the command line reference page
+        # system, not python, for the same reason as gen-mjcf-tags below: it imports
+        # mujoco_mojo. It writes docs/reference/cli.md from the
+        # command line itself, so it is listed before gen-docs-source, which bundles it
+        entry: uv run --no-project --with-editable . python scripts/gen_cli_reference.py
+        language: system
+        files: ^(src/mujoco_mojo/utils/layers/cli\.py|scripts/gen_cli_reference\.py)$
+        pass_filenames: false
         stages: [pre-commit]
   - repo: local
     hooks:
@@ -36,6 +94,23 @@ repos:
         # environment and uv.lock.
         language: system
         files: ^(src/mujoco_mojo/mjcf/.*\.py|scripts/(gen_mjcf_tags\.py|mjcf_python_tree\.py|mjcf_schema_ignore\.txt))$
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
+      - id: gen-docs-source
+        name: Update the docs source bundled in the package
+        # stdlib only, so pre-commit's own python is enough. It rewrites
+        # src/mujoco_mojo/docs_source/ (mkdocs.yml and the pages without their images,
+        # which `mujoco-mojo docs build` builds the site from), and a commit stops when it
+        # did, so stage the result and commit again. It is listed after gen-cli-reference
+        # and gen-mjcf-tags because it copies what they write (the command line reference
+        # page and the MJCF tags checklist), and the command line is in the pattern
+        # because only a staged file starts a hook. SensAI and `mujoco-mojo docs path`
+        # read the guides from this bundle
+        entry: python scripts/gen_docs_source.py
+        language: python
+        files: ^(docs/.*\.(md|py|js|css|svg)|mkdocs\.yml|CHANGELOG\.md|scripts/(generated/implemented_mjcf_tags\.md|gen_docs_source\.py|fix_smart_quotes\.py)|src/mujoco_mojo/utils/layers/cli\.py)$
         pass_filenames: false
         stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit

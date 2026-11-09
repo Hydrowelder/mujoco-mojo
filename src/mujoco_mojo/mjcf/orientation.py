@@ -125,7 +125,7 @@ class OrientationBase(XMLModel, ABC):
         diff = self.inv() * other
         as_rad = float(np.linalg.norm(diff.to_rotation().as_rotvec()))
         as_rad = max(0.0, as_rad)
-        return as_rad if angle == Angle.RADIAN else np.degrees(as_rad)
+        return as_rad if angle == Angle.RADIAN else float(np.degrees(as_rad))
 
     @overload
     @classmethod

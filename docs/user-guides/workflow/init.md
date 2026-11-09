@@ -18,15 +18,35 @@ With no flags, the command generates a standard Monte Carlo project. Pass `--opt
 
 ## Generated Files
 
-Running `mujoco-mojo init` produces three files in the current directory:
+Running `mujoco-mojo init` produces these files in the current directory:
 
-| File            | Purpose                                                 |
-| --------------- | ------------------------------------------------------- |
-| `simulation.py` | Simulation stubs: `UserData`, `generate`, and `runtime` |
-| `run.sh`        | Pre-configured shell script to launch the campaign      |
-| `reloaded.sh`   | Shell script to open the interactive viewer             |
+| File            | Purpose                                                       |
+| --------------- | ------------------------------------------------------------- |
+| `simulation.py` | Simulation stubs: `UserData`, `generate`, and `runtime`       |
+| `run.sh`        | Pre-configured shell script to launch the campaign            |
+| `reloaded.sh`   | Shell script to open the interactive viewer                   |
+| `AGENTS.md`     | Tells coding assistants where the Mojo guides are (see below) |
 
 Both shell scripts are made executable and resolve their paths relative to their own location, so they can be invoked from any working directory.
+
+It also creates a `.mujoco-mojo/` folder holding the project's settings file (`settings.toml`) and a schema that gives TOML-aware editors completion for it. If you have no global settings file yet, `init` asks whether to create one with the defaults. See [Where the Project File Lives](running-jobs/running-jobs.md#where-the-project-file-lives) for how project settings are found.
+
+### For Coding Assistants
+
+`AGENTS.md` is the file that coding assistants such as Codex, Cursor, GitHub Copilot and Claude Code read for instructions about a project. The one `init` writes says where the Mojo docs are, so an assistant that has never seen Mojo can read them instead of guessing. `mujoco-mojo docs path` prints the folder: it holds the pages of this site as markdown, for the version you have installed, and works without a network connection. The images are left out.
+
+If the project already has an `AGENTS.md`, `init` leaves it alone and prints the text to add to it. Claude Code reads `CLAUDE.md` instead of `AGENTS.md` when both exist, so a project with a `CLAUDE.md` needs the line `@AGENTS.md` in it. `init` tells you when that applies.
+
+### Choosing the Viewer
+
+`reloaded.sh` does not name a viewer. Reloaded takes it from the `reloaded.ui` setting, which defaults to the right one for the machine you run it on:
+
+| Your MuJoCo build                                | Default viewer                  |
+| ------------------------------------------------ | ------------------------------- |
+| Can serve the browser viewer                     | `web` (in a browser)            |
+| Cannot (for example the 4.0.0 Windows wheel)     | `opengl` (the classic window)   |
+
+A machine reached over SSH gets the browser viewer when it is available, which is the better experience over a network link. Because nothing is written into the script, the same project works on your desktop and on a remote machine. To pin a viewer, set `reloaded.ui` in your settings, or add `-ui studio`, `-ui web`, or `-ui opengl` to the command in `reloaded.sh`.
 
 ---
 

@@ -21,7 +21,7 @@ router = APIRouter()
 
 
 AUTOREFRESH_PERIOD = 5.0
-ACTIVE_CONNECTIONS: set[asyncio.Queue] = set()
+ACTIVE_CONNECTIONS: set[asyncio.Queue[str]] = set()
 
 
 async def broadcast_updates() -> None:
@@ -31,7 +31,7 @@ async def broadcast_updates() -> None:
     When clients connect, they join the broadcast to recieve updates.
     """
     loop = asyncio.get_running_loop()
-    synced_connections: set[asyncio.Queue] = set()
+    synced_connections: set[asyncio.Queue[str]] = set()
 
     while True:
         try:
@@ -91,7 +91,7 @@ async def broadcast_updates() -> None:
         await asyncio.sleep(AUTOREFRESH_PERIOD)
 
 
-async def _emit_to_all(message_dict: dict) -> None:
+async def _emit_to_all(message_dict: dict[str, Any]) -> None:
     """Helper to push a message to every queue on the bus."""
     if not ACTIVE_CONNECTIONS:
         return
@@ -135,7 +135,7 @@ async def get_custom_chime() -> FileResponse:
 
 
 @router.get("/api/status/job")
-async def get_job_status() -> dict:
+async def get_job_status() -> dict[str, Any]:
     """Returns aggregate job status for the monitor and trial viewer pages."""
     job = shared.CURRENT_JOB
     if not job:
@@ -182,7 +182,7 @@ async def status_stream(request: Request) -> EventSourceResponse:
     """
     Streams job loading progress to the monitor via SSE.
     """
-    client_queue = asyncio.Queue()
+    client_queue: asyncio.Queue[str] = asyncio.Queue()
     ACTIVE_CONNECTIONS.add(client_queue)
 
     async def event_generator() -> AsyncIterator[dict[str, Any]]:

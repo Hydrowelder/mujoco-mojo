@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.hfield import HField
@@ -7,9 +9,13 @@ from mujoco_mojo.mjcf.mujoco_attr.asset_attr.material import Material
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.mesh import AnyMesh
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.model import Model
 from mujoco_mojo.mjcf.mujoco_attr.asset_attr.texture import AnyTexture
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite_attr.skin import CompositeSkin
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.utils.utils import is_empty_list
+
+if TYPE_CHECKING:
+    # deformable_attr and body_attr import each other, so importing it here, before body_attr is loaded, fails;
+    # `Asset.model_rebuild()` in deformable.py resolves the annotation once both exist
+    from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.skin import DeformableSkin
 
 __all__ = ["Asset"]
 
@@ -29,7 +35,7 @@ class Asset(XMLModel):
         default_factory=list,
         exclude_if=is_empty_list,
     )
-    skins: list[CompositeSkin] = Field(
+    skins: list[DeformableSkin] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
     )

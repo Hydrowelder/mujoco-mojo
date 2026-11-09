@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+import numpy as np
 from pydantic import Field
 
 from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
@@ -15,14 +16,16 @@ class FlexCompElasticity(XMLModel):
     attributes = (
         "young",
         "poisson",
+        "shear",
         "damping",
         "thickness",
+        "yield_",
         "elastic2d",
         "section",
         "sectionsize",
     )
 
-    young: float = Field(
+    young: float | Vec2 = Field(
         default_factory=lambda: deepcopy(FlexElasticity.model_fields["young"].default),
     )
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
@@ -32,6 +35,9 @@ class FlexCompElasticity(XMLModel):
             FlexElasticity.model_fields["poisson"].default,
         ),
     )
+    """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
+
+    shear: float = 0
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     damping: float = Field(
@@ -46,6 +52,9 @@ class FlexCompElasticity(XMLModel):
             FlexElasticity.model_fields["thickness"].default,
         ),
     )
+    """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
+
+    yield_: Vec2 = np.array((0, 0))
     """Same as in flex/elasticity. All attributes are passed through to the automatically-generated flex."""
 
     elastic2d: FlexElastic2D = Field(

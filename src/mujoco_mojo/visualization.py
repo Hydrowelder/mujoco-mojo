@@ -35,14 +35,8 @@ class ArrowConfig:
     # any magnitude.
     _MAX_WIDTH_TO_LENGTH_RATIO: ClassVar[float] = 0.25
 
-    def draw_in_scene(self, mj_model: mujoco.MjModel, scene: mujoco.MjvScene) -> None:
-        if scene.ngeom >= scene.maxgeom:
-            logger.warning("Unable to draw arrow due to geom. quantity limit")
-            return
-
-        # grab current geom slot
-        geom = scene.geoms[scene.ngeom]
-
+    def fill_geom(self, geom: mujoco.MjvGeom, mj_model: mujoco.MjModel) -> None:
+        """Turns `geom` into this arrow. It can be a slot in a scene or a standalone `MjvGeom`, which is what a viewer that keeps its own list of decorative geoms wants."""
         # initialize with default
         mujoco.mjv_initGeom(
             geom=geom,
@@ -65,6 +59,13 @@ class ArrowConfig:
             to=end,
         )
         geom.rgba = self.color
+
+    def draw_in_scene(self, mj_model: mujoco.MjModel, scene: mujoco.MjvScene) -> None:
+        if scene.ngeom >= scene.maxgeom:
+            logger.warning("Unable to draw arrow due to geom. quantity limit")
+            return
+
+        self.fill_geom(scene.geoms[scene.ngeom], mj_model)
         scene.ngeom += 1
 
     def resolve_arrow_coords(
@@ -105,14 +106,8 @@ class LineConfig:
     color: Vec4
     width: float
 
-    def draw_in_scene(self, scene: mujoco.MjvScene) -> None:
-        if scene.ngeom >= scene.maxgeom:
-            logger.warning("Unable to draw line due to geom. quantity limit")
-            return
-
-        # grab current geom slot
-        geom = scene.geoms[scene.ngeom]
-
+    def fill_geom(self, geom: mujoco.MjvGeom) -> None:
+        """Turns `geom` into this line. It can be a slot in a scene or a standalone `MjvGeom`."""
         # initialize with default
         mujoco.mjv_initGeom(
             geom=geom,
@@ -132,4 +127,11 @@ class LineConfig:
             to=self.pos2,
         )
         geom.rgba = self.color
+
+    def draw_in_scene(self, scene: mujoco.MjvScene) -> None:
+        if scene.ngeom >= scene.maxgeom:
+            logger.warning("Unable to draw line due to geom. quantity limit")
+            return
+
+        self.fill_geom(scene.geoms[scene.ngeom])
         scene.ngeom += 1

@@ -1,0 +1,228 @@
+site_name: MuJoCo Mojo
+site_url: https://hydrowelder.github.io/mujoco-mojo/
+copyright: <a href="https://www.david-gable.com">Copyright &copy; 2026 David Gable</a>
+repo_url: https://github.com/Hydrowelder/mujoco-mojo
+repo_name: mujoco-mojo
+remote_branch: gh-pages
+remote_name: origin
+
+watch:
+  - docs
+  - src
+  - scripts
+
+nav:
+  - Home: index.md
+  - Changelog: changelog.md
+  - User Guide:
+      - Workflow:
+          - Getting Started: user-guides/workflow/getting-started.md
+          - Initializing a Project: user-guides/workflow/init.md
+          - Generate Script: user-guides/workflow/generate-script.md
+          - Runtime Script: user-guides/workflow/runtime-script.md
+          - Running Jobs:
+              - user-guides/workflow/running-jobs/running-jobs.md
+              - Example Report: user-guides/workflow/running-jobs/MOJO_RUNTIME_REPORT.md
+      - Features:
+          - Dojo Dashboard:
+              - user-guides/features/dojo/dojo.md
+              - Monitor: user-guides/features/dojo/monitor.md
+              - Mosaic: user-guides/features/dojo/mosaic.md
+          - Optimization: user-guides/features/optimization.md
+          - Reloaded: user-guides/features/reloaded.md
+          - Pose Context: user-guides/features/pose-context.md
+          - Requirements: user-guides/features/requirements.md
+      - Examples:
+          - user-guides/examples/examples.md
+          - Vertically Landed Rocket:
+              - user-guides/examples/vlr/introduction.md
+              - Composing the Model: user-guides/examples/vlr/composing-the-model.md
+              - Defining a Ground Surface: user-guides/examples/vlr/ground.md
+              - Building the Rocket: user-guides/examples/vlr/rocket.md
+              - Assembling Landing Gear: user-guides/examples/vlr/landing-gear.md
+              - Runtime Behavior: user-guides/examples/vlr/runtime.md
+
+      - Developer:
+          - user-guides/developer/developer.md
+          - Asset Bundling: user-guides/developer/asset-bundling.md
+  - About: about.md
+  - Reference:
+      - Command Line: reference/cli.md
+      - MJCF: reference/mujoco_mojo/mjcf.md
+      - Stochas: reference/mujoco_mojo/stochas.md
+
+theme:
+  name: material
+  logo: assets/dark-logo.svg
+  favicon: assets/dark-logo.svg
+  font: false
+
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/lightbulb-on
+        name: Switch to dark mode
+
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: cyan
+      toggle:
+        icon: material/lightbulb-outline
+        name: Switch to light mode
+
+  features:
+    - navigation.tabs
+    - navigation.instant
+    # - navigation.instant.preview
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - navigation.top
+    - navigation.path
+    - navigation.sections
+    - navigation.tabs.sticky
+    - navigation.indexes
+    - navigation.footer
+    - content.action.edit
+    - content.action.view
+    - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tooltips
+    - search.highlight
+    - search.suggest
+    - search.share
+    - content.tabs.link
+    - content.footnote.tooltips
+
+plugins:
+  - search
+  - open-in-new-tab:
+      add_icon: true
+  - api-autonav:
+      modules: [src/mujoco_mojo]
+      nav_section_title: Reference
+      module_options:
+        # the top-level package re-exports every mjcf type through __all__, which
+        # would render the whole mjcf API on this one page, so show only its docstring
+        "^mujoco_mojo$":
+          members: false
+      exclude:
+        # the mjcf object model is enormous and mirrors the MuJoCo XML reference
+        - "mujoco_mojo.mjcf"
+        - "mujoco_mojo.mjcf.*"
+        # a pure re-export of the stochas library, which has its own reference
+        - "mujoco_mojo.stochas"
+        - "mujoco_mojo.stochas.*"
+        # scaffolding templates copied by `mujoco-mojo init`
+        - "mujoco_mojo.templates"
+        - "mujoco_mojo.templates.*"
+        # dojo frontend (typescript, tailwind, and the vite build output)
+        - "mujoco_mojo.utils.layers.dojo.templates"
+        - "mujoco_mojo.utils.layers.dojo.templates.*"
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            modernize_annotations: true
+            backlinks: tree
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: true
+            show_bases: true
+            members_order: source
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            show_signature_annotations: true
+            separate_signature: true
+            summary: false # set to true to get summary tables
+            inherited_members: true
+            # inheritance_diagram_direction: TD
+            # show_inheritance_diagram: true
+            show_attribute_values: true
+            signature_crossrefs: true
+            extensions:
+              - pydantic: { schema: true }
+          inventories:
+            - https://docs.python.org/3/objects.inv
+            - https://mkdocstrings.github.io/griffe/objects.inv
+            - https://docs.pydantic.dev/latest/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://hydrowelder.github.io/stochas/objects.inv
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - md_in_html
+  - def_list
+  - footnotes
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      auto_title: true
+      # auto_title_map:
+      #   "Python": ":simple-python: Python"
+      #   "Bash": "`:material-bash:` Bash"
+      linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.details
+  - pymdownx.snippets:
+      check_paths: true
+      dedent_subsections: true
+  - pymdownx.blocks.caption
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.quotes:
+      callouts: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - pymdownx.critic
+  - pymdownx.caret
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.tilde
+  - zensical.extensions.glightbox:
+      auto_themed: true
+
+extra:
+  generator: false
+  social:
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/mujoco-mojo/
+      name: PyPI
+    - icon: fontawesome/brands/github
+      link: https://github.com/Hydrowelder
+      name: My GitHub
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/in/david-gable/
+      name: My LinkedIn
+
+extra_javascript:
+  - https://unpkg.com/mermaid@10.9.0/dist/mermaid.min.js
+  - https://unpkg.com/tablesort@5.3.0/dist/tablesort.min.js
+  - javascripts/tablesort.js
+  - javascripts/favicon-switcher.js
+  - javascripts/mojo-highlighter.js
+
+extra_css:
+  - stylesheets/extra.css

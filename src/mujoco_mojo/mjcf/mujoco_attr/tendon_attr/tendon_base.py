@@ -38,6 +38,7 @@ class TendonBase(XMLModel, ABC):
         "frictionloss",
         "margin",
         "springlength",
+        "springyield",
         "stiffness",
         "damping",
         "user",
@@ -84,6 +85,9 @@ class TendonBase(XMLModel, ABC):
     Note that the default value of -1, which invokes the automatic length computation, was designed with spatial tendons in mind, which can only have nonegative length. In order to set the springlength of a fixed tendon to -1, use a nearby value like -0.99999.
 
     If two non-decreasing values are given, they define a dead-band range. If the tendon length is between the two values, the force is 0. If it is outside this range, the force behaves like a regular spring, with the rest-point corresponding to the nearest springlength value. A deadband can be used to define tendons whose limits are enforced by springs rather than constraints."""
+
+    springyield: float = 0
+    """Elastic yield threshold for the tendon spring. When positive, the tendon spring reference range is allocated in the mutable state vector `mjData.plastic` at offset `mjModel.tendon_plasticadr[i]` (2 entries, initialized from `mjModel.tendon_lengthspring`) and shifts permanently whenever the displacement outside the spring deadband exceeds springyield (ideal elasto-plasticity). For unilateral slack tendons with springlength="0 L" (L > 0), tensile yielding shifts only the upper bound L while keeping the lower bound pinned at 0. When 0 (default), plasticity is disabled (`mjModel.tendon_plasticadr[i] == -1`) and the spring is purely elastic; setting `mjModel.tendon_springyield[i] = 0` at runtime on an already-plastic tendon (`tendon_plasticadr[i] >= 0`) corresponds to zero yield threshold (full plastic slip)."""
 
     stiffness: Vec3 = np.array((0, 0, 0))
     """Tendon stiffness coefficients a,b,ca,b,c. A positive aa generates a linear spring force f(x)=-ax, acting along the tendon. Here xx is the tendon displacement defined by springlength.

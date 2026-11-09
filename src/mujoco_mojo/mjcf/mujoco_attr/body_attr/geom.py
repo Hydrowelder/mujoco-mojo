@@ -100,6 +100,7 @@ _geom_attr = (
     "pose",
     "fitscale",
     "rgba",
+    "castshadow",
     "fluidshape",
     "fluidcoef",
     "user",
@@ -205,6 +206,9 @@ class GeomBase(XMLModel, ABC):
     fitscale: float = 1
     """This attribute is used only when a primitive geometric type is being fitted to a mesh asset. The scale specified here is relative to the output of the automated fitting procedure. The default value of 1 leaves the result unchanged, a value of 2 makes all sizes of the fitted geom two times larger."""
 
+    castshadow: bool = True
+    """If this attribute is true, the geom casts shadows when illuminated by shadow-casting lights (those with castshadow set to true). Setting this to false disables shadow casting for this geom while still allowing it to receive shadows and be lit normally."""
+
     fluidshape: FluidShape = FluidShape.NONE
     """"ellipsoid" activates the geom-level fluid interaction model based on an ellipsoidal approximation of the geom shape. When active, the model based on body inertia sizes is disabled for the body in which the geom is defined. See section on ellipsoid-based fluid interaction model for details."""
 
@@ -229,16 +233,16 @@ class GeomBase(XMLModel, ABC):
         """Returns the position of the center of the geom."""
         return state.data.geom_xpos[self.get_id(state.model)]
 
-    def geom_size(self, state: MjState) -> float:
+    def geom_size(self, state: MjState) -> Vec3:
         return state.model.geom_size[self.get_id(state.model)]
 
     def geom_aabb_radius(self, state: MjState) -> float:
         """Returns the radius of a bounding sphere of the geom wrapped to its AABB."""
-        return np.max(self.geom_size(state))
+        return float(np.max(self.geom_size(state)))
 
     def rbound(self, state: MjState) -> float:
         """Returns the radius of a bounding sphere of the geom."""
-        return state.model.geom_rbound[self.get_id(state.model)]
+        return float(state.model.geom_rbound[self.get_id(state.model)])
 
     def rt_pos(self, state: MjState) -> Vec3:
         """Returns the world position of the center of the geom."""
@@ -566,7 +570,7 @@ class GeomMesh(GeomBase, ProximityMixin):
     """If the geom type is "mesh", this attribute is required. It references the mesh asset to be instantiated. This attribute can also be specified if the geom type corresponds to a geometric primitive, namely one of "sphere", "capsule", "cylinder", "ellipsoid", "box". In that case the primitive is automatically fitted to the mesh asset referenced here. The fitting procedure uses either the equivalent inertia box or the axis-aligned bounding box of the mesh, as determined by the attribute fitaabb of compiler. The resulting size of the fitted geom is usually what one would expect, but if not, it can be further adjusted with the fitscale attribute below. In the compiled mjModel the geom is represented as a regular geom of the specified primitive type, and there is no reference to the mesh used for fitting."""
 
     def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
-        return mj_model.geom_dataid[self.get_id(mj_model)]
+        return int(mj_model.geom_dataid[self.get_id(mj_model)])
 
     def _proximity_name(self) -> str | None:
         return self.name

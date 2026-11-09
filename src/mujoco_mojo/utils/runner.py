@@ -80,6 +80,8 @@ from mujoco_mojo.utils.statusing import (
     JobStatus,
     JobType,
     TrialStatus,
+    describe_args,
+    describe_kwargs,
 )
 from mujoco_mojo.utils.utils import write_dojo_script
 from mujoco_mojo.utils.watching import watch_job
@@ -1013,7 +1015,7 @@ class MojoRunner:
             logger.info(f"Renumbered {folder.name} -> {expected_name}")
 
     def execute_single_trial(
-        self, trial_num: int, seed: int | None, overrides_payload: dict
+        self, trial_num: int, seed: int | None, overrides_payload: dict[str, Any]
     ) -> tuple[MojoModel | None, TrialStatus, MjState | None]:
         """
         Helper to package a Trial and run it.
@@ -1058,7 +1060,7 @@ class MojoRunner:
         return mojo_model, trial_status, state
 
     def _execute_trial_subprocess(
-        self, trial_num: int, seed: int | None, overrides_payload: dict
+        self, trial_num: int, seed: int | None, overrides_payload: dict[str, Any]
     ) -> TrialStatus:
         """
         Subprocess-safe wrapper around `execute_single_trial` for parallel MC.
@@ -1100,8 +1102,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            args_used=bool(self.args),
-            kwargs_used=bool(self.kwargs),
+            args_used=describe_args(self.args),
+            kwargs_used=describe_kwargs(self.kwargs),
             trial_nums=job_trial_nums,
         )
 
@@ -1291,8 +1293,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            args_used=bool(self.args),
-            kwargs_used=bool(self.kwargs),
+            args_used=describe_args(self.args),
+            kwargs_used=describe_kwargs(self.kwargs),
             trial_nums=self.config.trial_nums,
         )
 
@@ -1591,7 +1593,7 @@ class MojoRunner:
             # Look for MaxTime= followed by the time string (e.g., 1-00:00:00 or UNLIMITED)
             time_match = re.search(r"\bMaxTime=(\S+)", part_info)
             if time_match:
-                return time_match.group(1)
+                return str(time_match.group(1))
 
         except Exception:
             pass
@@ -1655,8 +1657,8 @@ class MojoRunner:
             generator=MojoRunner.inspect_protocol(self.generator),
             runtime=MojoRunner.inspect_protocol(self.runtime),
             objective=MojoRunner.inspect_protocol(self.objective),
-            args_used=bool(self.args),
-            kwargs_used=bool(self.kwargs),
+            args_used=describe_args(self.args),
+            kwargs_used=describe_kwargs(self.kwargs),
             trial_nums=job_trial_nums,
         )
 

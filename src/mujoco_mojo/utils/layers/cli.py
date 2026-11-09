@@ -26,7 +26,7 @@ from rich.text import Text
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
-from mujoco_mojo.typing import Direction, Sampler, UserInterface
+from mujoco_mojo.typing import Direction, Sampler, StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger, setup_logger
 from mujoco_mojo.utils.statusing import ExecutionMode
 from mujoco_mojo.utils.utils import find_free_port, get_local_ip
@@ -455,6 +455,23 @@ if True:
         ),
     ]
 
+    # docs
+    DocsRebuildType = Annotated[
+        bool,
+        typer.Option(
+            "--rebuild",
+            help="Build the docs again even if this version's docs are already built.",
+        ),
+    ]
+    # a None sentinel and not the installed version: the version is not a fixed value, and the generated command line reference has to read the same wherever it is written
+    DocsVersionType = Annotated[
+        str | None,
+        typer.Option(
+            "--version",
+            help="Which version's docs to serve, such as 2.7.1. Defaults to the installed version. Another version has to have been built already, by an install of that version.",
+        ),
+    ]
+
     # Reloaded
     ConfigPathFileType = Annotated[
         Path | None,
@@ -495,9 +512,21 @@ if True:
             "--user-interface",
             "-ui",
             help=(
-                "Which viewer type to use. OpenGL requires X11 forwarding but is ideal for local development. The Viser viewers require you to install those dependencies (they are available in the "
-                r"[bold]mujoco-mojo\[reloaded][/bold] group)"
+                "Which viewer to show the model in. [bold]opengl[/bold] is the classic MuJoCo window: it needs a display (X11 forwarding over SSH) but is ideal for local development. "
+                "[bold]studio[/bold] is a native MuJoCo Studio window and [bold]web[/bold] is MuJoCo Studio in a browser, which works over SSH and without a display."
             ),
+            case_sensitive=False,
+        ),
+    ]
+
+    _opts = ", ".join([f"[bold]{o.value}[/bold]" for o in StudioGraphics])
+    GfxType = Annotated[
+        StudioGraphics,
+        typer.Option(
+            "--gfx",
+            # the choices are in the help text, because a metavar never wraps and the longest one sets the width of the whole column
+            metavar="See desc.",
+            help=f"How the native MuJoCo Studio window is drawn (Studio's own [dim]--gfx[/dim] option): {_opts} where the display only has software OpenGL, such as a remote desktop, and the default fails to draw. Ignored by the [bold]web[/bold] and [bold]opengl[/bold] viewers.",
             case_sensitive=False,
         ),
     ]
@@ -593,6 +622,13 @@ settings_app = typer.Typer(
     no_args_is_help=True,
 )
 cli_app.add_typer(settings_app, name="settings")
+
+# docs subcommand group
+docs_app = typer.Typer(
+    help="Find the documentation that ships with this version of mujoco-mojo, and build and browse its site.",
+    no_args_is_help=True,
+)
+cli_app.add_typer(docs_app, name="docs")
 
 
 @cli_app.callback(
@@ -992,6 +1028,147 @@ def run_watch_workdir(
     raise typer.Exit(code=0 if outcome is WatchOutcome.DONE else 1)
 
 
+@docs_app.command(name="path")
+def docs_path() -> None:
+    """
+    [bold yellow]Print the folder that holds the documentation source.[/bold yellow]
+
+    It is the same pages and `mkdocs.yml` as the online docs, as markdown, for the version you have installed, so it needs no network. The guides are in `docs/user-guides/` and the command line reference is `docs/reference/cli.md`. The images are left out. Only the path is printed, for scripts and coding assistants to use. To read the pages as a site, see `docs serve`.
+    """
+    from mujoco_mojo.meta import DOCS_SOURCE_DIR
+
+    # echo, not the rich console: a long path must not be wrapped or styled
+    typer.echo(DOCS_SOURCE_DIR)
+
+
+def _build_docs_with_status(rebuild: bool) -> Path:
+    """Builds the docs site of the installed version behind a status line, and turns a failure into the red error and exit code 1 the other commands give."""
+    from mujoco_mojo.utils.docs_site import DocsBuildError, build_docs
+
+    try:
+        with console.status("Building the documentation site, which takes a moment..."):
+            return build_docs(VERSION, rebuild=rebuild)
+    except (ModuleNotFoundError, DocsBuildError) as exc:
+        console.print(f"[bold red]Error:[/bold red] {escape(str(exc))}")
+        raise typer.Exit(code=1)
+
+
+@docs_app.command(name="build")
+def docs_build(rebuild: DocsRebuildType = False) -> None:
+    r"""
+    [bold yellow]Build the documentation site for this version of mujoco-mojo.[/bold yellow]
+
+    The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo\[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
+    """
+    typer.echo(_build_docs_with_status(rebuild))
+
+
+@docs_app.command(name="serve")
+def docs_serve(
+    version: DocsVersionType = None,
+    host: HostType = _SETTINGS.general.default_host,
+    port: PortType = _SETTINGS.general.default_port,
+) -> None:
+    r"""
+    [bold yellow]Browse the documentation site in a web browser.[/bold yellow]
+
+    Serves the site built by `docs build`. If this version's docs are not built yet they are built first, which needs the `docs` extra (`pip install mujoco-mojo\[docs]`) once; after that nothing extra is needed.
+    """
+    import uvicorn
+
+    from mujoco_mojo.utils.docs_site import (
+        built_versions,
+        docs_app_for,
+        docs_site_dir,
+        is_built,
+    )
+
+    chosen = (version or VERSION).removeprefix("v")
+    site = docs_site_dir(chosen)
+    if not is_built(site):
+        if chosen != VERSION:
+            built = ", ".join(built_versions()) or "none"
+            console.print(
+                f"[bold red]Error:[/bold red] The docs for v{escape(chosen)} are not built, and this install (v{VERSION}) can only build its own. Built versions: {escape(built)}"
+            )
+            raise typer.Exit(code=1)
+        console.print(f"The docs for v{VERSION} are not built yet. Building them now.")
+        site = _build_docs_with_status(rebuild=False)
+
+    port = find_free_port(host, port)
+    connection_info = f"Local: [bold cyan u]http://127.0.0.1:{port}[/bold cyan u]"
+    if host == "0.0.0.0":
+        connection_info += (
+            f"\nMobile: [bold cyan u]http://{get_local_ip()}:{port}[/bold cyan u]"
+        )
+    else:
+        connection_info += "\n\n[dim]Tip: To view on other devices, run with[/dim] [yellow]--host 0.0.0.0[/yellow]"
+
+    console.print(
+        Panel(
+            f"""[bold green]The MuJoCo Mojo docs are live![/bold green]\n\n{connection_info}\n\n[yellow]Press CTRL+C to stop[/yellow]""",
+            border_style="cyan",
+            expand=False,
+            title="Mojo Docs",
+            subtitle=f"v{chosen}",
+        )
+    )
+
+    uvicorn.run(docs_app_for(site), host=host, port=port, log_level="critical")
+
+
+@docs_app.command(name="list")
+def docs_list() -> None:
+    """
+    [bold yellow]List the documentation sites that are built.[/bold yellow]
+
+    One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
+    """
+    from mujoco_mojo.utils.docs_site import built_versions, docs_site_dir
+
+    versions = built_versions()
+    if not versions:
+        console.print(
+            "No docs are built yet. Run [bold]mujoco-mojo docs build[/bold] to build them."
+        )
+        return
+    width = max(len(built) for built in versions)
+    for built in versions:
+        marker = "*" if built == VERSION else " "
+        # echo, not the rich console: a long path must not be wrapped or styled
+        typer.echo(f"{marker} {built:<{width}}  {docs_site_dir(built)}")
+
+
+def _agents_follow_up(wrote: bool, snippet: str) -> None:
+    """
+    What `init` tells the user about `AGENTS.md` once it has run.
+
+    A project that already had one keeps it untouched, so the text to add is shown instead. And when a `CLAUDE.md` is in this folder or above it, Claude Code reads that and not `AGENTS.md`, so the line that imports it is shown too (unless the file has it already).
+    """
+    if not wrote:
+        console.print(
+            "\n[bold yellow]AGENTS.md[/bold yellow]\n"
+            "[bold cyan]AGENTS.md[/bold cyan] already exists, so it was left alone. "
+            "To point coding agents at the Mojo guides, add this to it:\n"
+        )
+        # soft_wrap: it is meant to be copied, so no line breaks of rich's own in it
+        console.print(snippet, markup=False, highlight=False, soft_wrap=True)
+    here = Path.cwd()
+    claude = next(
+        (d / "CLAUDE.md" for d in (here, *here.parents) if (d / "CLAUDE.md").is_file()),
+        None,
+    )
+    if claude is not None and "@AGENTS.md" not in claude.read_text(
+        encoding="utf-8", errors="replace"
+    ):
+        console.print(
+            "\n[bold yellow]CLAUDE.md[/bold yellow]\n"
+            f"Claude Code reads [bold cyan]{escape(str(claude))}[/bold cyan] instead of "
+            "AGENTS.md when both exist. Add this line to it so it reads AGENTS.md too:\n\n"
+            "    [bold yellow]@AGENTS.md[/bold yellow]"
+        )
+
+
 @cli_app.command(name="init")
 def init_project(
     optimizer: Annotated[
@@ -1006,7 +1183,7 @@ def init_project(
     """
     [bold yellow]Initialize a new empty mujoco-mojo project.[/bold yellow]
 
-    Writes a [bold cyan]simulation.py[/bold cyan] scaffold to the current directory containing stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
+    Writes these to the current directory: a [bold cyan]simulation.py[/bold cyan] scaffold, the [bold cyan]run.sh[/bold cyan] and [bold cyan]reloaded.sh[/bold cyan] scripts, a project settings file, and an [bold cyan]AGENTS.md[/bold cyan] that points coding agents at the user guides (an existing [bold cyan]AGENTS.md[/bold cyan] is left alone). The scaffold contains stub implementations of [bold]generate[/bold], [bold]runtime[/bold], and [bold]UserData[/bold]. Pass [bold cyan]--optimizer[/bold cyan] to also include an [bold]objective[/bold] stub.
     """
     import os
     from importlib.resources import files
@@ -1042,13 +1219,29 @@ def init_project(
     os.chmod(run_dest, 0o755)
     os.chmod(reloaded_dest, 0o755)
 
-    w = max(len(str(p)) for p in (py_dest, run_dest, reloaded_dest))
+    # not among the conflicts above: a project often has one already, and it is the user's
+    agents_dest = Path("AGENTS.md")
+    agents_text = tmpl.joinpath("AGENTS.md").read_text(encoding="utf-8")
+    agents_written = not agents_dest.exists()
+    if agents_written:
+        agents_dest.write_text(agents_text, encoding="utf-8")
+
+    shown = [py_dest, run_dest, reloaded_dest]
+    if agents_written:
+        shown.append(agents_dest)
+    w = max(len(str(p)) for p in shown)
+    agents_line = (
+        f"  [bold cyan]{str(agents_dest).ljust(w)}[/bold cyan]  - points coding agents at the guides\n"
+        if agents_written
+        else ""
+    )
     console.print(
         Panel(
             f"[bold green]Project initialized![/bold green]\n\n"
             f"  [bold cyan]{str(py_dest).ljust(w)}[/bold cyan]  - simulation stubs\n"
             f"  [bold cyan]{str(run_dest).ljust(w)}[/bold cyan]  - run the campaign\n"
-            f"  [bold cyan]{str(reloaded_dest).ljust(w)}[/bold cyan]  - interactive viewer\n\n"
+            f"  [bold cyan]{str(reloaded_dest).ljust(w)}[/bold cyan]  - interactive viewer\n"
+            f"{agents_line}\n"
             f"[white]Get started:[/white]\n"
             f"    [bold yellow]bash run.sh[/bold yellow]",
             title="[cyan]Mojo Init[/cyan]",
@@ -1056,6 +1249,8 @@ def init_project(
             border_style="cyan",
         )
     )
+
+    _agents_follow_up(agents_written, agents_text)
 
     settings_init(force=False, project=True)
 
@@ -1079,21 +1274,25 @@ def init_project(
         console.print("\n[bold yellow]Type Hints Setup[/bold yellow]")
         console.print(
             "[bold white]MuJoCo does not ship Python type stubs.[/bold white] "
-            "Generate them once for Pylance/Pyright autocomplete:\n\n"
+            "Generate them once for Pylance, Pyright, or ty autocomplete:\n\n"
             "[bold yellow]"
             "pip install pybind11-stubgen\n"
             "pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated\n"
-            "pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated"
+            "pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated\n"
+            "pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated"
             "[/bold yellow]\n\n"
-            "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]:\n\n"
+            "Run from the project root. Then add to [bold cyan]pyproject.toml[/bold cyan]. For Pyright:\n\n"
             "[dim]"
             "\\[tool.pyright]\n"
             'stubPath = "typings"\n'
             'venvPath = "."\n'
             'venv    = ".venv"'
             "[/dim]\n\n"
-            "[dim]Enum errors? Run: "
-            "python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi[/dim]"
+            "For ty:\n\n"
+            "[dim]"
+            "\\[tool.ty.environment]\n"
+            'extra-paths = ["typings"]'
+            "[/dim]"
         )
 
 
@@ -1466,6 +1665,7 @@ def run_reloaded(
     runtime: RuntimeType = DEFAULT_RUNTIME,
     workdir: WorkdirType = DEFAULT_WORKDIR,
     ui: UIType = _SETTINGS.reloaded.ui,
+    gfx: GfxType = _SETTINGS.reloaded.gfx,
     overrides_path: OverridesType = None,
     trial_num: TrialNumType = 0,
     seed: SeedType = DEFAULT_SEED,
@@ -1476,19 +1676,26 @@ def run_reloaded(
     record: RecordType = _SETTINGS.reloaded.record,
     args: ArgsType = [],
     kwargs: KwargsType = [],
-    host: HostType = _SETTINGS.general.default_host,
     port: PortType = _SETTINGS.general.default_port,
     verbose: VerboseType = 0,
     quiet: QuietType = 0,
 ) -> None:
     """
-    [bold yellow]Run a development session with the native OpenGL viewer or a web browser based GUI.[/bold yellow]
+    [bold yellow]Run a development session in a terminal UI, with the model shown in a MuJoCo viewer.[/bold yellow]
 
-    Manual trigger to regenerate and reload the MJCF model for rapid prototyping.
+    Regenerates and reloads the MJCF model on command, or whenever your source files change, for rapid prototyping.
     """
+    from .crash_guard import run_supervised
+
+    # first of all: the work is done by a child process that this one waits for, so that if the child is killed
+    # (by a crash in the viewer, say) the terminal is put right before the shell has it back
+    status = run_supervised(Path(workdir).resolve() / "crash.log")
+    if status is not None:
+        raise typer.Exit(status)
+
     from .reloaded import MojoReloaded
 
-    port = find_free_port(host, port)
+    web_port = find_free_port("0.0.0.0", port) if ui == UserInterface.WEB else None
 
     _logger = _setup_cli_logging(
         verbose=_SETTINGS.general.verbose + verbose,
@@ -1505,6 +1712,7 @@ def run_reloaded(
         runtime=runtime,
         workdir=workdir,
         ui=ui,
+        gfx=gfx,
         overrides_path=overrides_path,
         config_path=config_path,
         trial_num=trial_num,
@@ -1513,10 +1721,10 @@ def run_reloaded(
         xml_name=xml_name,
         watch=watch,
         record=record,
+        keys=_SETTINGS.reloaded.keys,
         args=processed_args,
         kwargs=processed_kwargs,
-        host=host,
-        port=port,
+        port=web_port,
     ).run()
 
 

@@ -56,7 +56,7 @@ MJCF `Frame` elements are coordinate transforms that disappear at compile time, 
 
 ???+ warning "Scaled Frames"
 
-    A `Frame` can scale its contents with `scale` (MuJoCo 3.16.0 and later). Pose context only composes rigid transforms, so resolving a pose for an element inside a frame whose `scale` is not 1 raises a `ValueError`. The scaled frame itself, and anything outside it, resolve as usual.
+    A `Frame` can scale its contents with `scale`. Pose context only composes rigid transforms, so resolving a pose for an element inside a frame whose `scale` is not 1 raises a `ValueError`. The scaled frame itself, and anything outside it, resolve as usual.
 
 ---
 

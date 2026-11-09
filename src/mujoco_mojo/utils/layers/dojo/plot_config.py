@@ -19,6 +19,20 @@ from pydantic.alias_generators import to_camel
 from mujoco_mojo.utils.filters.filters import AnyFilter
 
 # ---------------------------------------------------------------------------
+# signal colors
+# ---------------------------------------------------------------------------
+
+PLOT_COLORS: tuple[str, ...] = (
+    "#00b8db",
+    "#00bc7d",
+    "#2b7fff",
+    "#8e51ff",
+    "#fe9a00",
+    "#ff2056",
+)
+"""The colors a signal added to the plot takes, in this order, each as a 6-digit hex string. The trial viewer's color picker and its next-color rule read this list, through the generated TypeScript constant of the same name (run `python scripts/gen_ts_models.py` after changing it), and SensAI picks colors from it and is shown it in its instructions."""
+
+# ---------------------------------------------------------------------------
 # String-enum types  (generate named TypeScript union types)
 # ---------------------------------------------------------------------------
 
@@ -689,16 +703,45 @@ class PlotProfileTab(BaseModel):
     )
 
 
-class PlotProfile(BaseModel):
+class VersusState(BaseModel):
+    """What versus mode is set to: which other trials are drawn behind the open one. A saved profile carries it, and so does SensAI's view of the trial viewer."""
+
+    model_config = camel_case_dict
+
+    vs_enabled: bool = Field(
+        default=False,
+        description="Whether comparison traces from other trials are shown.",
+    )
+
+    vs_range: tuple[int, int] | None = Field(
+        default=(0, 10),
+        description="Trial number range for comparison traces as `(first, last)`, or null for no range (only the pinned trials).",
+    )
+
+    vs_pinned: list[int] = Field(
+        default_factory=list,
+        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
+    )
+
+    @field_validator("vs_range", mode="after")
+    @classmethod
+    def _ordered_range(cls, value: tuple[int, int] | None) -> tuple[int, int] | None:
+        return None if value is None else (min(value), max(value))
+
+    @field_validator("vs_pinned", mode="after")
+    @classmethod
+    def _sorted_unique_pins(cls, value: list[int]) -> list[int]:
+        return sorted(set(value))
+
+
+class PlotProfile(VersusState):
     """
-    A saved profile: the full set of open plot tabs.
+    A saved profile: the full set of open plot tabs, and the versus mode it was saved with.
 
     Replaces the old profile format (a single bare `PlotConfig` per saved
     file) - see `routers/mosaic.py`'s `get_profile`/`save_profile` for how a
     legacy single-config file is transparently read as a one-tab profile.
     """
-
-    model_config = camel_case_dict
 
     version: Literal[2] = 2
 
@@ -712,24 +755,3 @@ class PlotProfile(BaseModel):
         ge=0,
         description="Index into `tabs` of the tab that should be active when the profile is loaded.",
     )
-
-    vs_enabled: bool = Field(
-        default=False,
-        description="Whether comparison traces from other trials are shown.",
-    )
-
-    vs_range: Annotated[tuple[int, int], Field()] = Field(
-        default=(0, 10),
-        description="Trial number range for comparison traces as `(first, last)`.",
-    )
-
-    vs_pinned: list[int] = Field(
-        default_factory=list,
-        description="Explicitly pinned trial numbers included in VS comparison regardless of `vs_range`. Stored as raw trial numbers (integers). Union with the range-selected trials when building the comparison set.",
-    )
-
-    @model_validator(mode="after")
-    def validate_vs_range(self) -> Self:
-        if self.vs_range[0] > self.vs_range[1]:
-            self.vs_range = self.vs_range[1], self.vs_range[0]
-        return self

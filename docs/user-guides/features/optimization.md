@@ -70,7 +70,7 @@ A valid objective function must accept the `MojoModel`, the `Path` to the teleme
 
 ## Running the Optimizer
 
-Optimization jobs are launched via the `mujoco-mojo run optimize` command (instead of `monte-carlo`). This engine orchestrates the feedback loop between your `generate` script, your `runtime` script, and your `objective` function.
+Optimization jobs are launched via the `mujoco-mojo run optimization` command (instead of `monte-carlo`). This engine orchestrates the feedback loop between your `generate` script, your `runtime` script, and your `objective` function.
 
 ### Key Command Line Arguments
 
@@ -78,13 +78,13 @@ Optimization jobs are launched via the `mujoco-mojo run optimize` command (inste
 | :----------------------- | :------- | :----------------------------------------------------------------------------- |
 | `--direction`            | `-d`     | Whether to `minimize` (e.g., error) or `maximize` (e.g., efficiency).          |
 | `--sampler`              | `-sm`    | The search algorithm. `tpe` is the workhorse; `cmaes` is for local refinement. |
-| `--storage`              | `-st`    | Defines if a storage database will be placed in the workdir.                   |
-| `--evals-per-trial`      | `-ept`   | Runs the sim _N_ times with different seeds and averages the score.            |
-| `--refine-search-factor` | `-rsf`   | **Aggressive Refinement**. On resume, shrinks bounds around the current best.  |
+| `--storage`              | _N/A_    | Defines if a storage database will be placed in the workdir.                   |
+| `--evals-per-trial`      | _N/A_    | Runs the sim _N_ times with different seeds and averages the score.            |
+| `--refine-search-factor` | _N/A_    | **Aggressive Refinement**. On resume, shrinks bounds around the current best.  |
 
 ```bash linenums="0"
 # Launch a 400-trial study with 10 parallel workers
-mujoco-mojo run optimiztion \
+mujoco-mojo run optimization \
     -g sim.generate \
     -r sim.runtime \
     --objective sim.objective \
@@ -113,7 +113,7 @@ Once you find a promising "neighborhood," you can resume the job with `--refine-
 
 One difference you may notice with `mujoco-mojo dojo` is the new **Morph** tab not present for Monte-Carlo jobs. This new tab allows you to view the history of your optimization using [`optuna-dashboard`](https://github.com/optuna/optuna-dashboard).
 
-To use this you must provide a storage database argument for you optimization job configuration.
+Morph reads the study's storage database, which an optimization job writes to its workdir by default. Running with `--no-storage` turns it off.
 
 ---
 

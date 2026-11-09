@@ -8,6 +8,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import mujoco_mojo.utils.layers.dojo.shared as shared
 from mujoco_mojo.__about__ import __version__
+from mujoco_mojo.meta import DOCS_ASSETS_DIR
 from mujoco_mojo.utils.log import get_logger
 
 from .favicons import CACHE_DIR as FAVICON_CACHE_DIR
@@ -87,9 +88,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, _cleanup_webm_cache)
 
-    # (re)generate raster favicons if light-logo.svg has changed since last run
-    static_dir = shared.HERE / "templates" / "static"
-    await loop.run_in_executor(None, ensure_favicons, static_dir)
+    # (re)generate raster favicons if light-logo.svg (the docs' logo) has changed since last run
+    await loop.run_in_executor(None, ensure_favicons, DOCS_ASSETS_DIR)
 
     # start the monitor background broadcast task
     broadcast_task = asyncio.create_task(monitor.broadcast_updates())

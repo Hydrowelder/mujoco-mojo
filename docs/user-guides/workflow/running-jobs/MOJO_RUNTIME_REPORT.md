@@ -17,10 +17,12 @@
 | Number of Processers   | 8                                                                                                                             |
 | Successes              | 100 (100.0%) <progress value="100" max="100" style="accent-color: #10b981;">100</progress>                                    |
 | Failures               | 0 (0.0%) <progress value="0" max="100" style="accent-color: #f43f5e;">0</progress>                                            |
+| Errors                 | 0 (0.0%) <progress value="0" max="100" style="accent-color: #f59e0b;">0</progress>                                            |
 | Generator              | `generate` at `user-guides/workflow/monte_carlo_example.py:109` |
 | Runtime                | `runtime` at `user-guides/workflow/monte_carlo_example.py:255`  |
-| Args Used?             | ❌                                                                                                                            |
-| Kwargs Used?           | ❌                                                                                                                            |
+| Objective              | none defined                                                                                                                  |
+| Args                   | none                                                                                                                         |
+| Kwargs                 | none                                                                                                                         |
 
 ---
 
@@ -38,7 +40,10 @@
 ---
 
 ## Failed Trials
-✅ **No failures detected.** 🎉
+✅ **No requirement failures detected.** 🎉
+
+## Errored Trials
+✅ **No errors detected.** 🎉
 
 ---
 

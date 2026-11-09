@@ -7,11 +7,12 @@ import inspect
 import json
 import textwrap
 import tomllib
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Self, cast
 
 import tomlkit
 from dotenv import find_dotenv, load_dotenv
@@ -49,9 +50,11 @@ from mujoco_mojo.typing import (
     Sampler,
     SortDirection,
     SortMode,
+    StudioGraphics,
     UserInterface,
 )
 from mujoco_mojo.utils.color import Color
+from mujoco_mojo.utils.utils import web_client_available
 
 SETTINGS_DIR = MUJOCO_MOJO_DIR
 SETTINGS_FILENAME = "settings.toml"
@@ -192,7 +195,7 @@ _SBATCH_PREFIX = "sbatch."
 def _is_color_widget_field(info: Any) -> bool:
     """Whether a `model_fields[name]` `FieldInfo` was tagged `json_schema_extra={"x-widget": "color"}` - the same tag the Dojo settings panel uses to pick a color-picker widget, reused here so a field only needs to be marked once to get both the frontend widget and this backend validation, instead of also being hand-listed in a separate tuple."""
     extra = info.json_schema_extra
-    return isinstance(extra, dict) and extra.get("x-widget") == "color"
+    return bool(isinstance(extra, dict) and extra.get("x-widget") == "color")
 
 
 class VisualizationSettings(BaseModel):
@@ -314,6 +317,13 @@ class VisualizationSettings(BaseModel):
         return data
 
 
+DEFAULT_MAX_REQUESTS = 12
+"""The default of `dojo.sensai.max_requests`."""
+
+DEFAULT_MAX_VERSUS_TRIALS = 50
+"""The default of `dojo.sensai.max_versus_trials`."""
+
+
 class SensAIModelEntry(BaseModel):
     """One entry in `SensAISettings.models` - a provider paired with that provider's own model identifier."""
 
@@ -367,6 +377,22 @@ class SensAISettings(BaseModel):
         default="http://localhost:11434/v1",
         title="Base URL",
         description="Only needed if one of the models above uses the Ollama provider. Ollama has no built-in localhost default, unlike every other provider here. Ignored otherwise.",
+    )
+
+    max_requests: int = Field(
+        default=DEFAULT_MAX_REQUESTS,
+        ge=1,
+        le=50,
+        title="Max Model Requests",
+        description="The most model requests one message may make, the chat agent's and its specialists' together. A message over it is stopped with an error. Tool calls are not counted, only requests.",
+    )
+
+    max_versus_trials: int = Field(
+        default=DEFAULT_MAX_VERSUS_TRIALS,
+        ge=1,
+        le=1000,
+        title="Max Versus Trials",
+        description="The most trials one message may add to versus mode, since each loads its data. Pins past it are left out and a later message adds the next batch.",
     )
 
 
@@ -583,7 +609,7 @@ class GeneralSettings(BaseModel):
     default_host: str = Field(
         default="127.0.0.1",
         title="Default Host",
-        description="Default host IP for `mujoco-mojo dojo` and `mujoco-mojo reloaded`'s web-based viewers.",
+        description="Default host IP for `mujoco-mojo dojo`.",
     )
 
     default_port: int = Field(
@@ -593,6 +619,105 @@ class GeneralSettings(BaseModel):
         title="Default Port",
         description="Starting port for `dojo`/`reloaded`'s web viewers - both probe upward and bind the first free one, so running both with no `--port` never collides.",
     )
+
+
+def default_user_interface() -> UserInterface:
+    """The viewer for this machine: Studio in a browser where this MuJoCo build can serve it, and the classic OpenGL window where it cannot. The native Studio window is never chosen automatically, but `studio` can still be set."""
+    return UserInterface.WEB if web_client_available() else UserInterface.OPENGL
+
+
+class ReloadedKeySettings(BaseModel):
+    """Keyboard shortcuts of the Reloaded terminal UI. Each action takes a list of Textual key names such as `f2` or `ctrl+g`, and the first one is shown in the footer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="Keys")
+
+    # function keys by default: the focused command line owns the common Ctrl chords, and a terminal inside an editor hands some keys to the editor before Reloaded sees them. VS Code does that for F1 (command palette), F5 and F10 (debugging), F6, and F11 (full screen), and Ctrl+P and Ctrl+Q never arrive either. So the keys shown in the footer skip those, apart from F10 which only matters during a VS Code debug session. F1 and Ctrl+Q stay as extra keys for terminals that do pass them along
+    generate: list[str] = Field(
+        default_factory=lambda: ["f2"],
+        title="Generate",
+        description="Keys that generate the model without running it.",
+    )
+
+    run: list[str] = Field(
+        default_factory=lambda: ["f3"],
+        title="Run",
+        description="Keys that generate the model and run the runtime.",
+    )
+
+    pause: list[str] = Field(
+        default_factory=lambda: ["f12"],
+        title="Pause",
+        description="Keys that pause a run in progress, and resume it when it is paused.",
+    )
+
+    step: list[str] = Field(
+        default_factory=list,
+        title="Step",
+        description="Keys that advance a run by one step, pausing it first. None by default, since no function key is left that an editor terminal passes on.",
+    )
+
+    watch: list[str] = Field(
+        default_factory=lambda: ["f4"],
+        title="Watch",
+        description="Keys that turn reloading on source changes on or off.",
+    )
+
+    record: list[str] = Field(
+        default_factory=lambda: ["f7"],
+        title="Record",
+        description="Keys that turn telemetry and video recording on or off.",
+    )
+
+    explain: list[str] = Field(
+        default_factory=lambda: ["f8"],
+        title="Explain",
+        description="Keys that show or hide the hint on what the typed command does.",
+    )
+
+    help: list[str] = Field(
+        default_factory=lambda: ["f9", "f1"],
+        title="Help",
+        description="Keys that open the help.",
+    )
+
+    stop: list[str] = Field(
+        default_factory=lambda: ["escape"],
+        title="Stop",
+        description="Keys that stop the run in progress.",
+    )
+
+    quit: list[str] = Field(
+        default_factory=lambda: ["f10", "ctrl+q"],
+        title="Quit",
+        description="Keys that close Reloaded. Typing `quit` always works too.",
+    )
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _split_text(cls, value: Any) -> Any:
+        """The Dojo settings panel and `mujoco-mojo settings set` give a list as text such as `f2, f3`."""
+        if isinstance(value, str):
+            return value.split(",")
+        return value
+
+    @field_validator("*", mode="after")
+    @classmethod
+    def _tidy(cls, keys: list[str]) -> list[str]:
+        """Key names are lowercase, so `F2` and `f2` are the same key, and a repeated or empty entry means nothing."""
+        return list(
+            dict.fromkeys(key for key in (k.strip().lower() for k in keys) if key)
+        )
+
+    @model_validator(mode="after")
+    def _one_action_per_key(self) -> Self:
+        owners: dict[str, str] = {}
+        for action in type(self).model_fields:
+            for key in getattr(self, action):
+                if key in owners:
+                    msg = f"`{key}` is bound to both `{owners[key]}` and `{action}`. A key can only do one thing."
+                    raise ValueError(msg)
+                owners[key] = action
+        return self
 
 
 class ReloadedSettings(BaseModel):
@@ -611,9 +736,27 @@ class ReloadedSettings(BaseModel):
     )
 
     ui: UserInterface = Field(
-        default=UserInterface.OPENGL,
+        default_factory=default_user_interface,
         title="UI Backend",
-        description="Which viewer backend to use.",
+        description="Viewer to show the model in: `opengl` (classic window), `studio` (native Studio window), or `web` (Studio in a browser).",
+    )
+
+    @field_validator("ui", mode="before")
+    @classmethod
+    def _migrate_removed_viewers(cls, value: Any) -> Any:
+        """`viser` and `mjviser` no longer exist, and a settings file that still names one would otherwise stop every `mujoco-mojo` command from starting, so both now mean the browser viewer."""
+        if isinstance(value, str) and value.lower() in ("viser", "mjviser"):
+            warnings.warn(
+                f'The `{value}` viewer was removed, so `reloaded.ui = "{value}"` in your settings now means `web`. Update the setting to `web`.',
+                stacklevel=2,
+            )
+            return "web"
+        return value
+
+    gfx: StudioGraphics = Field(
+        default=StudioGraphics.DEFAULT,
+        title="Studio Graphics",
+        description="How the native Studio window (`studio`) is drawn, as Studio's `--gfx`. Use `opengl_software` where the display only has software OpenGL, such as a remote desktop. Ignored by `web` and `opengl`.",
     )
 
     watch: bool = Field(
@@ -627,6 +770,8 @@ class ReloadedSettings(BaseModel):
         title="Record",
         description="Record telemetry to a per-trial `telemetry.parquet` and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.",
     )
+
+    keys: ReloadedKeySettings = Field(default_factory=ReloadedKeySettings)
 
 
 class _RunDefaults(BaseModel):

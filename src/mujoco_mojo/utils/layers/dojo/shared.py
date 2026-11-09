@@ -1,4 +1,6 @@
 import ipaddress
+import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -7,12 +9,15 @@ from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from mujoco_mojo.meta import DOCS_ASSETS_DIR, DOCS_SOURCE_DIR
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus, JobType
 
 __all__ = [
     "CURRENT_JOB",
     "HERE",
+    "VITE_DEV",
+    "asset_url",
     "is_localhost",
     "set_globals",
     "static",
@@ -21,13 +26,29 @@ __all__ = [
 ]
 
 HERE = Path(__file__).parent
+TS_DIR = HERE / "templates" / "static" / "ts"
 WORKDIR: Path | None = None
 CURRENT_JOB: JobStatus | None = None
 AUTH_PASSWORD: str | None = None
 
+# the env var MOJO_DOJO_DEV (set by scripts/dev_dojo.sh) points the templates at the
+# TypeScript sources a running Vite dev server serves instead of the built files, so a
+# frontend edit needs no rebuild. read once at import: whether it is set can't change
+# without a process restart.
+VITE_DEV = os.environ.get("MOJO_DOJO_DEV", "").lower() in {"1", "true", "yes"}
+
 # Chime sound comes from https://mixkit.co/free-sound-effects/win/
 templates = Jinja2Templates(directory=HERE / "templates")
-static = StaticFiles(directory=HERE / "templates" / "static")
+# the folder is looked in first, then the docs' own assets, so `/mojo-static/light-logo.svg` and `dark-logo.svg` are the logos of the docs source and the Dojo keeps no copy of them
+static = StaticFiles(
+    directory=HERE / "templates" / "static",
+    packages=[
+        (
+            "mujoco_mojo",
+            DOCS_ASSETS_DIR.relative_to(DOCS_SOURCE_DIR.parent).as_posix(),
+        )
+    ],
+)
 
 # the same dict as `templates.env.globals`, typed for what it holds: jinja2 builds that dict from
 # an unannotated literal of its own helpers, so a type checker infers a value type that
@@ -67,6 +88,20 @@ template_globals["default_lab_sort_mode"] = lambda: (
 template_globals["default_lab_sort_dir"] = lambda: (
     MujocoMojoSettings().dojo.lab_sort_dir.value
 )
+
+
+def asset_url(name: str) -> str:
+    """The URL a template loads a built frontend file from: `/mojo-static/dist/<name>`, or the TypeScript or CSS source Vite serves for it when `MOJO_DOJO_DEV` is set. `name` is a key of `ts/entries.json`, the list `vite.config.ts` builds from too, so an unknown name raises `KeyError` in dev."""
+    if not VITE_DEV:
+        return f"/mojo-static/dist/{name}"
+    entries: dict[str, str] = json.loads((TS_DIR / "entries.json").read_text())
+    return f"/{entries[name]}"
+
+
+# base.html and the page templates build their <script>/<link> URLs with asset(), and
+# add Vite's client (what reloads the page on an edit) when vite_dev is set
+template_globals["asset"] = asset_url
+template_globals["vite_dev"] = VITE_DEV
 
 
 def is_localhost(request: Request) -> bool:

@@ -3,44 +3,22 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/mujoco-mojo/" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/pypi/v/mujoco-mojo.svg?cacheSeconds=300" alt="PyPI version">
-  </a>
-  <a href="https://pypi.org/project/mujoco-mojo/" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/pypi/pyversions/mujoco-mojo.svg?cacheSeconds=86400" alt="Python versions">
-  </a>
-  <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml" class="badge-link" style="text-decoration:none;">
-    <img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg?branch=master" alt="Tests & Release Status">
-  </a>
-  <a href="https://github.com/astral-sh/uv" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv">
-  </a>
-  <a href="https://github.com/astral-sh/ruff" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff">
-  </a>
-  <a href="https://github.com/astral-sh/ty" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty">
-  </a>
-  <a href="https://docs.pydantic.dev/latest/" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2">
-  </a>
-  <a href="https://opensource.org/licenses/Apache-2.0" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License">
-  </a>
-  <a href="https://hydrowelder.github.io/mujoco-mojo/" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Documentation">
-  </a>
-  <a href="https://github.com/Hydrowelder/mujoco-mojo/discussions" class="badge-link" style="text-decoration:none;">
-    <img src="https://img.shields.io/badge/discussions-GitHub-blue?logo=github&logoColor=white" alt="GitHub Discussions">
-  </a>
-  <a href="https://pepy.tech/projects/mujoco-mojo">
-    <img src="https://static.pepy.tech/personalized-badge/mujoco-mojo?period=monthly&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads%2Fmonth" alt="PyPI Downloads">
-  </a>
+  <a href="https://pypi.org/project/mujoco-mojo"><img src="https://img.shields.io/pypi/v/mujoco-mojo.svg?cacheSeconds=300" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/mujoco-mojo"><img src="https://img.shields.io/pypi/pyversions/mujoco-mojo.svg?cacheSeconds=86400" alt="Python versions"></a>
+  <a href="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml"><img src="https://github.com/Hydrowelder/mujoco-mojo/actions/workflows/release.yml/badge.svg?branch=master" alt="Tests & Release Status"></a>
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json" alt="uv"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+  <a href="https://github.com/astral-sh/ty"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ty/main/assets/badge/v0.json" alt="ty"></a>
+  <a href="https://docs.pydantic.dev/latest"><img src="https://img.shields.io/badge/Pydantic-v2-FF43A1?logo=pydantic&logoColor=white" alt="Pydantic v2"></a>
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+  <a href="https://hydrowelder.github.io/mujoco-mojo"><img src="https://img.shields.io/badge/docs-GitHub_Pages-blue.svg" alt="Documentation"></a>
+  <a href="https://github.com/Hydrowelder/mujoco-mojo/discussions"><img src="https://img.shields.io/badge/discussions-GitHub-blue?logo=github&logoColor=white" alt="GitHub Discussions"></a>
+  <a href="https://pepy.tech/projects/mujoco-mojo"><img src="https://static.pepy.tech/personalized-badge/mujoco-mojo?period=monthly&units=INTERNATIONAL_SYSTEM&left_color=GREY&right_color=BLUE&left_text=downloads%2Fmonth" alt="PyPI Downloads"></a>
 </p>
 
 ---
 
-A **complete MJCF lifecycle and trial orchestration suite** for MuJoCo, powered by **Pydantic v2**.
+A **complete MJCF lifecycle and trial orchestration suite** for [MuJoCo](https://github.com/google-deepmind/mujoco), powered by **Pydantic v2**.
 
 **MuJoCo Mojo** bridges the gap between static XML modeling and large-scale simulation research. It provides a strongly-typed bridge for building models and a robust execution engine for running them at scale.
 
@@ -68,9 +46,10 @@ pip install mujoco-mojo[all]
 >
 > To get the most out of MuJoCo Mojo, select additional extras from this list (or use `[all]` to install all of them):
 >
-> - `[reloaded]`: the [hot-reloading development loop](#reloaded), including its OpenGL/Viser > visualizers.
+> - `[docs]`: build the documentation on your own machine (`mujoco-mojo docs build`).
 > - `[mesh-decomp]`: concave mesh decomposition via CoACD.
 > - `[optimize]`: Bayesian optimization studies powered by Optuna.
+> - `[sensai]`: the SensAI assistant in the Dojo.
 
 ---
 
@@ -131,7 +110,7 @@ pip install mujoco-mojo[all]
 > [!TIP]
 >
 > ```bash
-> mujoco-mojo run optimiztion \
+> mujoco-mojo run optimization \
 >     -g sim.generate \
 >     -r sim.runtime \
 >     --objective sim.objective \
@@ -167,8 +146,8 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 A rapid prototyping loop that allows you to modify physics logic and model architecture on the fly without ever closing the visualizer.
 
 - **Module Hot-Reloading:** Recursively reloads local Python modules and MJCF logic, allowing code changes to propagate instantly to the active simulation.
-- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across native OpenGL, Viser web interfaces, and video recordings.
-- **Multiple Viewer Backends:** Drive the same reload/sync pipeline through either the native MuJoCo OpenGL viewer or a Viser web viewer.
+- **Unified Visualizer Bridge:** Synchronized visualization of custom force and torque vectors across the viewer (the classic OpenGL window, MuJoCo Studio, or Studio in a browser) and video recordings.
+- **Terminal UI:** Drive the reload/sync pipeline from a terminal UI with clickable settings, command completion, and a log of every run.
 - **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
 - **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
 - **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.

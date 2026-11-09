@@ -18,7 +18,7 @@ __all__ = [
 
 
 class ExtensionPluginInstanceConfig(XMLModel):
-    """Configuration of a plugin instance. When implicitly declaring a plugin under a model element, configuration is performed with identical semantics using element/plugin/config. The elements which currently support plugins are body, composite, actuator and sensor."""
+    """Configuration of a plugin instance. When implicitly declaring a plugin under a model element, configuration is performed with identical semantics using element/plugin/config. The elements which currently support plugins are body, flexcomp, actuator and sensor."""
 
     tag = "config"
 

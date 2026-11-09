@@ -1,0 +1,213 @@
+/*
+ * stylesheet for the Reloaded terminal UI. colors come only from the "mojo"
+ * theme in theme.py (the Textual variables it sets, plus $surface-inset and
+ * $scrim), never from a color name or a hex value here.
+ */
+
+Screen {
+    background: $background;
+}
+
+/* the row of buttons under the status bar. a button that does not apply is dimmed and does nothing */
+ControlBar {
+    height: 1;
+    margin: 0 1;
+}
+
+ControlButton {
+    width: auto;
+    min-width: 0;
+    height: 1;
+    margin-right: 1;
+    padding: 0 1;
+    border: none;
+    background: $surface;
+    color: $text;
+    text-style: none;
+}
+
+ControlButton:hover {
+    background: $border-blurred;
+    color: $primary;
+}
+
+ControlButton:disabled {
+    background: $background;
+    color: $text-muted;
+}
+
+#control-run {
+    color: $success;
+}
+
+#control-stop {
+    color: $error;
+}
+
+/* the colored ones are matched by id, which outranks the rule above, so they dim again here */
+#control-run:disabled,
+#control-stop:disabled {
+    color: $text-muted;
+}
+
+/* status bar: badge, then one ParamField per session value */
+StatusBar {
+    height: 1;
+    padding: 0 1;
+    background: $surface;
+}
+
+StatusBar #badge {
+    width: auto;
+    margin-right: 1;
+}
+
+/* takes the room the fields leave over, and StatusBar hides the text when it would not fit */
+StatusBar #title {
+    width: 1fr;
+    height: 1;
+    text-align: right;
+}
+
+ParamField {
+    width: auto;
+    height: 1;
+    padding: 0 1;
+}
+
+ParamField .label,
+ParamField .value {
+    width: auto;
+    height: 1;
+}
+
+ParamField .editor {
+    display: none;
+    width: 10;
+    height: 1;
+    background: $surface-inset;
+}
+
+ParamField.-editing .value {
+    display: none;
+}
+
+ParamField.-editing .editor {
+    display: block;
+}
+
+ParamField.-edit:hover,
+ParamField.-toggle:hover {
+    background: $border-blurred;
+}
+
+#log {
+    height: 1fr;
+    margin: 0 1;
+    padding: 0 1;
+    border: round $border-blurred;
+    border-title-color: $text-muted;
+    border-subtitle-color: $text-muted;
+    background: $background;
+}
+
+#command-row {
+    height: 3;
+    margin: 0 1;
+}
+
+/* the box draws the border, so the input and the hint inside it share one line */
+#command-box {
+    width: 1fr;
+    height: 3;
+    padding: 0 1;
+    border: round $border-blurred;
+    border-title-color: $text-muted;
+    background: $surface-inset;
+}
+
+#command-box:focus-within {
+    border: round $border;
+    border-title-color: $primary;
+}
+
+#command {
+    width: 1fr;
+    height: 1;
+    padding: 0;
+    border: none;
+    background: $surface-inset;
+    background-tint: transparent;
+}
+
+#command:focus {
+    border: none;
+    background-tint: transparent;
+}
+
+/* what the draft command will do, kept to the right end of the line and cut short rather than wrapped */
+#hint {
+    display: none;
+    width: auto;
+    max-width: 60%;
+    height: 1;
+    margin-left: 1;
+    text-align: right;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* a sibling of the command box, so it gets the same rounded border */
+#explain-button {
+    width: auto;
+    min-width: 0;
+    height: 3;
+    margin-left: 1;
+    padding: 0 1;
+    border: round $border-blurred;
+    background: $surface-inset;
+    color: $text;
+    text-style: none;
+}
+
+#explain-button:hover {
+    border: round $border;
+    color: $primary;
+}
+
+/* lit while the explain box is open. Textual's own -active is the pressed flash */
+#explain-button.-open {
+    border: round $primary;
+    color: $primary;
+    text-style: bold;
+}
+
+RainScreen {
+    background: $background;
+}
+
+MatrixRain {
+    width: 100%;
+    height: 100%;
+}
+
+HelpScreen {
+    align: center middle;
+    background: $scrim 70%;
+}
+
+#help-body {
+    width: 100;
+    max-width: 90%;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    border: round $border-blurred;
+    border-subtitle-color: $text-muted;
+    background: $surface;
+}
+
+#help-body Static {
+    width: 100%;
+    height: auto;
+}

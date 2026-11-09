@@ -155,7 +155,7 @@ def _generate_ico_if_stale(cache_dir: Path, svg_bytes: bytes, source_hash: str) 
     logger.debug(f"Regenerated favicon.ico from {_SOURCE_SVG} ({source_hash[:12]})")
 
 
-def ensure_favicons(static_dir: Path, cache_dir: Path = CACHE_DIR) -> None:
+def ensure_favicons(logo_dir: Path, cache_dir: Path = CACHE_DIR) -> None:
     """
     (Re)generates every favicon derivative that's missing or stale.
 
@@ -166,11 +166,11 @@ def ensure_favicons(static_dir: Path, cache_dir: Path = CACHE_DIR) -> None:
     asset.
 
     Args:
-        static_dir: Dojo's `templates/static` directory, where light-logo.svg lives.
+        logo_dir: The folder light-logo.svg is in (the docs' assets, `DOCS_ASSETS_DIR`).
         cache_dir: Where derived PNG/ICO files are written. Defaults to `CACHE_DIR`.
 
     """
-    svg_path = static_dir / _SOURCE_SVG
+    svg_path = logo_dir / _SOURCE_SVG
     if not svg_path.exists():
         return
 

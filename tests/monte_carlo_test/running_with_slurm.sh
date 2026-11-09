@@ -26,7 +26,7 @@ mujoco-mojo run monte-carlo \
     -w mujoco-mojo/tests/monte_carlo_test/mc_test \
     -nt 100 \
     --no-resume \
-    -cw \
+    --clean-workdir \
     -np 1 \
     --seed 42 \
     --overrides mujoco-mojo/tests/monte_carlo_test/overrides.json \

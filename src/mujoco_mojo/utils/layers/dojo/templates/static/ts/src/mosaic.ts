@@ -1,5 +1,6 @@
 import type { DojoStore, JobStatus, TrialManifest } from './models';
 import { fetchWithTimeout, fetchWithRetry } from './lib/fetch-timeout';
+import { trialOutcome } from './lib/trial-status';
 
 function mosaic() {
   return {
@@ -56,9 +57,7 @@ function mosaic() {
     tileClass(trial: string): string {
       const tn = Number(trial.split('_').pop() ?? '0');
       const store = Alpine.store('dojo') as DojoStore;
-      if (store.errorTrialNums.includes(tn)) return 'badge-error';
-      if (store.failureTrialNums.includes(tn)) return 'badge-failure';
-      return 'badge-success';
+      return `badge-${trialOutcome(tn, store.errorTrialNums, store.failureTrialNums)}`;
     },
   };
 }

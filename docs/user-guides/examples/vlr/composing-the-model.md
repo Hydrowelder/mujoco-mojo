@@ -24,6 +24,12 @@ The `options` tag is used to set some key parameters like the simulation timeste
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:generate"
 ```
 
+<!-- docs/assets/models/vlr/model.xml is written by scripts/gen_docs_models.py, and a pre-push hook keeps it current. Do not edit it by hand. -->
+
+You can explore the model this builds in your browser with MuJoCo Live. It is the model as `generate` leaves it, before any runtime behavior, so the landing gear's springs (added by the runtime step later in this guide) are not part of it.
+
+[Open the model in MuJoCo Live :material-open-in-new:](https://live.mujoco.org/?model=github:Hydrowelder/mujoco-mojo/master/docs/assets/models/vlr/model.xml){ .md-button .md-button--primary target=_blank }
+
 ---
 
 ## VLRModel Definition

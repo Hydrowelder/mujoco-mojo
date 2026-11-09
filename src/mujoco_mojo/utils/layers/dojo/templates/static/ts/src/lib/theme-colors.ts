@@ -13,7 +13,8 @@
 // own contract above. That's harmless for consumers that just hand the
 // string to a CSS-color-aware API (Plotly/culori, canvas fillStyle), but it
 // broke anything that stores or re-parses the raw string as "the color":
-// plotColors (persisted as shape/annotation/series colors in PlotConfig)
+// the signal color cycle, back when it came from here (persisted as
+// shape/annotation/series colors in PlotConfig)
 // and the swatch color picker (iro.js doesn't understand lab() and falls
 // back to black; the hex text field showed the lab() string verbatim).
 // Routing every value through a 1x1 canvas forces a real hex string
@@ -33,7 +34,7 @@ function resolveToHex(cssColor: string): string {
   if (!hexCanvasCtx) return cssColor;
   hexCanvasCtx.fillStyle = cssColor;
   hexCanvasCtx.fillRect(0, 0, 1, 1);
-  const [r, g, b] = hexCanvasCtx.getImageData(0, 0, 1, 1).data;
+  const [r = 0, g = 0, b = 0] = hexCanvasCtx.getImageData(0, 0, 1, 1).data;
   const toHex = (n: number) => n.toString(16).padStart(2, "0");
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }

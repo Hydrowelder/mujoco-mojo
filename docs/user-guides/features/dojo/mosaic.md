@@ -15,7 +15,8 @@
 ## Selection Ribbon
 
 The top of the page is dedicated to Data Navigation and Signal Selection.
-Trial Navigation
+
+### Trial Navigation
 
 - **Sequential Access:** Use the PREV and NEXT buttons (or your arrow keys) to flip through trials like a slide deck.
 - **The Warp Box:** Want to jump to a specific trial? Type the number into the center box and hit Enter (or click Warp).

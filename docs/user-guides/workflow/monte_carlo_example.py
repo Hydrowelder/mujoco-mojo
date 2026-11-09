@@ -1,6 +1,6 @@
 # --8<-- [start:imports]
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 from pydantic import Field
@@ -24,7 +24,7 @@ class Handoff(mojo.UserData):
     box1_rot: mojo.AnySite
     springs: dict[
         Literal["pz", "mz"],
-        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue, mojo.NamedValue],
+        tuple[mojo.AnySite, mojo.AnySite, mojo.NamedValue[Any], mojo.NamedValue[Any]],
     ] = Field(default_factory=dict)
 
     def define_spring(

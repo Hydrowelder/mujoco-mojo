@@ -131,7 +131,7 @@ class SiteBase(XMLModel, ABC):
         return quat
 
     def rt_parent_body(self, state: MjState) -> int:
-        return state.model.site_bodyid[self.get_id(state.model)]
+        return int(state.model.site_bodyid[self.get_id(state.model)])
 
     def rt_pos(self, state: MjState) -> Vec3:
         return state.data.site_xpos[self.get_id(state.model)]
@@ -802,7 +802,7 @@ class SiteMesh(SiteBase, ProximityMixin):
     """
 
     def _mesh_dataid(self, mj_model: mujoco.MjModel) -> int:
-        return mj_model.site_dataid[self.get_id(mj_model)]
+        return int(mj_model.site_dataid[self.get_id(mj_model)])
 
     def _proximity_name(self) -> str | None:
         return self.name

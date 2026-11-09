@@ -11,7 +11,6 @@ from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mjcf.meta.frame import Frame
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.attach import Attach
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.camera import Camera
-from mujoco_mojo.mjcf.mujoco_attr.body_attr.composite import Composite
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp import FlexComp
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.free_joint import FreeJoint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.geom import AnyGeom
@@ -97,7 +96,6 @@ _body_children = (
     "sites",
     "cameras",
     "lights",
-    "composites",
     "flexcomps",
     "plugins",
     "attaches",
@@ -205,12 +203,6 @@ class Body(XMLModel):
     )
     """Lights assigned to body."""
 
-    composites: list[Composite] = Field(
-        default_factory=list,
-        exclude_if=is_empty_list,
-    )
-    """Composites assigned to body."""
-
     flexcomps: list[FlexComp] = Field(
         default_factory=list,
         exclude_if=is_empty_list,
@@ -266,7 +258,7 @@ class Body(XMLModel):
 
     def rt_mass(self, state: MjState) -> float:
         """Mass of the body from a compiled MjModel."""
-        return state.model.body_mass[self.get_id(state.model)]
+        return float(state.model.body_mass[self.get_id(state.model)])
 
     def rt_xmat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the body during runtime."""
@@ -297,7 +289,7 @@ class Body(XMLModel):
 
     def rt_parent_body_id(self, state: MjState) -> int:
         """Parent ID of the body."""
-        return state.model.body_parentid[self.get_id(state.model)]
+        return int(state.model.body_parentid[self.get_id(state.model)])
 
     def rt_pos(self, state: MjState) -> Vec3:
         """Position of the body during runtime."""
@@ -383,19 +375,19 @@ class Body(XMLModel):
 
         # calculate datum to center of mass
         h_rel = self.rt_xipos(state) - np.asarray(ref_point)
-        return -mass * np.dot(g, h_rel)
+        return float(-mass * np.dot(g, h_rel))
 
     def rt_trans_ke(self, state: MjState) -> float:
         """Translational kinetic energy of the body during runtime."""
         mass = self.rt_mass(state)
         v = self.rt_lin_vel(state)
-        return 0.5 * mass * np.dot(v, v)
+        return float(0.5 * mass * np.dot(v, v))
 
     def rt_rot_ke(self, state: MjState) -> float:
         """Rotational kinetic energy of the body during runtime."""
         omega = self.rt_ang_vel(state)
         I_world = self.rt_inertia_world(state)
-        return 0.5 * np.dot(omega, I_world @ omega)
+        return float(0.5 * np.dot(omega, I_world @ omega))
 
     def rt_ke(self, state: MjState) -> float:
         """Total kinetic energy of the body during runtime."""
@@ -713,7 +705,6 @@ Frame.model_rebuild(
         "Body": Body,
         "Attach": Attach,
         "Camera": Camera,
-        "Composite": Composite,
         "FlexComp": FlexComp,
         "FreeJoint": FreeJoint,
         "AnyGeom": AnyGeom,

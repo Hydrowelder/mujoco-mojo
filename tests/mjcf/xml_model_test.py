@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from pydantic import Field
 
+from mujoco_mojo.mjcf import Visual, VisualRGBA
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.xml_model import XMLModel, _format_value
 from mujoco_mojo.typing import Angle, EulerSeq, Vec4
@@ -151,6 +152,14 @@ def test_rgba_warning(caplog) -> None:
 
     assert "MuJoCo rgba values range from 0 to 1" in caplog.text
     assert "You entered rgba=array([255,   0,   0, 255])" in caplog.text
+
+
+def test_rgba_warning_skips_a_model_of_colors(caplog) -> None:
+    """`Visual.rgba` holds a `VisualRGBA` of several colors rather than one array, which `warn_rgba` once failed on with a `TypeError`."""
+    visual = Visual(rgba=VisualRGBA(haze=np.array([0, 0, 0, 0])))
+
+    assert visual.rgba is not None
+    assert "MuJoCo rgba values range from 0 to 1" not in caplog.text
 
 
 def test_exclusive_groups_none_check() -> None:

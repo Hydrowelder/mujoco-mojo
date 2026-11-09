@@ -70,8 +70,8 @@ class Flex(XMLModel):
     flatskin: bool = False
     """This attribute determines whether 2D and 3D flexes that are rendered in flexskin mode will use smooth or flat shading. The default smooth shading is suitable in most cases, however if the object is intended to have visible sharp edges (such as a cube) then flat shading is more natural."""
 
-    material: MaterialName | None = None
-    """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates."""
+    material: MaterialName | list[MaterialName] | None = None
+    """If specified, this attribute applies a material to the flex. Note that textures specified in the material will be applied only if the flex has explicit texture coordinates. A single material name is applied to all elements of the flex, or a list gives one material name per element."""
 
     rgba: Vec4 = np.array((0.5, 0.5, 0.5, 1))
     """Instead of creating material assets and referencing them, this attribute can be used to set color and transparency only. This is not as flexible as the material mechanism, but is more convenient and is often sufficient. If the value of this attribute is different from the internal default, it takes precedence over the material."""

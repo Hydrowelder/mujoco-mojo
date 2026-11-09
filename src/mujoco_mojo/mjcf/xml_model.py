@@ -103,8 +103,9 @@ class XMLModel(MojoBaseModel):
 
     @model_validator(mode="after")
     def warn_rgba(self) -> Self:
-        rgba: np.ndarray | None = getattr(self, "rgba", None)
-        if rgba is not None:
+        rgba = getattr(self, "rgba", None)
+        # `Visual.rgba` is a `VisualRGBA` holding several colors, not one array of four values
+        if isinstance(rgba, np.ndarray):
             if max(rgba) > 1:
                 logger.warning(
                     f"{self.__class__.__name__} {getattr(self, 'name', 'unnamed')}: MuJoCo rgba values range from 0 to 1, not 0 to 255. You entered {rgba=}."

@@ -43,7 +43,7 @@ class Spatial(TendonBase):
     """This attribute specifies whether actuator forces acting on the tendon should be clamped. See Force limits for details. This attribute interacts with the actuatorfrcrange attribute. If this attribute is "false", actuator force clamping is disabled. If it is "true", actuator force clamping is enabled. If this attribute is "auto", and autolimits is set in compiler, actuator force clamping will be enabled if actuatorfrcrange is defined."""
 
     actuatorfrcrange: Vec2 = np.array((0, 0))
-    """Range for clamping total actuator forces acting on this tendon. See Force limits for details. The compiler expects the lower bound to be nonpositive and the upper bound to be nonnegative. Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
+    """Range for clamping total actuator forces acting on this tendon. See Force limits for details; to limit several commands of one physical actuator, prefer a single multi-input actuator such as pid with forcerange. The compiler expects the lower bound to be nonpositive and the upper bound to be nonnegative. Setting this attribute without specifying actuatorfrclimited is an error if compiler-autolimits is "false"."""
 
     width: float = 0.003
     """Radius of the cross-section area of the spatial tendon, used for rendering. Parts of the tendon that wrap around geom obstacles are rendered with reduced width."""

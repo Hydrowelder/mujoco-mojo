@@ -12,7 +12,7 @@ from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.typing import CameraName
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
-from typing import Never
+from typing import Any, Never
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 CAM1 = CameraName("cam1")
@@ -27,7 +27,7 @@ def _frames_visually_equal(a: np.ndarray, b: np.ndarray) -> bool:
     tolerance won't mask an actual gating bug.
     """
     diff = np.abs(a.astype(np.int16) - b.astype(np.int16))
-    return diff.max() <= 4 and int((diff.max(axis=-1) > 0).sum()) <= 4
+    return bool(diff.max() <= 4 and int((diff.max(axis=-1) > 0).sum()) <= 4)
 
 
 @pytest.fixture
@@ -72,7 +72,11 @@ def recorder(tmp_path, state) -> Iterator[VideoRecorder]:
 
 
 def _expected_bbox(
-    text: str, position: tuple[int, int], font_size: int, padding: int, frame_shape
+    text: str,
+    position: tuple[int, int],
+    font_size: int,
+    padding: int,
+    frame_shape: tuple[int, ...],
 ) -> tuple[int, int, int, int]:
     """Mirrors `VideoRecorder._draw_label`'s bbox math, so tests can sample a pixel that's inside the padded background rect but outside the tight text bbox (i.e. guaranteed to have no glyph ink)."""
     font = ImageFont.load_default(size=font_size)
@@ -390,7 +394,7 @@ class TestEncoderCodecArgs:
     """Verifies `quality`/`encode_speed` reach the ffmpeg command line, without spawning a real process."""
 
     @pytest.fixture
-    def captured_argv(self, monkeypatch) -> list:
+    def captured_argv(self, monkeypatch) -> list[Any]:
         calls = []
 
         class FakeStdin:

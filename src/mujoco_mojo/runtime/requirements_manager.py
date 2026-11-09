@@ -204,7 +204,9 @@ class RequirementsManager:
             return name_or_fn
         for spec in self._requirements.values():
             if spec.fn is name_or_fn:
-                return spec.name
+                # `BaseDict.values()` is untyped in stochas, so the name is declared here
+                name: str = spec.name
+                return name
         fn_repr = getattr(name_or_fn, "__name__", repr(name_or_fn))
         raise ValueError(f"{fn_repr} is not registered as a requirement")
 

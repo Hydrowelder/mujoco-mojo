@@ -54,7 +54,7 @@ There are two equivalent approaches to defining a requirement: using a decorator
 
 !!! info
 
-    It is reccomended to define requirements functions before running your main simulation loop.
+    It is recommended to define requirements functions before running your main simulation loop.
 
 Both styles accept the same keyword arguments:
 
@@ -147,7 +147,7 @@ If a failing terminator and a passing one fire on the same step, the failure win
 
 ### Latching Results
 
-Sometimes you may have an computationally expensive requirement which is costly to keep checking after it has already passed or failed. The `latch_on_pass` and `latch_on_fail` arguments lock in a verdict the first time the check produces it. The function is never called again afterward (neither live nor at end of trial); the locked-in result is replayed for free. Each can be controlled independently.
+Sometimes you may have a computationally expensive requirement which is costly to keep checking after it has already passed or failed. The `latch_on_pass` and `latch_on_fail` arguments lock in a verdict the first time the check produces it. The function is never called again afterward (neither live nor at end of trial); the locked-in result is replayed for free. Each can be controlled independently.
 
 They are not symmetric, though:
 

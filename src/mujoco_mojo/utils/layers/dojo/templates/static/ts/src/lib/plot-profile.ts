@@ -10,13 +10,19 @@ export interface PlotProfileTab {
   config: PlotConfig;
 }
 
-export interface PlotProfile {
+// versus mode's settings (the comparison-trial overlay), shared across every
+// tab, not nested in any one tab's PlotConfig. a saved profile carries them and
+// so does SensAI's view of the trial viewer; SensAI can set no range (null),
+// which leaves only the pinned trials
+export interface VersusState {
+  vsEnabled: boolean;
+  vsRange: [number, number] | null;
+  vsPinned: number[];
+}
+
+export interface PlotProfile extends Omit<VersusState, "vsRange"> {
   version: 2;
   tabs: PlotProfileTab[];
   activeTabIndex: number;
-  // workspace-level VS (comparison-trial overlay) settings - shared across
-  // every tab in the profile, not nested in any one tab's PlotConfig.
-  vsEnabled: boolean;
   vsRange: [number, number];
-  vsPinned: number[];
 }

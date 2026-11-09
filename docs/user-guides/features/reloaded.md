@@ -4,8 +4,6 @@
 
     **Mojo Reloaded** is the definitive rapid prototyping tool for MuJoCo Mojo. It allows you to modify your model architecture and physics logic on the fly without ever closing your visualizer. By tightening the feedback loop between code changes and visual results, Reloaded transforms the development process from "Compile and Wait" to "Save and See."
 
-    To get the most out of this feature, install Mojo with `uv add mujoco-mojo[reloaded]` or `pip install mujoco-mojo[reloaded]`!
-
 ---
 
 ## Getting Started
@@ -20,33 +18,134 @@ mujoco-mojo reloaded --generator my_sim.Experiment.generate
 
 The `reloaded` command is highly flexible, allowing you to specify different viewers, initial seeds, and even pass custom arguments to your scripts.
 
-| Argument           | Shortcut | Description                                                                                                                                                                                                                                               |
-| :----------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--help`           |          | Describes all available arguments. Used on its own.                                                                                                                                                                                                       |
-| `--generator`      | `-g`     | Import path to your `generate` function.                                                                                                                                                                                                                  |
-| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                               |
-| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                          |
-| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                            |
-| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (native), `viser`, or `mjviser` (web-based).                                                                                                                                                                                 |
-| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                         |
-| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                                 |
-| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                              |
-| `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                               |
-| `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                       |
-| `--port`           | `-p`     | Port for the web-based viewers. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically. |
+| Argument           | Shortcut | Description                                                                                                                                                                                                                                            |
+| :----------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--help`           |          | Describes all available arguments. Used on its own.                                                                                                                                                                                                    |
+| `--generator`      | `-g`     | Import path to your `generate` function.                                                                                                                                                                                                               |
+| `--config`         | `-c`     | Path to a saved `model_config.json`. Mutually exclusive with `--generator`.                                                                                                                                                                            |
+| `--runtime`        | `-r`     | Optional import path to your `runtime` function.                                                                                                                                                                                                       |
+| `--workdir`        | `-w`     | Workspace directory for output files (default: `mojo-models`).                                                                                                                                                                                         |
+| `--user-interface` | `-ui`    | Choose your viewer: `opengl` (the classic MuJoCo window), `studio` (MuJoCo Studio in a native window), or `web` (MuJoCo Studio in a browser). Defaults to `web` where your MuJoCo build can serve it, and `opengl` where it cannot (the `reloaded.ui` setting). |
+| `--gfx`            |          | How the native Studio window is drawn: `default`, `opengl`, `opengl_software`, `vulkan`, or `vulkan_software`. Reads from the `reloaded.gfx` setting. Ignored by `web` and `opengl`.                                                                   |
+| `--trial-num`      | `-tn`    | Load the random state for a specific trial number (default: `0`).                                                                                                                                                                                      |
+| `--seed`           | `-s`     | Set the global seed for stochastic draws.                                                                                                                                                                                                              |
+| `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                           |
+| `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                            |
+| `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                    |
+| `--port`           | `-p`     | Port for the web viewer. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically.     |
 
 ---
 
-## Interactive Controls
+## The Terminal UI
 
-Once Reloaded is running, your terminal becomes an interactive command center. You can trigger reloads and control simulation speed without restarting the process.
+Once Reloaded is running, your terminal becomes a command center with a status bar and a row of control buttons at the top, a log of everything that happens in the middle, and a command line at the bottom. You can trigger reloads and control simulation speed without restarting the process.
 
-| Command              | Action                                                                                       |
-| :------------------- | :------------------------------------------------------------------------------------------- |
-| `ENTER`              | Repeat the last command (perfect for rapid iteration).                                       |
-| `gen`                | Trigger **Generate Only** mode. Useful for MJCF debugging.                                   |
-| `1.0` (or any float) | Trigger **Runtime** mode at the specified playback speed (only if a `runtime` was provided). |
-| `exit`               | Safely close the server and visualizer.                                                      |
+### Commands
+
+Type a command and press `ENTER`. Press `TAB` to complete the one you are typing (`explain hel` becomes `explain help`), and use the up and down arrows to step through earlier commands.
+
+| Command                             | Action                                                                                                                                                             |
+| :---------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ENTER`                             | Repeat the last command (perfect for rapid iteration). On a paused run it steps once instead.                                                                      |
+| `gen`, `g`, `generate`              | Trigger **Generate Only** mode. Useful for MJCF debugging.                                                                                                         |
+| `run`, `r`, `runtime`               | Generate and run the `runtime` (only if a `runtime` was provided). Give a speed, as in `run 0.5`, to set it first. On a paused run it carries on.                  |
+| `run until time 2.5`                | Run, then pause by itself once the simulation time reaches that reading. It starts a run if none is going, and carries a paused one on.                            |
+| `run until step 500`                | The same, but pausing once the run has taken that many steps since it began.                                                                                       |
+| `pause`, `p`                        | Hold the run in progress where it is.                                                                                                                              |
+| `step`, `step 5`                    | Advance a run by one step, or by that many. A run that is going is paused first.                                                                                   |
+| `speed 0.5`, `speed 0`, `speed inf` | Set the playback speed for the next run, or for the one in progress: 1 is real time, `0` steps by hand, and `inf` runs as fast as it can. It does not start a run. |
+| `seed 42`                           | Set the seed. `seed none` clears it.                                                                                                                               |
+| `trial 3`                           | Set the trial number.                                                                                                                                              |
+| `watch`, `w`                        | Turn reloading on or off when your `*.py` files change.                                                                                                            |
+| `record`, `rec`                     | Turn telemetry and video recording on or off.                                                                                                                      |
+| `dojo`                              | Print the command that opens the Dojo for this session.                                                                                                            |
+| `explain seed 42`                   | Say what a command would do without running it. Ending a command with `?` does the same.                                                                           |
+| `stop`, `halt`, `abort`             | Abort the run in progress.                                                                                                                                         |
+| `help`, `h`, `?`                    | Show every command and key.                                                                                                                                        |
+| `quit`                              | Close the viewer and Reloaded. It is the only word that does, so `stop` is the one that ends a run.                                                                |
+
+A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
+
+Anything your code logs with Python's `logging` ends with the file and line that logged it, such as `src/my_sim/robot.py:42`, flush with the right edge of the log. A long message wraps, and the location goes on its last row, or on a row of its own if there is no room beside the end of the message. The path is relative to the folder you launched from when the file is inside it. Click the location to copy it with the full path, so it works from any folder, then paste it into your editor's quick open to jump straight there (`Ctrl+P` in VS Code). Messages from Reloaded itself and anything printed with `print` have no location.
+
+### Controlling a Run
+
+While a run is going you can `pause` it, `step` it, carry it on with `run`, and change its speed with `speed 0.5`. A paused run is carried on by `run 2` at that speed. `stop` still aborts it, paused or not.
+
+Speed `0` is manual stepping: the run waits at every step and each press of `ENTER` (or `step`) lets one through, which is handy for watching a few steps closely. `run` alone does not let it go, because the speed is still 0. Give it a speed, as in `run 1`, or `speed inf` to run as fast as the machine can. Whenever a run is paused, `stop` ends it.
+
+To have a run pause by itself, give `run` a target: `run until time 2.5` pauses when the simulation time reaches 2.5, and `run until step 500` pauses when the run has taken 500 steps. Both are readings since the run began, not distances from now, and they use whatever time unit your model does. You can put a speed first (`run 0.5 until step 500`), set a target on a run that is already going or paused, and a target that has already been passed is refused. The log says where the run stopped, such as `reached step 500 (time 1, step 500)`, and `run` carries on from there. A target applies to one run only. The status bar shows `PAUSED` while a run is held.
+
+Pausing holds the run inside `rm.step(...)`, the call your runtime already makes each step, so it works for any runtime that steps through the `RuntimeManager`. That is also how forces, recording, and the force arrows reach the viewer. A runtime that calls `mujoco.mj_step` on its own can be stopped but not paused.
+
+### Keys and Clicks
+
+| Key   | Action                                       |
+| :---- | :------------------------------------------- |
+| `F2`  | Generate only.                               |
+| `F3`  | Generate and run, or carry a paused run on.  |
+| `F12` | Pause the run, or resume it if it is paused. |
+| `F4`  | Turn watching on or off.                     |
+| `F7`  | Turn recording on or off.                    |
+| `F8`  | Show or hide the hint.                       |
+| `F9`  | Show help.                                   |
+| `Esc` | Stop the run in progress.                    |
+| `F10` | Quit.                                        |
+
+The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same as the keys. Each has an icon and shows its key beside the label. A button that does not apply right now is dimmed, so Stop only lights up during a run and Run lights up again when a run is paused. You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
+
+Closing the viewer window also closes Reloaded.
+
+### Copying from the Log
+
+Drag across the log with the mouse to select text. Every line the drag touches is highlighted in full, and letting go copies those lines to the clipboard and says how many were copied. `Ctrl+C` copies again. This is how to pass a log on, for example when reporting a problem. The gap that pushes a line's location to the right edge is not copied: you get the message, two spaces, and the location. Clicking a location without dragging copies just its full path and line.
+
+### Watching for Changes
+
+With `watch` on, saving a `*.py` file reloads with the last command. Reloaded watches the folder it was started in and the folders of the project modules your generator and runtime import, which are the files a reload picks up, so a module that is first imported later is watched from then on. Folders that nothing imports, such as virtual environments and build trees, are left alone. That keeps the number of watches small, because your operating system has a limit that your editor shares. If watching does stop, Reloaded says why in the log and turns `watch` off.
+
+### If Reloaded Crashes
+
+The Studio viewers run compiled code, and if that code crashes it takes Reloaded down with it. Reloaded then puts your terminal back as it was, so you do not have to close the shell, and says where it saved the Python stack of every thread, `crash.log` in your workdir. Send that file along when reporting a crash. It is removed again after a normal exit. To do this, `mujoco-mojo reloaded` runs your session in a child process and waits for it, so two `mujoco-mojo` processes show up, and it starts about a second slower.
+
+### The Studio Viewers
+
+With `-ui studio` or `-ui web` the model is shown in MuJoCo Studio, and Studio's own buttons control the run the same way the terminal does, so the two always agree:
+
+| In Studio        | Same as in the terminal                                                                                                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pause and play   | `pause` and `run`. The terminal's status bar changes too, and so does Studio's button when you pause in the terminal.                                                             |
+| Step             | `step`.                                                                                                                                                                           |
+| Speed slider     | `speed`. The slider runs from 0.1% to 100% of real time, so a speed above real time, `inf`, and manual stepping all show as 100%. Moving the slider sets a speed up to real time. |
+| Reset and Reload | `ENTER`: runs the last command again once nothing is running. During a run they only remind you to `stop` it first.                                                               |
+
+Your generator builds the model, so a model file dropped onto Studio is ignored, and Studio's control noise setting has no effect.
+
+If the native window (`-ui studio`) fails to draw on a machine whose display only has software OpenGL, such as a remote desktop, run it with `--gfx opengl_software`, or set `reloaded.gfx`.
+
+With `-ui web`, the address to open is printed at the top of the log, right after the line that says Reloaded is live. Over SSH it is followed by the command that forwards the port. Reloaded takes the first free port from `--port` upward.
+
+### Changing the Keys
+
+The keys come from the `reloaded.keys` settings, a list for each action. The first key in a list is the one the footer shows, and the others work too.
+
+```toml linenums="0"
+[reloaded.keys]
+generate = ["f5", "ctrl+g"]
+help = ["f9"]
+```
+
+You can also set one from the command line:
+
+```bash linenums="0"
+mujoco-mojo settings set reloaded.keys.generate "f5, ctrl+g"
+```
+
+The actions are `generate`, `run`, `pause`, `step`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. `pause` is `F12` and `step` has no key by default, because no function key is left that an editor terminal passes on, so give it one if you want it. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`. A key can only do one thing, and a list can be empty to leave an action without a key. Typing `quit` always closes Reloaded.
+
+!!! tip
+
+    A terminal inside an editor hands some keys to the editor before Reloaded sees them. The terminal in VS Code keeps `F1`, `F5`, `F6`, `F10`, `F11`, `Ctrl+P`, and `Ctrl+Q` for itself, which is why the defaults lean on other function keys.
 
 ---
 
@@ -92,11 +191,15 @@ Once the world looks right, it's time to test your forces. By providing a `--run
 
 1. Launch with both: `mujoco-mojo reloaded --generator my_mod.gen --runtime my_mod.run`.
 2. Modify your physics logic (e.g., increase a spring's stiffness).
-3. Enter a speed like `1.0` (Real-time) or `0.5` (Slow-motion).
-4. Watch the physics play out. If it’s not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
+3. Enter `run 1.0` (Real-time) or `run 0.5` (Slow-motion).
+4. Watch the physics play out. If it's not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
 
 ---
 
 !!! success
 
-    Use the **Viser** UI (`--ui viser`, available in the `mujoco-mojo[reloaded]` dependency group) if you want to develop on one machine and view the simulation on another (such as on an SSH connection, phone, or tablet) via your local network. Reloaded will automatically display the local and mobile URLs in your terminal.
+    Use the **web** UI (`-ui web`) if you want to develop on a machine with no display, such as over an SSH connection. Reloaded prints the address and the command that forwards the viewer's port to your own machine (for example `ssh -L 8000:localhost:8000 user@host`) at the top of its log. Run it on your computer, then open `http://localhost:8000` in your browser.
+
+!!! warning
+
+    The MuJoCo Studio web viewer listens on every network interface of the machine it runs on and has no password. Only use it on a network you trust, or keep the port closed to others and reach it through an SSH tunnel.

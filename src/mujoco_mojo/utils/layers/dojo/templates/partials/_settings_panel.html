@@ -76,14 +76,21 @@
          this exact widget. z-960 - above the settings modal's own z-950
          backdrop (base.html), so the now-top-level panel still paints over
          the modal it visually belongs to, but below the z-1000 toast
-         layer. -->
+         layer.
+
+         The list also opens clear of the hint bar, where each option's
+         docstring shows, above the trigger when there is no room below, and
+         follows its trigger as the pane scrolls, hidden while the trigger is
+         out of view (settingsDropdown). -->
     <template x-if="{{ field_expr }}.widget === 'select'">
       <div class="relative w-full"
-           x-data="{ open: false, coords: { top: 0, left: 0, width: 0 } }"
+           x-data="settingsDropdown()"
+           @scroll.window.capture="open && place()"
+           @resize.window="open && place()"
            @click.away="open = false">
         <button type="button"
                 x-ref="trigger"
-                @click="const r = $refs.trigger.getBoundingClientRect(); coords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; open = !open"
+                @click="toggle()"
                 :disabled="!$store.dojo.settingsIsLocalhost"
                 class="dropdown-trigger">
           <!-- capitalize: enum values are plain lowercase wire values
@@ -113,8 +120,8 @@
                x-transition
                @click.stop
                @click.away="open = false"
-               :style="`position:absolute;top:${coords.top}px;left:${coords.left}px;width:${coords.width}px;`"
-               class="dropdown-panel z-960"
+               :style="panelStyle"
+               class="dropdown-panel z-960 overflow-y-auto"
                style="display:none;">
             <template x-for="opt in {{ field_expr }}.enumOptions"
                       :key="opt">
@@ -505,7 +512,11 @@
 <div class="space-y-2">
   <template x-for="(item, idx) in {{ list_expr }}.items"
             :key="idx">
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2"
+         @mouseenter="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}))"
+         @mouseleave="$store.dojo.hideSettingsHint()"
+         @focusin="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}))"
+         @focusout="$store.dojo.hideSettingsHint()">
       <template x-for="field in item.fields"
                 :key="field.path">
         <div class="flex-1 min-w-0">
@@ -518,11 +529,13 @@
                a list-row select needs the same escape-the-scroll-pane fix. -->
           <template x-if="field.widget === 'select'">
             <div class="relative w-full"
-                 x-data="{ open: false, coords: { top: 0, left: 0, width: 0 } }"
+                 x-data="settingsDropdown()"
+                 @scroll.window.capture="open && place()"
+                 @resize.window="open && place()"
                  @click.away="open = false">
               <button type="button"
                       x-ref="trigger"
-                      @click="const r = $refs.trigger.getBoundingClientRect(); coords = { top: r.bottom + window.scrollY + 2, left: r.left + window.scrollX, width: r.width }; open = !open"
+                      @click="toggle()"
                       :disabled="!$store.dojo.settingsIsLocalhost"
                       class="dropdown-trigger-sm text-xs w-full">
                 <span class="truncate"
@@ -543,7 +556,7 @@
                      x-transition
                      @click.stop
                      @click.away="open = false"
-                     :style="`position:absolute;top:${coords.top}px;left:${coords.left}px;width:${coords.width}px;`"
+                     :style="panelStyle"
                      class="dropdown-panel z-960 text-xs max-h-60 overflow-y-auto"
                      style="display:none;">
                   <template x-for="opt in field.enumOptions"
@@ -807,7 +820,8 @@
              full available height even when its actual content (e.g. just
              the one-field Assets section) is much shorter, leaving a block
              of empty space above the footer instead of shrinking to fit. -->
-        <div class="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar px-6">
+        <div data-settings-pane
+             class="flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar px-6">
           <!-- search mode: every matching section, stacked and still
                individually collapsible - unchanged from this panel's
                original single-column behavior. -->
@@ -950,7 +964,8 @@
            hovered, so hovering the last row never moves the pane's edge
            out from under it. Still allowed to grow past this floor for
            some future outlier - it's min-h, not h - just never shorter. -->
-      <div class="px-6 py-2.5 border-t border-line dark:border-subtle shrink-0 min-h-32">
+      <div data-settings-hint
+           class="px-6 py-2.5 border-t border-line dark:border-subtle shrink-0 min-h-32">
         <p x-show="$store.dojo.settingsHintText"
            class="text-xs text-ink-body leading-relaxed [&_code]:md-inline-code [&_p]:mb-1 [&_p:last-child]:mb-0"
            x-html="$store.dojo.renderMarkdown($store.dojo.settingsHintText)"></p>

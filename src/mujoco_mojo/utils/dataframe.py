@@ -54,7 +54,7 @@ def _resolve_column_metadata(
         return column_metadata
     if path is not None:
         return MojoDataFrame.read_column_metadata(path)
-    return {}
+    return dict[str, ColumnMetadata]()
 
 
 def _try_parse(name: str) -> Column | None:
@@ -457,12 +457,14 @@ class MojoNamespace:
         """Returns the structured manifest used by the frontend. `extra_columns` are appended to `all` and included in rotatable/quat discovery. Pass `column_metadata` (from `MojoDataFrame.read_column_metadata()`) to populate `column_metadata`, and to leave out any group tagged `scalar`, which is not a vector or a quaternion and so is never offered for rotation (matching `change_frame`)."""
         bm = self._get_base_map(extra_columns)
         all_cols = list(self._df.columns) + (extra_columns or [])
-        meta = column_metadata or {}
+        meta: Mapping[str, ColumnMetadata] = column_metadata or {}
         col_meta = {col: m for col in all_cols if (m := meta.get(col)) is not None}
 
         def is_scalar(base: str, first: str) -> bool:
             tagged = meta.get(f"{base}:{first}")
-            return tagged is not None and tagged.transform_type == TransformType.SCALAR
+            return bool(
+                tagged is not None and tagged.transform_type == TransformType.SCALAR
+            )
 
         return {
             "all": all_cols,

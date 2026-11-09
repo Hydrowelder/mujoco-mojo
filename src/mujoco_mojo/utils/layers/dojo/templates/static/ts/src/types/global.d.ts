@@ -41,9 +41,11 @@ declare global {
     mosaic(): object;
     sensai(): object;
     sensaiMsgData(role: string): object;
+    settingsDropdown(): object;
     downloadSensAIHistory(): void;
     renderMarkdown(text: string): string;
     initSensAICodeBlocks(container: HTMLElement): void;
+    initSensAIMath(container: HTMLElement): Promise<boolean>;
     // iro.js color-picker construction, called from _macros.html's
     // color_picker macro (the $watch/color:change wiring around the
     // returned picker stays inline there since it needs Alpine's reactive

@@ -1,4 +1,5 @@
 import json
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,7 +18,7 @@ from mujoco_mojo.typing import GeomName, JointName, MeshName
 from mujoco_mojo.utils.proximity import Proximity
 from mujoco_mojo.utils.signal_metadata import TransformType
 from mujoco_mojo.utils.statusing import RequirementResult, TrialStatus
-from typing import Never
+from typing import Any, Never
 
 
 class MockLoad(Load):
@@ -147,6 +148,21 @@ def test_save_recordings_skips_log_when_no_frames_captured(caplog) -> None:
     mock_recorder.save.assert_called_once()
     mock_recorder.close.assert_called_once()
     assert not any("Saving" in r.message for r in caplog.records)
+
+
+def test_save_recordings_frees_renderers_on_the_calling_thread() -> None:
+    """A renderer's GL context is current on the thread that ran the simulation, and freeing it from the save pool's threads fails, so it is freed before the pool starts."""
+    freed_on: list[int] = []
+    mock_recorder = MagicMock(frame_count=1)
+    mock_recorder.close_renderer.side_effect = lambda: freed_on.append(
+        threading.get_ident()
+    )
+    mgr = RuntimeManager(video_recorders=[mock_recorder])
+
+    mgr.save_recordings()
+
+    assert freed_on == [threading.get_ident()]
+    mock_recorder.save.assert_called_once()
 
 
 @patch("mujoco_mojo.runtime.runtime_manager.ThreadPoolExecutor")
@@ -462,7 +478,7 @@ def test_requirement_fn_receives_model_and_dataframe(tmp_path: Path) -> None:
     sm = MagicMock(spec=SignalManager)
     sm.export_path = parquet_path
     fake_model = MagicMock()
-    captured: list[tuple] = []
+    captured: list[tuple[Any, ...]] = []
 
     mgr = RuntimeManager(signal_manager=sm)
     mgr._mojo_model = fake_model
@@ -664,7 +680,7 @@ def test_last_passed_accepts_function_handle() -> None:
 
     @mgr.requirement(every=1)
     def upright(model, state, df) -> tuple[bool, str]:
-        return state.data.time > 0.05, "ok"
+        return bool(state.data.time > 0.05), "ok"
 
     state = MagicMock()
     state.data.time = 0.1
@@ -779,7 +795,7 @@ def test_latch_on_fail_stops_calling_fn_after_first_failure() -> None:
 
     def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
-        return state.data.time < 0.25, "check"
+        return bool(state.data.time < 0.25), "check"
 
     mgr = RuntimeManager()
     mgr._mojo_model = MagicMock()
@@ -803,7 +819,7 @@ def test_latch_on_fail_defaults_to_true() -> None:
 
     def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
-        return state.data.time < 0.25, "check"
+        return bool(state.data.time < 0.25), "check"
 
     mgr = RuntimeManager()
     mgr._mojo_model = MagicMock()
@@ -824,7 +840,7 @@ def test_latch_on_fail_can_be_disabled_to_keep_observing() -> None:
 
     def flaky(model, state, df) -> tuple[bool, str]:
         calls.append(state.data.time)
-        return state.data.time < 0.25, "check"
+        return bool(state.data.time < 0.25), "check"
 
     mgr = RuntimeManager()
     mgr._mojo_model = MagicMock()
@@ -948,7 +964,7 @@ def test_latch_on_pass_locks_in_success_despite_later_failure() -> None:
         calls.append(state.data.time)
         # passes on the very first evaluation; would fail every time after
         # that if it were ever called again
-        return state.data.time == 0.1, "check"
+        return bool(state.data.time == 0.1), "check"
 
     mgr = RuntimeManager()
     mgr._mojo_model = MagicMock()

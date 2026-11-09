@@ -15,6 +15,7 @@ import polars as pl
 import stochas
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
+from pint.errors import PintError
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
@@ -49,6 +50,7 @@ from .. import shared
 from ..plot_config import PlotConfig as _PlotConfig
 from ..plot_config import PlotProfile as _PlotProfile
 from ..plot_config import PlotProfileTab as _PlotProfileTab
+from ..trial_log import find_log_file, parse_log_file
 
 logger = get_logger(__name__)
 
@@ -93,7 +95,7 @@ def _origin_for_positions_only(
     return f
 
 
-def _json_safe_list(series: pl.Series) -> list:
+def _json_safe_list(series: pl.Series) -> list[Any]:
     """
     Converts a polars `Series` to a plain Python list, replacing any `NaN`/`Infinity`/`-Infinity` with `None`.
 
@@ -105,7 +107,7 @@ def _json_safe_list(series: pl.Series) -> list:
     return [None if v is not None and math.isinf(v) else v for v in values]
 
 
-def _downsample(data: dict[str, list], max_points: int) -> dict[str, list]:
+def _downsample(data: dict[str, list[Any]], max_points: int) -> dict[str, list[Any]]:
     """
     Downsample all columns in `data` to at most `max_points` rows.
 
@@ -229,10 +231,10 @@ def _format_filter_error(exc: Exception) -> str:
         return "Filter validation failed - check filter settings"
 
     first = errors[0]
-    loc: tuple = first.get("loc", ())
+    loc: tuple[Any, ...] = first.get("loc", ())
     msg: str = first.get("msg", "")
     err_type: str = first.get("type", "")
-    ctx: dict = first.get("ctx", {}) or {}
+    ctx: dict[str, Any] = first.get("ctx", {}) or {}
 
     # Resolve filter type and field from location tuple
     # e.g. ('/Bodies/xpos:x', 0, 'low_pass', 'alpha') → filter='Low Pass', field='alpha'
@@ -287,7 +289,7 @@ def get_network_ip() -> str:
     try:
         # Doesn't actually have to be reachable; just triggers IP selection
         s.connect(("8.8.8.8", 1))
-        ip = s.getsockname()[0]
+        ip: str = s.getsockname()[0]
     except Exception:
         ip = "localhost"
     finally:
@@ -376,7 +378,7 @@ async def get_trial_viewer(request: Request, trial_id: str) -> HTMLResponse:
 
 
 @router.get("/api/filter-schema")
-async def get_filter_schema() -> list[dict]:
+async def get_filter_schema() -> list[dict[str, Any]]:
     """
     Returns metadata for all available filter types, derived from Pydantic models.
 
@@ -385,7 +387,7 @@ async def get_filter_schema() -> list[dict]:
     """
     from pydantic_core import PydanticUndefined
 
-    def _infer_type(prop: dict) -> str:
+    def _infer_type(prop: dict[str, Any]) -> str:
         if prop.get("ui_type") == "col":
             return "col"
         if prop.get("ui_type") == "quat_col":
@@ -437,7 +439,11 @@ async def get_filter_schema() -> list[dict]:
             elif isinstance(default, float):
                 default = round(float(default), 8)
 
-            p: dict = {"name": alias, "type": _infer_type(prop), "default": default}
+            p: dict[str, Any] = {
+                "name": alias,
+                "type": _infer_type(prop),
+                "default": default,
+            }
             if p["type"] == "select" and "enum" in prop:
                 p["options"] = prop["enum"]
             if "minimum" in prop_clean:
@@ -453,7 +459,7 @@ async def get_filter_schema() -> list[dict]:
         description = (cls.__doc__ or "").strip()
         description = description.split("\n")[0].strip()
 
-        entry: dict = {
+        entry: dict[str, Any] = {
             "type": type_val,
             "label": type_val.replace("_", " ").title(),
             "description": description,
@@ -599,9 +605,16 @@ _PROFILE_MAX_BYTES = (
 
 
 @router.post("/api/profiles/{name:path}")
-async def save_profile(name: str, request: Request, body: dict) -> dict[str, str]:
+async def save_profile(
+    name: str,
+    request: Request,
+    body: dict[str, Any],
+    overwrite: bool = Query(True),
+) -> dict[str, str]:
     """
     Save the current set of plot tabs as a named profile.
+
+    With `overwrite=false` a profile that is already stored under the name this one sanitizes to is left alone and the request fails with 409, whose detail carries the stored name, so the caller can ask before replacing it. The names are compared the way the files are, so this agrees with what a save would write.
 
     `body` is a plain dict (not `_PlotProfile` directly) so the legacy-format
     discriminator in `_parse_profile` can run before Pydantic's own request
@@ -625,10 +638,13 @@ async def save_profile(name: str, request: Request, body: dict) -> dict[str, str
             detail=f"Invalid profile payload: {exc}",
         ) from exc
     path = _resolve_profile_path(name)
+    d = _get_profiles_dir()
+    stored_name = path.relative_to(d).with_suffix("").as_posix()
+    if path.exists() and not overwrite:
+        raise HTTPException(status_code=409, detail={"name": stored_name})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(profile.model_dump_json(), encoding="utf-8")
-    d = _get_profiles_dir()
-    return {"name": path.relative_to(d).with_suffix("").as_posix()}
+    return {"name": stored_name}
 
 
 @router.delete("/api/profiles/{name:path}")
@@ -688,7 +704,7 @@ def _resolve_lab_path(name: str) -> Path:
     return path
 
 
-def _lab_meta(path: Path, d: Path) -> dict:
+def _lab_meta(path: Path, d: Path) -> dict[str, Any]:
     """Parse a saved lab file and return metadata for the API."""
     from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
 
@@ -719,7 +735,7 @@ def _lab_meta(path: Path, d: Path) -> dict:
 
 
 @router.get("/api/lab")
-async def list_labs() -> list[dict]:
+async def list_labs() -> list[dict[str, Any]]:
     """List all saved lab graphs with their input column requirements and output labels."""
     d = _get_lab_dir()
     return [
@@ -786,7 +802,9 @@ class _LabEntry(TypedDict):
 
 
 @lru_cache(maxsize=32)
-def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list:
+def _valid_lab_columns_cached(
+    parquet_cols: frozenset[str], lab_mtime: float
+) -> list[str]:
     """
     BFS to find all valid lab virtual column names for a given parquet column set.
 
@@ -811,9 +829,9 @@ def _valid_lab_columns_cached(parquet_cols: frozenset, lab_mtime: float) -> list
         except Exception:
             pass
 
-    available: set = set(parquet_cols)
-    valid_cols: list = []
-    processed: set = set()
+    available: set[str] = set(parquet_cols)
+    valid_cols: list[str] = []
+    processed: set[str] = set()
     changed = True
     while changed:
         changed = False
@@ -849,7 +867,7 @@ def _lab_column_metadata_cached(lab_mtime: float) -> dict[str, ColumnMetadata]:
     return result
 
 
-def _column_metadata_fields() -> list[dict]:
+def _column_metadata_fields() -> list[dict[str, Any]]:
     """
     Describes the fields `ColumnMetadata` declares, for the Lab's Signal Out node.
 
@@ -857,7 +875,7 @@ def _column_metadata_fields() -> list[dict]:
     """
     schema = ColumnMetadata.model_json_schema()
     defs = schema.get("$defs", {})
-    fields: list[dict] = []
+    fields: list[dict[str, Any]] = []
     for name, prop in schema["properties"].items():
         variants = [v for v in prop.get("anyOf", [prop]) if v.get("type") != "null"]
         variant = variants[0] if variants else {}
@@ -992,7 +1010,7 @@ async def get_trial_data(
         from collections import defaultdict as _dd
 
         by_lab: dict[str, list[tuple[str, str]]] = _dd(list)
-        lab_executors: dict = {}
+        lab_executors: dict[str, Any] = {}
 
         if lab_cols:
             from mujoco_mojo.utils.layers.dojo.lab_executor import LabExecutor
@@ -1116,7 +1134,7 @@ async def get_trial_data(
             }
 
         # parse validated filter stacks (col_name -> list[AnyFilter])
-        col_filters: dict = {}
+        col_filters: dict[str, Any] = {}
         filter_errors: list[str] = []
         if filters:
             try:
@@ -1125,7 +1143,7 @@ async def get_trial_data(
                 logger.warning(f"Could not parse filters for {trial_id}: {e}")
                 filter_errors.append(_format_filter_error(e))
 
-        data: dict = {}
+        data: dict[str, Any] = {}
 
         # ── Execute lab virtual columns (multi-pass for chained labs) ──────────
         # exec_df accumulates lab outputs alongside the raw fetched columns, so
@@ -1324,7 +1342,7 @@ def _resolve_trial_dir(trial_id: str) -> Path:
 
 
 @router.get("/{trial_id}/media")
-async def list_trial_media(trial_id: str) -> dict:
+async def list_trial_media(trial_id: str) -> dict[str, Any]:
     """Lists media files in the trial directory with their fps metadata."""
     trial_dir = _resolve_trial_dir(trial_id)
     if not trial_dir.is_dir():
@@ -1378,38 +1396,7 @@ async def get_trial_media_file(trial_id: str, filename: str) -> FileResponse:
     )
 
 
-_DEFAULT_LOG_ENTRY = {
-    "timestamp": 0,
-    "level": "Invalid Level",
-    "pathname": "",
-    "lineno": None,
-    "message": "",
-}
-
-
-def _parse_log_file(log_path: Path) -> list[dict]:
-    """
-    Parses a `mojo.log` file of newline-delimited JSON log entries.
-
-    Lines that aren't valid JSON (e.g. output from a library that doesn't use
-    our JSON formatter) are appended to the message of the preceding entry.
-    Entries missing fields are filled in with defaults.
-    """
-    entries: list[dict] = []
-    with log_path.open(encoding="utf-8", errors="replace") as f:
-        for raw_line in f:
-            line = raw_line.rstrip("\n")
-            if not line:
-                continue
-            try:
-                entries.append({**_DEFAULT_LOG_ENTRY, **json.loads(line)})
-            except json.JSONDecodeError:
-                if entries:
-                    entries[-1]["message"] += f"\n{line}"
-    return entries
-
-
-def _chart_data(dist: stochas.AnyDist) -> dict:
+def _chart_data(dist: stochas.AnyDist) -> dict[str, Any]:
     """
     Return chart data for the distribution tooltip.
 
@@ -1549,7 +1536,7 @@ def _safe_param(v: object) -> object:
     return v
 
 
-def _extract_sampled_values(named_raw: dict, name: str) -> list[float] | None:
+def _extract_sampled_values(named_raw: dict[str, Any], name: str) -> list[float] | None:
     """Pull every drawn scalar out of a NamedValue's stored_value, flattening any nesting."""
     import numpy as np
 
@@ -1566,7 +1553,43 @@ def _extract_sampled_values(named_raw: dict, name: str) -> list[float] | None:
         return None
 
 
-def _extract_sampled_labels(named_raw: dict, name: str) -> list[str] | None:
+def _stored_unit(named_raw: dict[str, Any], name: str) -> str | None:
+    """The unit a NamedValue's `stored_value` is expressed in, or `None` if none was recorded. Sampling converts a drawn value into the model's base unit and records that unit on the NamedValue, while the distribution keeps the unit it was declared in."""
+    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
+    unit = entry.get("unit") if entry else None
+    if isinstance(unit, dict):
+        unit = unit.get("name")
+    return unit if isinstance(unit, str) and unit else None
+
+
+def _in_unit(
+    values: list[float], from_unit: str | None, to_unit: str | None
+) -> list[float]:
+    """Re-expresses `values` from `from_unit` in `to_unit`. They come back as they were when either unit is unknown, when the units are the same, or when pint cannot convert between them, so an unrecognized unit leaves the number visible instead of hiding the row."""
+    if not from_unit or not to_unit or from_unit == to_unit:
+        return values
+    import numpy as np
+
+    try:
+        converted = _ureg.Quantity(np.asarray(values, dtype=float), from_unit).to(
+            to_unit
+        )
+    except (PintError, ValueError, TypeError):
+        return values
+    return [float(v) for v in np.ravel(converted.magnitude)]
+
+
+def _sampled_values_in_dist_unit(
+    named_raw: dict[str, Any], dist: stochas.AnyDist
+) -> list[float] | None:
+    """The drawn scalars for `dist`, in the unit `dist` was declared in. A distribution's parameters, nominal, and chart are all in its declared unit, so the drawn value has to be too, or the z-score and percentile compare a base-unit number against declared-unit parameters."""
+    values = _extract_sampled_values(named_raw, dist.name)
+    if values is None or dist.unit is None:
+        return values
+    return _in_unit(values, _stored_unit(named_raw, dist.name), str(dist.unit))
+
+
+def _extract_sampled_labels(named_raw: dict[str, Any], name: str) -> list[str] | None:
     """Pull every drawn label out of a NamedValue's stored_value for non-numeric distributions (e.g. categorical)."""
     entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
     if entry is None:
@@ -1575,11 +1598,13 @@ def _extract_sampled_labels(named_raw: dict, name: str) -> list[str] | None:
     if isinstance(sv, str):
         return [sv]
     if isinstance(sv, list) and sv and all(isinstance(v, str) for v in sv):
-        return sv
+        return [v for v in sv if isinstance(v, str)]
     return None
 
 
-def _extract_sampled_permutations(named_raw: dict, name: str) -> list[list] | None:
+def _extract_sampled_permutations(
+    named_raw: dict[str, Any], name: str
+) -> list[list[Any]] | None:
     """Pull every drawn permutation out of a NamedValue's stored_value, where each draw is itself a list of items."""
     entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
     if entry is None:
@@ -1591,7 +1616,7 @@ def _extract_sampled_permutations(named_raw: dict, name: str) -> list[list] | No
 
 
 @router.get("/{trial_id}/dists")
-async def get_trial_dists(trial_id: str) -> dict:
+async def get_trial_dists(trial_id: str) -> dict[str, Any]:
     """Returns per-trial distribution configs merged with sampled values and PDF/PMF data."""
     trial_dir = _resolve_trial_dir(trial_id)
     job = shared.CURRENT_JOB
@@ -1612,7 +1637,7 @@ async def get_trial_dists(trial_id: str) -> dict:
         ) from exc
 
     named_path = trial_dir / _NAMED_VALUES_FNAME
-    named_raw: dict = {}
+    named_raw: dict[str, Any] = {}
     if named_path.exists():
         try:
             named_raw = json.loads(named_path.read_text(encoding="utf-8"))
@@ -1623,7 +1648,7 @@ async def get_trial_dists(trial_id: str) -> dict:
 
     loop = asyncio.get_running_loop()
 
-    def _build_entries() -> list[dict]:
+    def _build_entries() -> list[dict[str, Any]]:
         entries = []
         for dist in dist_dict.values():
             chart = _chart_data(dist)
@@ -1633,7 +1658,7 @@ async def get_trial_dists(trial_id: str) -> dict:
             sampled_values = (
                 None
                 if is_permutation
-                else _extract_sampled_values(named_raw, dist.name)
+                else _sampled_values_in_dist_unit(named_raw, dist)
             )
             sampled = sampled_values[0] if sampled_values else None
             sampled_labels = (
@@ -1686,24 +1711,17 @@ async def get_trial_dists(trial_id: str) -> dict:
 
 
 @router.get("/{trial_id}/logs")
-async def get_trial_logs(trial_id: str) -> dict:
+async def get_trial_logs(trial_id: str) -> dict[str, Any]:
     """
     Parses and returns the per-trial log file.
 
     Looks for `mojo.log` first; if absent, falls back to the first `*.log`
     file (by name) found in the trial directory.
     """
-    trial_dir = _resolve_trial_dir(trial_id)
-    if not trial_dir.is_dir():
+    log_path = find_log_file(_resolve_trial_dir(trial_id))
+    if log_path is None:
         return {"filename": None, "entries": []}
 
-    log_path = trial_dir / "mojo.log"
-    if not log_path.is_file():
-        candidates = sorted(trial_dir.glob("*.log"))
-        if not candidates:
-            return {"filename": None, "entries": []}
-        log_path = candidates[0]
-
     loop = asyncio.get_running_loop()
-    entries = await loop.run_in_executor(None, _parse_log_file, log_path)
+    entries = await loop.run_in_executor(None, parse_log_file, log_path)
     return {"filename": log_path.name, "entries": entries}

@@ -3,22 +3,25 @@ import { themeColor } from "./lib/theme-colors";
 import Plotly from "./lib/plotly";
 import confetti from "canvas-confetti";
 import { fetchWithRetry } from "./lib/fetch-timeout";
-
-interface StatCard {
-  label: string;
-  value: string;
-  color: string;
-  subValue: string;
-  tooltip: string;
-}
-
-interface HolidayTheme {
-  name: string;
-  emojis?: string[];
-  colors?: string[];
-  isSnow?: boolean;
-  audioUrl?: string;
-}
+import { confettiPlan, confettiShots } from "./lib/confetti";
+import {
+  isNarrowTimeline,
+  timelineLayout,
+  timelineTraces,
+  type TimelineColors,
+} from "./lib/timeline";
+import {
+  celebrationKey,
+  chimeChoice,
+  completionNotification,
+  holidayTheme,
+  outcomeGradient,
+  progressTitle,
+  statCards,
+  trialNotification,
+  type HolidayTheme,
+  type StatCard,
+} from "./lib/monitor-stats";
 
 function monitor() {
   return {
@@ -85,12 +88,7 @@ function monitor() {
 
     handleDataUpdate(data: JobStatus) {
       const wasInit = this.hasInitialData;
-      const prev = { ...this.prevStatus } as {
-        n_done: number;
-        n_success: number;
-        n_failed: number;
-        n_error: number;
-      };
+      const prev = { ...this.prevStatus };
       this.prevStatus = {
         n_done: data.n_done,
         n_success: data.n_success,
@@ -105,129 +103,24 @@ function monitor() {
       if (this.status.is_complete) {
         this.handleCompletion();
       } else if (wasInit) {
-        const newDone = data.n_done - prev.n_done;
-        if (newDone > 0) {
-          const newFailed = data.n_failed - prev.n_failed;
-          const newError = data.n_error - prev.n_error;
-          const store = Alpine.store("dojo") as DojoStore;
-          if (newDone === 1) {
-            let verb = "succeeded";
-            let trialId = data.success_tns.at(-1);
-            if (newError === 1) {
-              verb = "errored";
-              trialId = data.error_tns.at(-1);
-            } else if (newFailed === 1) {
-              verb = "failed requirements";
-              trialId = data.failure_tns.at(-1);
-            }
-            store.addNotification(
-              `Trial ${trialId} ${verb}`,
-              verb === "succeeded" ? "success" : "error",
-            );
-          } else {
-            const newOk = newDone - newFailed - newError;
-            store.addNotification(
-              `${newDone} trials done - ${newOk} ok, ${newFailed} failed, ${newError} errored`,
-              newFailed + newError > 0 ? "error" : "success",
-            );
-          }
-        }
+        const note = trialNotification(prev, data);
+        if (note) (Alpine.store("dojo") as DojoStore).addNotification(note.message, note.type);
       }
     },
 
     refreshStats() {
-      const totalDone = this.status.n_done || 0;
-      const n_trial = this.status.n_trial || 1;
-      const progress = ((totalDone / n_trial) * 100).toFixed(1);
-
-      document.title = `${this.status.is_complete ? "✓" : `(${progress}%)`} Monitor | MuJoCo Mojo`;
-
-      const pctOfTotal = (n: number) => ((n / n_trial) * 100).toFixed(1);
-
-      const lastSuccess = this.status.last_success_tn ?? "None";
-      const lastFailure = this.status.last_failure_tn ?? "None";
-      const lastError = this.status.last_error_tn ?? "None";
-
-      this.stats = [
-        {
-          label: "Successes",
-          value: `${this.status.n_success} (${pctOfTotal(this.status.n_success)}%)`,
-          color: "text-success-500",
-          subValue: `Last Success: Trial ${lastSuccess}`,
-          tooltip: `Trials that completed and passed every registered requirement (or had none). Percentage is of all ${n_trial} trials.`,
-        },
-        {
-          label: "Failures",
-          value: `${this.status.n_failed} (${pctOfTotal(this.status.n_failed)}%)`,
-          color: "text-danger-500",
-          subValue: `Last Failure: Trial ${lastFailure}`,
-          tooltip:
-            "Trials that ran but failed one or more requirement checks, including early terminations triggered by a failing requirement. Not runtime errors.",
-        },
-        {
-          label: "Errors",
-          value: `${this.status.n_error} (${pctOfTotal(this.status.n_error)}%)`,
-          color: "text-warning-500",
-          subValue: `Last Error: Trial ${lastError}`,
-          tooltip:
-            "Trials that raised an unhandled runtime error while being processed. These runs broke; they were never judged against requirements.",
-        },
-        {
-          label: "Time Elapsed",
-          value: this.status.elapsed,
-          color: "text-ink-secondary",
-          subValue: `Started: ${this.status.start_time}`,
-          tooltip: "Wall-clock time since the job started.",
-        },
-        {
-          label: "Remaining",
-          value: `${this.status.n_remaining} (${pctOfTotal(this.status.n_remaining)}%)`,
-          color: "text-accent-500",
-          subValue: `${this.status.throughput} trials/min - ${n_trial} trials total`,
-          tooltip:
-            "Trials that have not finished yet. Throughput is derived from the average duration of completed trials (successes and failures; errors excluded) and the number of processors.",
-        },
-        {
-          label: this.status.is_complete ? "Finished" : "Est. Remaining",
-          value: this.status.is_complete
-            ? "00:00:00"
-            : this.status.time_remaining,
-          color: "text-ink-secondary",
-          subValue: this.status.is_complete
-            ? `Finished: ${this.status.end_time}`
-            : `ETA: ${this.status.end_time}`,
-          tooltip: this.status.is_complete
-            ? "The job has finished. Shows the local time at which the job completed."
-            : "Estimated wall-clock time until all trials finish, based on the average completed-trial duration (errors excluded). ETA is the projected local completion time.",
-        },
-      ];
+      document.title = progressTitle(this.status);
+      this.stats = statCards(this.status);
     },
 
     // builds a single left-to-right gradient across the filled bar: solid
     // color in the middle of each outcome's share, soft blends at boundaries
     progressGradient(): string {
-      const segs = [
+      return outcomeGradient([
         { color: themeColor("success"), n: this.status.n_success },
         { color: themeColor("danger"), n: this.status.n_failed },
         { color: themeColor("warning"), n: this.status.n_error },
-      ].filter((seg) => seg.n > 0);
-      if (segs.length === 0) return "transparent";
-      if (segs.length === 1) return segs[0].color;
-
-      const total = segs.reduce((sum, seg) => sum + seg.n, 0);
-      const blend = 5; // half-width of each blend zone, in % of the filled bar
-      const stops: string[] = [];
-      let acc = 0;
-      segs.forEach((seg, i) => {
-        const start = (acc / total) * 100;
-        acc += seg.n;
-        const end = (acc / total) * 100;
-        const mid = (start + end) / 2;
-        const lo = i === 0 ? 0 : Math.min(start + blend, mid);
-        const hi = i === segs.length - 1 ? 100 : Math.max(end - blend, mid);
-        stops.push(`${seg.color} ${lo.toFixed(2)}%`, `${seg.color} ${hi.toFixed(2)}%`);
-      });
-      return `linear-gradient(to right, ${stops.join(", ")})`;
+      ]);
     },
 
     renderTimeline() {
@@ -235,7 +128,6 @@ function monitor() {
       const el = document.getElementById("timeline-chart");
       if (!el || bins.length === 0) return;
 
-      const x = bins.map((b) => b.label);
       // same tokens trial-viewer.ts's renderPlot() uses, so this chart's
       // chrome matches every other Plotly chart in the app instead of
       // improvising its own: --color-ink-muted at 15% alpha (the previous
@@ -244,91 +136,21 @@ function monitor() {
       // the opposite of --color-chart-grid-major/-minor's dedicated dark
       // values, which are deliberately darker than the surface so gridlines
       // sit recessed rather than glowing.
-      const fontColor = themeColor("chart-text");
-      const gridColor = themeColor("chart-grid-major");
-
-      const traces = [
-        {
-          name: "Success",
-          x,
-          y: bins.map((b) => b.n_success),
-          type: "bar",
-          marker: { color: themeColor("success") },
-        },
-        {
-          name: "Failure",
-          x,
-          y: bins.map((b) => b.n_failed),
-          type: "bar",
-          marker: { color: themeColor("danger") },
-        },
-        {
-          name: "Error",
-          x,
-          y: bins.map((b) => b.n_error),
-          type: "bar",
-          marker: { color: themeColor("warning") },
-        },
-        {
-          name: "Running",
-          x,
-          y: bins.map((b) => b.n_running),
-          type: "bar",
-          marker: { color: themeColor("info") },
-        },
-        {
-          name: "Pending",
-          x,
-          y: bins.map((b) => b.n_pending),
-          type: "bar",
-          marker: { color: themeColor("accent-500") },
-        },
-      ];
-
+      const colors: TimelineColors = {
+        font: themeColor("chart-text"),
+        grid: themeColor("chart-grid-major"),
+        success: themeColor("success"),
+        danger: themeColor("danger"),
+        warning: themeColor("warning"),
+        info: themeColor("info"),
+        accent: themeColor("accent-500"),
+        tooltipBg: themeColor("chart-tooltip-bg"),
+        tooltipFont: themeColor("chart-tooltip-font"),
+      };
+      const traces = timelineTraces(bins, colors);
       // on narrow screens the horizontal legend doesn't fit above the plot,
       // so move it below the x-axis where it can wrap freely
-      const narrow = el.offsetWidth > 0 && el.offsetWidth < 560;
-
-      const layout = {
-        autosize: true,
-        barmode: "stack",
-        bargap: 0.15,
-        margin: { l: 45, r: 10, t: 10, b: narrow ? 110 : 55 },
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        font: { color: fontColor, family: "monospace", size: 11 },
-        xaxis: {
-          // bin labels carry microsecond precision so distinct bins never
-          // collide onto the same x position; force a real date axis (rather
-          // than letting plotly infer a categorical string axis) and control
-          // the tick format so it still reads as a plain clock time
-          type: "date",
-          tickformat: "%H:%M:%S",
-          gridcolor: gridColor,
-          tickangle: -45,
-          nticks: 8,
-          showspikes: true,
-          spikemode: "across",
-          spikelinecolor: themeColor("accent-500"),
-          spikethickness: -2,
-        },
-        yaxis: { gridcolor: gridColor, title: { text: "trials" } },
-        legend: narrow
-          ? { orientation: "h", x: 0.5, xanchor: "center", y: -0.45, yanchor: "top", font: { size: 10 } }
-          : { orientation: "h", y: 1.15, x: 0 },
-        hovermode: "x unified",
-        hoverlabel: {
-          bgcolor: themeColor("chart-tooltip-bg"),
-          bordercolor: themeColor("accent-500"),
-          font: {
-            color: themeColor("chart-tooltip-font"),
-            family: "monospace",
-            size: 12,
-          },
-          align: "left",
-        },
-        showlegend: true,
-      };
+      const layout = timelineLayout(isNarrowTimeline(el.offsetWidth), colors);
 
       // defer one frame so the x-show'd container has a real width before
       // plotly measures it, then force a resize in case it was still hidden
@@ -348,7 +170,7 @@ function monitor() {
 
       // Use localStorage so the notification only fires once per job across all page navigations.
       // The key is the job's start_time - unique per job run.
-      const celebKey = `mojo_celebrated_${this.status.start_time}`;
+      const celebKey = celebrationKey(this.status.start_time);
       if (localStorage.getItem(celebKey)) {
         this.hasCelebrated = true; // sync in-memory flag so future calls within this session are fast
         return;
@@ -357,10 +179,8 @@ function monitor() {
       this.hasCelebrated = true;
 
       const store = Alpine.store("dojo") as DojoStore;
-      store.addNotification(
-        `Job complete in ${this.status.elapsed} - ${this.status.n_success} succeeded, ${this.status.n_failed} failed, ${this.status.n_error} errored`,
-        this.status.n_failed + this.status.n_error > 0 ? "error" : "success",
-      );
+      const done = completionNotification(this.status);
+      store.addNotification(done.message, done.type);
       const theme = this.getHolidayTheme();
       const chime = document.getElementById("chime") as HTMLAudioElement | null;
       // dojo.chime (settings.py) - a global, server-side enable/disable
@@ -370,13 +190,16 @@ function monitor() {
       // not "keep seasonal sounds but drop the default one."
       const chimeEnabled = chime?.dataset.chimeEnabled !== "false";
 
-      if (chimeEnabled && !(Alpine.store("dojo") as DojoStore).isMuted) {
-        if (theme.audioUrl) {
-          const holidaySound = new Audio(theme.audioUrl);
-          holidaySound.play().catch(() => chime?.play().catch(() => {}));
-        } else {
-          chime?.play().catch(() => {});
-        }
+      const sound = chimeChoice(
+        chimeEnabled,
+        (Alpine.store("dojo") as DojoStore).isMuted,
+        theme.audioUrl,
+      );
+      if (sound === "holiday") {
+        const holidaySound = new Audio(theme.audioUrl);
+        holidaySound.play().catch(() => chime?.play().catch(() => {}));
+      } else if (sound === "default") {
+        chime?.play().catch(() => {});
       }
 
       setTimeout(() => this.fireConfetti(theme), 300);
@@ -384,67 +207,19 @@ function monitor() {
     },
 
     getHolidayTheme(): HolidayTheme {
-      const now = new Date();
-      const m = now.getMonth();
-      const d = now.getDate();
-
-      if ((m === 11 && d === 31) || (m === 0 && d <= 2)) {
-        return {
-          name: "New Year",
-          emojis: ["🎆", "✨", "🥂"],
-          colors: ["#ffcc00", "#ffffff"],
-        };
-      }
-      if (m === 2 && d === 14) {
-        return { name: "Pi Day", emojis: ["π", "🥧"], colors: ["#ff9900"] };
-      }
-      if (m === 2 && d === 17) {
-        return {
-          name: "St. Patrick's Day",
-          emojis: ["🍀", "🌈"],
-          colors: ["#22c55e", "#166534"],
-        };
-      }
-      if (m === 4 && d === 4) {
-        return {
-          name: "May the 4th",
-          emojis: ["⚔️", "🌌", "✨"],
-          colors: ["#FFE81F", "#2dd4bf"],
-        };
-      }
-      if ((m === 9 && d >= 25) || (m === 10 && d === 1)) {
-        return {
-          name: "Halloween",
-          emojis: ["🎃", "👻", "🦇"],
-          colors: ["#ff6600", "#9437ff"],
-        };
-      }
-      if (m === 11 || (m === 0 && d <= 15)) {
-        return {
-          name: "Winter Snow",
-          emojis: ["❄️", "⛄", "🌨️"],
-          isSnow: true,
-        };
-      }
-      return {
-        name: "Standard Mojo",
-        colors: ["#06b6d4", "#3b82f6", "#22c55e"],
-      };
+      return holidayTheme(new Date());
     },
 
     fireConfetti(theme: HolidayTheme = { name: "Standard Mojo" }) {
-      const themeName = theme.name ?? "Standard Mojo";
-      const isSpecial = !!theme.emojis;
-      const isSnow = theme.isSnow ?? false;
+      const plan = confettiPlan(theme);
 
       console.log(
-        `%c 🎊 Mojo Celebration: ${themeName} `,
+        `%c 🎊 Mojo Celebration: ${plan.themeName} `,
         "background: #06b6d4; color: #fff; font-weight: bold; padding: 2px 4px; border-radius: 4px;",
       );
 
-      const duration = 3000;
-      const animationEnd = Date.now() + duration;
-      const colors = theme.colors ?? ["#06b6d4", "#3b82f6", "#22c55e"];
+      const animationEnd = Date.now() + plan.duration;
+      const colors = plan.colors;
 
       let shapes: confetti.Shape[] = ["circle", "square"];
       if (theme.emojis) {
@@ -457,43 +232,21 @@ function monitor() {
         zIndex: 1000,
         shapes,
         colors,
-        ticks: isSpecial ? 200 : 100,
-        scalar: isSpecial ? 5 : 1,
-        gravity: isSnow ? 0.4 : isSpecial ? 0.4 : 1.2,
+        ticks: plan.ticks,
+        scalar: plan.scalar,
+        gravity: plan.gravity,
       };
 
-      const interval = setInterval(
-        () => {
-          const timeLeft = animationEnd - Date.now();
-          if (timeLeft <= 0) {
-            clearInterval(interval);
-            return;
-          }
-
-          if (isSnow) {
-            confetti({
-              ...defaults,
-              particleCount: 1,
-              startVelocity: 0,
-              drift: (Math.random() - 0.5) * 1.5,
-              origin: { x: Math.random(), y: -0.2 },
-            });
-          } else {
-            const countMultiplier = isSpecial ? 40 : 150;
-            const particleCount = countMultiplier * (timeLeft / duration);
-            for (let i = 0; i < 3; i++) {
-              confetti({
-                ...defaults,
-                particleCount: Math.ceil(particleCount / 3),
-                spread: isSpecial ? 90 : 360,
-                startVelocity: isSpecial ? 15 : 45,
-                origin: { x: Math.random(), y: Math.random() - 0.2 },
-              });
-            }
-          }
-        },
-        isSpecial ? 400 : 250,
-      );
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+        if (timeLeft <= 0) {
+          clearInterval(interval);
+          return;
+        }
+        for (const shot of confettiShots(plan, timeLeft, Math.random)) {
+          void confetti({ ...defaults, ...shot });
+        }
+      }, plan.intervalMs);
     },
   };
 }

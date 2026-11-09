@@ -1,6 +1,7 @@
 from pathlib import Path
 from xml.etree.ElementTree import Element
 
+import mujoco
 import numpy as np
 import pytest
 from PIL import Image
@@ -10,11 +11,18 @@ from mujoco_mojo.mjcf import (
     Asset,
     Body,
     Compiler,
+    Fixed,
+    Flag,
+    FlexComp,
     FreeJoint,
     GeomSphere,
     Joint,
+    Key,
+    Material,
     Mujoco,
+    Option,
     PoseQuat,
+    Spatial,
     Statistic,
     Texture,
     WorldBody,
@@ -22,16 +30,25 @@ from mujoco_mojo.mjcf import (
 from mujoco_mojo.mjcf.dependency_path import DepPath
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.general import ActuatorGeneral
 from mujoco_mojo.mjcf.mujoco_attr.actuator_attr.pid import ActuatorPid
+from mujoco_mojo.mjcf.mujoco_attr.body_attr.flexcomp_attr.elasticity import (
+    FlexCompElasticity,
+)
+from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex import Flex
+from mujoco_mojo.mjcf.mujoco_attr.deformable_attr.flex_attr.elasticity import (
+    FlexElasticity,
+)
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import (
     ActuatorName,
     Angle,
     BodyName,
     DynType,
+    EnableDisable,
     EulerSeq,
     Fuse,
     JointName,
     JointType,
+    MaterialName,
     Passthrough,
     TextureEmbed,
     TextureName,
@@ -244,3 +261,166 @@ def test_the_deprecated_meaninertia_is_still_written_and_compiles() -> None:
 
     assert _xml(statistic).attrib["meaninertia"] == "2.0"
     Mujoco(statistics=[statistic], worldbody=WorldBody()).to_mj_model()
+
+
+# attributes checked through the XML mojo writes, and where it matters through the model MuJoCo builds from it
+
+PLASTIC_THRESHOLDS = np.array((0.01, 0.0))
+"""Stretching and bending yield strains, where only stretching is plastic."""
+
+SKIN = MaterialName("skin")
+BONE = MaterialName("bone")
+
+
+@pytest.mark.parametrize(
+    ("element", "attribute"),
+    [
+        pytest.param(Flag(), "speculative", id="speculative"),
+        pytest.param(GeomSphere(size=0.1), "castshadow", id="geom-castshadow"),
+        pytest.param(Joint(), "springyield", id="joint-springyield"),
+        pytest.param(Spatial(), "springyield", id="spatial-springyield"),
+        pytest.param(Fixed(), "springyield", id="fixed-springyield"),
+        pytest.param(FlexElasticity(), "shear", id="flex-shear"),
+        pytest.param(FlexElasticity(), "yield", id="flex-yield"),
+        pytest.param(FlexCompElasticity(), "shear", id="flexcomp-shear"),
+        pytest.param(FlexCompElasticity(), "yield", id="flexcomp-yield"),
+        pytest.param(Key(), "plastic", id="key-plastic"),
+    ],
+)
+def test_the_new_attributes_are_omitted_at_their_defaults(
+    element: XMLModel, attribute: str
+) -> None:
+    assert attribute not in _xml(element).attrib
+
+
+@pytest.mark.parametrize(
+    ("element", "expected"),
+    [
+        pytest.param(
+            Flag(speculative=EnableDisable.ENABLE),
+            {"speculative": "enable"},
+            id="speculative",
+        ),
+        pytest.param(
+            GeomSphere(size=0.1, castshadow=False),
+            {"castshadow": "false"},
+            id="geom-castshadow",
+        ),
+        pytest.param(Joint(springyield=0.5), {"springyield": "0.5"}, id="joint"),
+        pytest.param(Spatial(springyield=0.5), {"springyield": "0.5"}, id="spatial"),
+        pytest.param(Fixed(springyield=0.5), {"springyield": "0.5"}, id="fixed"),
+        pytest.param(
+            FlexElasticity(shear=1e4, yield_=PLASTIC_THRESHOLDS),
+            {"shear": "10000.0", "yield": "0.01 0.0"},
+            id="flex-elasticity",
+        ),
+        pytest.param(
+            FlexCompElasticity(shear=1e4, yield_=PLASTIC_THRESHOLDS),
+            {"shear": "10000.0", "yield": "0.01 0.0"},
+            id="flexcomp-elasticity",
+        ),
+        pytest.param(
+            Key(plastic=np.array((0.0, 1.5))), {"plastic": "0.0 1.5"}, id="key-plastic"
+        ),
+    ],
+)
+def test_the_new_attributes_are_written_with_mujocos_names(
+    element: XMLModel, expected: dict[str, str]
+) -> None:
+    attributes = _xml(element).attrib
+
+    assert {name: attributes[name] for name in expected} == expected
+
+
+def test_the_speculative_flag_is_applied_to_the_model() -> None:
+    plain = Mujoco(worldbody=WorldBody()).to_mj_model()
+    flag = Flag(speculative=EnableDisable.ENABLE)
+    speculative = Mujoco(
+        options=[Option(flag=flag)], worldbody=WorldBody()
+    ).to_mj_model()
+
+    bit = int(mujoco.mjtEnableBit.mjENBL_SPECULATIVE)
+    assert not plain.opt.enableflags & bit
+    assert speculative.opt.enableflags & bit
+
+
+def test_a_geom_can_opt_out_of_casting_shadows() -> None:
+    body = Body(name=BodyName("b"))
+    body.geoms.append(GeomSphere(size=0.1))
+    body.geoms.append(GeomSphere(size=0.1, castshadow=False))
+    worldbody = WorldBody()
+    worldbody.bodies.append(body)
+
+    model = Mujoco(worldbody=worldbody).to_mj_model()
+
+    assert model.geom_castshadow.tolist() == [True, False]
+
+
+def test_the_flexcomp_elasticity_defaults_follow_the_flex() -> None:
+    flex, flexcomp = FlexElasticity(), FlexCompElasticity()
+
+    assert flexcomp.shear == flex.shear == 0
+    assert np.array_equal(flexcomp.yield_, flex.yield_)
+
+
+@pytest.mark.parametrize(
+    ("material", "written"),
+    [
+        pytest.param(SKIN, "skin", id="one-for-all"),
+        pytest.param([SKIN, BONE], "skin bone", id="one-per-element"),
+    ],
+)
+def test_a_flex_writes_one_material_or_one_per_element(
+    material: MaterialName | list[MaterialName], written: str
+) -> None:
+    flex = Flex(body="a b", element=np.array((0, 1)), material=material)
+
+    assert _xml(flex).attrib["material"] == written
+
+
+def test_a_flexcomp_writes_one_material_per_element() -> None:
+    flexcomp = FlexComp(
+        name="rod",
+        dim=1,
+        count=(3, 1, 1),
+        spacing=np.array((0.1, 0.1, 0.1)),
+        mass=1,
+        material=[SKIN, BONE],
+    )
+
+    assert _xml(flexcomp).attrib["material"] == "skin bone"
+
+
+def _material_rod(material: MaterialName | list[MaterialName]) -> Mujoco:
+    """A rod of four elements, elastic so that MuJoCo has nothing to warn about, with `skin` and `bone` to choose from."""
+    flexcomp = FlexComp(
+        name="rod",
+        dim=1,
+        count=(5, 1, 1),
+        spacing=np.array((0.1, 0.1, 0.1)),
+        mass=1,
+        material=material,
+        elasticities=[FlexCompElasticity(young=1e5)],
+    )
+    worldbody = WorldBody()
+    worldbody.flexcomps.append(flexcomp)
+    materials = [Material(name=SKIN), Material(name=BONE)]
+    return Mujoco(assets=[Asset(materials=materials)], worldbody=worldbody)
+
+
+def test_one_flex_material_is_used_for_every_element() -> None:
+    model = _material_rod(SKIN).to_mj_model()
+
+    assert model.nflexelem == 4
+    assert model.flex_matid.tolist() == [0, 0, 0, 0]
+
+
+def test_a_flex_can_have_a_material_per_element() -> None:
+    model = _material_rod([SKIN, BONE, SKIN, BONE]).to_mj_model()
+
+    assert model.flex_matid.tolist() == [0, 1, 0, 1]
+
+
+def test_the_wrong_number_of_flex_materials_is_left_for_mujoco_to_report() -> None:
+    with pytest.raises(ValueError, match="material size"):
+        _material_rod([SKIN, BONE]).to_mj_model()

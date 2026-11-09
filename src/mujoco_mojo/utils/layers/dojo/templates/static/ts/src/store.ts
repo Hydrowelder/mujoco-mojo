@@ -7,10 +7,42 @@ import {
   isHexColor,
   collapseColorAlias,
   createSettingsPanelState,
+  settingsDropdown,
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
+import {
+  isPlotlyPrefix,
+  markAllRead,
+  newNotification,
+  notifierMessage,
+  parseNotifications,
+  plotlyLogMessage,
+  plotlyLogType,
+  prependNotification,
+  shouldForwardLog,
+} from "./lib/notifications";
+import {
+  cancelResult,
+  clearNewFlags,
+  confirmResult,
+  connectionChange,
+  errorText,
+  initialFullscreen,
+  jobOutcomes,
+  markChangelogSeen,
+  needsMarkSeen,
+  newRunDetected,
+  nextPhraseIndex,
+  pageReadyDelay,
+  parseSyncEvent,
+  randomPhraseIndex,
+  secondsSince,
+  shouldAutoOpenChangelog,
+  shouldStartSync,
+} from "./lib/store-logic";
 import type {
   ChangelogResponse,
+  ColumnManifest,
   DojoStore,
   JobStatus,
   NotificationEntry,
@@ -25,6 +57,7 @@ import type {
 // Monitor, Mosaic). Importing it here too - main.js loads on every page -
 // fixes that; ES modules are idempotent, so trial-viewer.ts keeping its own
 // import as well is harmless, not a double-registration.
+import type { VersusState } from "./lib/plot-profile";
 import "./lib/color-picker";
 
 // the npm/module build doesn't auto-start itself the way the old vendored
@@ -43,6 +76,7 @@ window.notifTimeAgo = notifTimeAgo;
 // Tailwind's default palette to a lab() string in modern browsers -- a
 // format iro.js can't parse.
 window.themeColor = themeColor;
+window.settingsDropdown = settingsDropdown;
 
 // _settings_panel.html's color-picker wiring isn't bundled TS either (it's
 // built per-field at runtime from the schema, unlike _macros.html's
@@ -71,11 +105,13 @@ document.addEventListener("alpine:init", () => {
     // has never actually touched fullscreen in this browser - once they
     // have (mojo_fullscreen exists in localStorage either way), that choice
     // always wins over the server default, same as today.
-    isFullscreen:
-      localStorage.getItem("mojo_fullscreen") === null
-        ? !!window.__mojoDefaultToFullscreen
-        : localStorage.getItem("mojo_fullscreen") === "true",
+    isFullscreen: initialFullscreen(
+      localStorage.getItem("mojo_fullscreen"),
+      !!window.__mojoDefaultToFullscreen,
+    ),
     overlayCount: 0,
+    columnManifest: null as ColumnManifest | null,
+    versus: null as VersusState | null,
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem("mojo_muted") !== "false",
@@ -86,7 +122,7 @@ document.addEventListener("alpine:init", () => {
     globalToast: {
       show: false,
       message: "",
-      type: "info" as "success" | "error" | "info",
+      type: "info",
     },
     isSyncing: false,
     syncProgress: 0,
@@ -144,28 +180,26 @@ document.addEventListener("alpine:init", () => {
 
     init() {
       // Restore notification history persisted from a previous page/tab
+      let rawNotifications: string | null = null;
       try {
-        const raw = localStorage.getItem("mojo_notif");
-        if (raw) {
-          const saved = JSON.parse(raw) as {
-            n: NotificationEntry[];
-            u: number;
-          };
-          this.notifications = saved.n ?? [];
-          this.unreadCount = saved.u ?? 0;
-        }
+        rawNotifications = localStorage.getItem("mojo_notif");
       } catch {
-        /* ignore corrupt data */
+        /* storage unavailable */
+      }
+      const saved = parseNotifications(rawNotifications);
+      if (saved) {
+        this.notifications = saved.notifications;
+        this.unreadCount = saved.unreadCount;
       }
 
-      this.checkServerHealth();
-      setInterval(() => this.checkServerHealth(), 5000);
+      void this.checkServerHealth();
+      setInterval(() => void this.checkServerHealth(), 5000);
       this.startGlobalSync();
       document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) this.checkServerHealth();
+        if (!document.hidden) void this.checkServerHealth();
       });
       this._installPlotlyLogCapture();
-      this.fetchChangelog();
+      void this.fetchChangelog();
     },
 
     async fetchChangelog() {
@@ -190,16 +224,11 @@ document.addEventListener("alpine:init", () => {
         // closeChangelog() marks a version seen - so this alone correctly
         // stays quiet on a later page load in the same session AND across
         // a full Dojo restart, with no separate client-side bookkeeping.
-        else if (
-          data.show_whats_changed &&
-          !this.settingsOpen &&
-          data.entries.some((e) => e.is_new)
-        ) {
+        else if (shouldAutoOpenChangelog(data, this.settingsOpen)) {
           this.openChangelog();
         }
       } catch (err) {
-        this.changelogError =
-          err instanceof Error ? err.message : "Failed to load changelog";
+        this.changelogError = errorText(err, "Failed to load changelog");
       } finally {
         this.changelogLoading = false;
       }
@@ -223,20 +252,11 @@ document.addEventListener("alpine:init", () => {
       // only acknowledge when there was actually something new - no point
       // writing (and no point clearing the "New" tags) on a plain re-read
       // of an already-seen changelog
-      if (this.changelogLatestVersion && this.changelogEntries.some((e) => e.is_new)) {
-        try {
-          await fetch("/changelog/mark-seen", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ version: this.changelogLatestVersion }),
-          });
-          this.changelogEntries = this.changelogEntries.map((e) => ({
-            ...e,
-            is_new: false,
-          }));
-        } catch {
-          // best-effort - a failed mark-seen just means the "New" tags and
-          // auto-open may reappear on a later refresh
+      if (needsMarkSeen(this.changelogLatestVersion, this.changelogEntries)) {
+        // best-effort - a failed mark-seen just means the "New" tags and
+        // auto-open may reappear on a later refresh
+        if (await markChangelogSeen(this.changelogLatestVersion!)) {
+          this.changelogEntries = clearNewFlags(this.changelogEntries);
         }
       }
     },
@@ -253,10 +273,7 @@ document.addEventListener("alpine:init", () => {
         if (!resp.ok) throw new Error(`Request failed (${resp.status})`);
       } catch (err) {
         this.changelogShowWhatsChanged = previous;
-        this.toast(
-          err instanceof Error ? err.message : "Failed to update setting",
-          "error",
-        );
+        this.toast(errorText(err, "Failed to update setting"), "error");
       }
     },
 
@@ -271,12 +288,10 @@ document.addEventListener("alpine:init", () => {
 
       const recent = new Map<string, number>();
       const forward = (prefix: string, args: unknown[]) => {
-        const msg = args.map(String).join(" ").slice(0, 160);
-        const now = Date.now();
+        const msg = plotlyLogMessage(args);
         // rate-limit: plotly repeats the same warning on every re-render
-        if (now - (recent.get(msg) ?? 0) < 10_000) return;
-        recent.set(msg, now);
-        const type = prefix === "ERROR:" ? "error" : "info";
+        if (!shouldForwardLog(recent, msg, Date.now())) return;
+        const type = plotlyLogType(prefix);
         this.toast(`${msg}`, type);
         this.addNotification(`${msg}`, type);
       };
@@ -287,8 +302,8 @@ document.addEventListener("alpine:init", () => {
         const orig = console[level].bind(console);
         console[level] = (...args: unknown[]) => {
           orig(...args);
-          const first = String(args[0] ?? "");
-          if (first === "WARN:" || first === "ERROR:") {
+          const first = typeof args[0] === "string" ? args[0] : "";
+          if (isPlotlyPrefix(first)) {
             forward(first, args.slice(1));
           }
         };
@@ -307,7 +322,7 @@ document.addEventListener("alpine:init", () => {
               ? [node]
               : Array.from(node.querySelectorAll(".notifier-note"));
             for (const note of notes) {
-              const msg = (note.textContent ?? "").replace(/^\s*×/, "").trim();
+              const msg = notifierMessage(note.textContent);
               if (msg) this.toast(`${msg}`, "info");
             }
           }
@@ -331,7 +346,7 @@ document.addEventListener("alpine:init", () => {
         try {
           await navigator.clipboard.writeText(text);
           this.toast(successMsg, "success");
-          return;
+          return true;
         } catch (err) {
           console.warn("Modern clipboard failed, falling back...", err);
         }
@@ -342,31 +357,27 @@ document.addEventListener("alpine:init", () => {
       document.body.appendChild(textArea);
       textArea.focus();
       textArea.select();
+      let copied = false;
       try {
         if (document.execCommand("copy")) {
           this.toast(successMsg, "success");
+          copied = true;
         } else throw new Error("execCommand returned false");
       } catch {
         this.toast("Failed to copy to clipboard", "error");
       }
       document.body.removeChild(textArea);
+      return copied;
     },
 
     _setConnected(connected: boolean) {
       this.isConnected = connected;
-      if (this._wasConnected === null) {
-        // Initial connection - set baseline without notifying.
-        if (connected) this._wasConnected = true;
-        return;
+      const change = connectionChange(this._wasConnected, connected);
+      this._wasConnected = change.wasConnected;
+      if (change.notice) {
+        this.toast(change.notice.message, change.notice.type);
+        this.addNotification(change.notice.message, change.notice.type);
       }
-      if (connected === this._wasConnected) return;
-      this._wasConnected = connected;
-      const message = connected
-        ? "Server connection restored"
-        : "Server connection lost";
-      const type = connected ? "success" : "error";
-      this.toast(message, type);
-      this.addNotification(message, type);
     },
 
     async checkServerHealth() {
@@ -388,7 +399,7 @@ document.addEventListener("alpine:init", () => {
         if (response.ok) {
           const status = (await response.json()) as { is_complete?: boolean };
           // a new run started while we were idle after a completed job
-          if (this.isComplete && status.is_complete === false) {
+          if (newRunDetected(this.isComplete, status.is_complete)) {
             this.isComplete = false;
             this.toast("New run detected", "info");
             this.addNotification("New run detected", "info");
@@ -403,9 +414,7 @@ document.addEventListener("alpine:init", () => {
 
     setPageReady(val: boolean, force = false) {
       if (val) {
-        const minDuration = force ? 0 : 2000;
-        const elapsed = Date.now() - this.loadStartTime;
-        const remaining = Math.max(0, minDuration - elapsed);
+        const remaining = pageReadyDelay(force, this.loadStartTime, Date.now());
         setTimeout(() => {
           this.isPageReady = true;
           this.stopLoadingMessages();
@@ -419,18 +428,19 @@ document.addEventListener("alpine:init", () => {
 
     startLoadingMessages() {
       if (this.loadingInterval) return;
-      this.loadingIndex = Math.floor(
-        Math.random() * this.loadingPhrases.length,
+      this.loadingIndex = randomPhraseIndex(
+        this.loadingPhrases.length,
+        Math.random,
       );
       this.showPhrase = true;
       this.loadingInterval = setInterval(() => {
         this.showPhrase = false;
         setTimeout(() => {
-          let nextIndex: number;
-          do {
-            nextIndex = Math.floor(Math.random() * this.loadingPhrases.length);
-          } while (nextIndex === this.loadingIndex);
-          this.loadingIndex = nextIndex;
+          this.loadingIndex = nextPhraseIndex(
+            this.loadingIndex,
+            this.loadingPhrases.length,
+            Math.random,
+          );
           this.showPhrase = true;
         }, 300);
       }, 4000);
@@ -464,29 +474,25 @@ document.addEventListener("alpine:init", () => {
     },
 
     startGlobalSync() {
-      if (this.source || !this.isAutoRefresh || this.isComplete) return;
+      if (!shouldStartSync(!!this.source, this.isAutoRefresh, this.isComplete))
+        return;
       this.source = new EventSource("/monitor/api/status/stream");
 
       this.source.onopen = () => {
         this._setConnected(true);
       };
 
-      this.source.onmessage = (event: MessageEvent) => {
+      this.source.onmessage = (event: MessageEvent<string>) => {
         if (!event.data || !event.data.trim()) return;
         try {
-          const data = JSON.parse(event.data as string) as {
-            type: string;
-            value?: number;
-            status?: JobStatus;
-          };
-          if (data.type === "start") this.startSync();
-          if (data.type === "progress" && data.value !== undefined)
-            this.setSyncProgress(data.value);
-          if (data.type === "final") {
-            this.endSync(Date.now(), data.status?.is_complete ?? false);
-            this.applyJobOutcomes(data.status);
+          const ev = parseSyncEvent(event.data);
+          if (ev.kind === "start") this.startSync();
+          else if (ev.kind === "progress") this.setSyncProgress(ev.value);
+          else if (ev.kind === "final") {
+            this.endSync(Date.now(), ev.isComplete);
+            this.applyJobOutcomes(ev.status);
             window.dispatchEvent(
-              new CustomEvent("mojo-data-updated", { detail: data.status }),
+              new CustomEvent("mojo-data-updated", { detail: ev.status }),
             );
           }
         } catch (err) {
@@ -501,7 +507,7 @@ document.addEventListener("alpine:init", () => {
         console.error("[Mojo Sync] Connection lost. Attempting recovery...");
         this.isSyncing = false;
         this.stopGlobalSync();
-        this.checkServerHealth();
+        void this.checkServerHealth();
         setTimeout(() => this.startGlobalSync(), 5000);
       };
     },
@@ -551,8 +557,9 @@ document.addEventListener("alpine:init", () => {
 
     applyJobOutcomes(data: JobStatus | undefined) {
       if (!data) return;
-      this.failureTrialNums = (data.failure_tns ?? []).map(Number);
-      this.errorTrialNums = (data.error_tns ?? []).map(Number);
+      const outcomes = jobOutcomes(data);
+      this.failureTrialNums = outcomes.failure;
+      this.errorTrialNums = outcomes.error;
     },
 
     // ── Notification history ───────────────────────────────────────────────
@@ -576,26 +583,24 @@ document.addEventListener("alpine:init", () => {
     },
 
     addNotification(message: string, type: string) {
-      (this.notifications as NotificationEntry[]).unshift({
-        id: Date.now() + Math.random(),
-        message,
-        type: type as "success" | "error" | "info",
-        timestamp: Date.now(),
-        read: !!(this.notifOpen as boolean),
-      });
-      if ((this.notifications as NotificationEntry[]).length > 100) {
-        (this.notifications as NotificationEntry[]).length = 100;
-      }
-      if (!(this.notifOpen as boolean)) (this.unreadCount as number)++;
+      prependNotification(
+        this.notifications,
+        newNotification(
+          message,
+          type,
+          !!(this.notifOpen),
+          Date.now(),
+          Math.random(),
+        ),
+      );
+      if (!(this.notifOpen)) (this.unreadCount)++;
       this._saveNotifications();
     },
 
     openNotifications() {
       this.notifOpen = !this.notifOpen;
       if (this.notifOpen) {
-        (this.notifications as NotificationEntry[]).forEach((n) => {
-          n.read = true;
-        });
+        markAllRead(this.notifications);
         this.unreadCount = 0;
         this._saveNotifications();
       }
@@ -617,7 +622,7 @@ document.addEventListener("alpine:init", () => {
       message: "",
       confirmLabel: "Confirm",
       cancelLabel: "Cancel",
-      variant: "info" as "danger" | "warning" | "info",
+      variant: "info",
       showInput: false,
       inputValue: "",
       inputPlaceholder: "",
@@ -667,9 +672,7 @@ document.addEventListener("alpine:init", () => {
 
       confirm() {
         this.show = false;
-        const result: unknown = this.showInput
-          ? this.inputValue.trim() || null
-          : true;
+        const result: unknown = confirmResult(this.showInput, this.inputValue);
         this.showInput = false;
         this._resolve?.(result);
         this._resolve = null;
@@ -677,7 +680,7 @@ document.addEventListener("alpine:init", () => {
 
       cancel() {
         this.show = false;
-        const result: unknown = this.showInput ? null : false;
+        const result: unknown = cancelResult(this.showInput);
         this.showInput = false;
         this._resolve?.(result);
         this._resolve = null;
@@ -712,9 +715,7 @@ document.addEventListener("alpine:init", () => {
 
   setInterval(() => {
     if (store.lastUpdate) {
-      store.secondsSinceUpdate = Math.floor(
-        (Date.now() - store.lastUpdate) / 1000,
-      );
+      store.secondsSinceUpdate = secondsSince(store.lastUpdate, Date.now());
     }
   }, 1000);
 

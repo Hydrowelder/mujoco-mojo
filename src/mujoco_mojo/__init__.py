@@ -12,8 +12,9 @@ MuJoCo does not ship Python type stubs. Generate them once with pybind11-stubgen
     pip install pybind11-stubgen
     pybind11-stubgen mujoco -o typings/ --numpy-array-wrap-with-annotated
     pybind11-stubgen mujoco.viewer -o typings/ --numpy-array-wrap-with-annotated
+    pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated
 
-Run this from the project root. The `typings/` directory is gitignored. Then add to pyproject.toml:
+Run this from the project root. The `typings/` directory is gitignored. Then point your type checker at it by adding to pyproject.toml. For Pyright:
 
 .. code-block:: toml
     [tool.pyright]
@@ -21,10 +22,11 @@ Run this from the project root. The `typings/` directory is gitignored. Then add
     venvPath = "."
     venv = ".venv"
 
-If you encounter Pyright enum errors on recent MuJoCo builds, apply the compatibility patch that ships alongside the stubs:
+For ty, which finds a `.venv` in the project root on its own:
 
-.. code-block:: bash
-    python typings/patch_mujoco_enums.py typings/mujoco/_enums.pyi
+.. code-block:: toml
+    [tool.ty.environment]
+    extra-paths = ["typings"]
 """
 
 from mujoco_mojo.__about__ import __version__  # noqa: F401
@@ -46,7 +48,6 @@ from .mjcf import (
     ActuatorPlugin,
     ActuatorPosition,
     ActuatorVelocity,
-    AnyCompositeGeom,
     AnyEqualityConnect,
     AnyEqualityWeld,
     AnyGeom,
@@ -60,10 +61,6 @@ from .mjcf import (
     Body,
     Camera,
     Compiler,
-    Composite,
-    CompositeJoint,
-    CompositeSite,
-    CompositeSkin,
     Contact,
     Deformable,
     DepPath,
@@ -72,7 +69,6 @@ from .mjcf import (
     EqualityConnectSite,
     EqualityFlex,
     EqualityFlexStrain,
-    EqualityFlexVert,
     EqualityJoint,
     EqualityTendon,
     EqualityWeldBody,
@@ -108,16 +104,16 @@ from .mjcf import (
     Light,
     Material,
     Mesh,
-    MeshCone,
-    MeshHemisphere,
-    MeshPlate,
     MeshBox,
+    MeshCone,
     MeshCylinder,
     MeshDisc,
     MeshEllipsoid,
     MeshGrid,
-    MeshSquare,
+    MeshHemisphere,
+    MeshPlate,
     MeshSphere,
+    MeshSquare,
     MeshSupersphere,
     MeshTorus,
     MeshWedge,
@@ -283,9 +279,6 @@ from .typing import (
     CameraOutput,
     CameraProjection,
     ColorSpace,
-    CompositeInitial,
-    CompositeJointKind,
-    CompositeType,
     Cone,
     Conflict,
     ContactExcludeName,
@@ -312,6 +305,7 @@ from .typing import (
     GeomType,
     GridLayoutStr,
     HFieldName,
+    # HeadlightActive, # TODO: This will be enabled in a future update when it is relevant (11/6/26)
     Inertia,
     InertiaFromGeom,
     InertiaGroupRange,
@@ -395,7 +389,6 @@ __all__ = [
     "ActuatorVelocity",
     "Align",
     "Angle",
-    "AnyCompositeGeom",
     "AnyContinuousDist",
     "AnyDesignValue",
     "AnyDiscreteDist",
@@ -428,13 +421,6 @@ __all__ = [
     "ChiSquaredDistribution",
     "ColorSpace",
     "Compiler",
-    "Composite",
-    "CompositeInitial",
-    "CompositeJoint",
-    "CompositeJointKind",
-    "CompositeSite",
-    "CompositeSkin",
-    "CompositeType",
     "Cone",
     "Conflict",
     "Contact",
@@ -466,7 +452,6 @@ __all__ = [
     "EqualityConnectSite",
     "EqualityFlex",
     "EqualityFlexStrain",
-    "EqualityFlexVert",
     "EqualityJoint",
     "EqualityName",
     "EqualityTendon",
@@ -513,6 +498,7 @@ __all__ = [
     "HField",
     "HFieldName",
     "HasPose",
+    # "HeadlightActive", # TODO: This will be enabled in a future update when it is relevant (11/6/26)
     "HypergeometricDistribution",
     "Inertia",
     "InertiaFromGeom",

@@ -5,8 +5,11 @@ from __future__ import annotations
 from pydantic_ai import Agent, RunContext
 
 from mujoco_mojo.utils.dataframe import ColumnManifest
+from mujoco_mojo.utils.log import get_logger
 
 from .deps import SensAIDeps
+
+logger = get_logger(__name__)
 
 _SYSTEM_PROMPT = """\
 You are the column-manifest agent inside the MuJoCo Mojo Dojo dashboard.
@@ -39,16 +42,19 @@ column_manifest_agent: Agent[SensAIDeps, ColumnManifest] = Agent(
 @column_manifest_agent.tool
 async def get_available_signals(ctx: RunContext[SensAIDeps]) -> list[str]:
     """Returns the list of signal column names available in the current trial's telemetry data."""
+    logger.info("SensAI get_available_signals")
     return ctx.deps.column_manifest["all"]
 
 
 @column_manifest_agent.tool
 async def get_rotatable_signals(ctx: RunContext[SensAIDeps]) -> list[str]:
     """Returns the list of signal column names which can be rotated by get_quat_signals."""
+    logger.info("SensAI get_rotatable_signals")
     return ctx.deps.column_manifest["rotatable_vectors"]
 
 
 @column_manifest_agent.tool
 async def get_quat_signals(ctx: RunContext[SensAIDeps]) -> list[str]:
     """Returns the list of signal column names which can be used to rotate get_rotatable_signals."""
+    logger.info("SensAI get_quat_signals")
     return ctx.deps.column_manifest["available_quats"]

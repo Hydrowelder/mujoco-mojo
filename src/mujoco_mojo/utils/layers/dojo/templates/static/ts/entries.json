@@ -1,0 +1,8 @@
+{
+  "main.js": "src/store.ts",
+  "monitor.js": "src/monitor.ts",
+  "mosaic.js": "src/mosaic.ts",
+  "trial-viewer.js": "src/trial-viewer.ts",
+  "sensai.js": "src/sensai.ts",
+  "main.css": "src/styles/main.css"
+}

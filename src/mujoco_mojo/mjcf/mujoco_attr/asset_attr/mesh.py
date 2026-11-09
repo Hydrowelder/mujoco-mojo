@@ -445,7 +445,7 @@ class Mesh(MeshBase):
             height (float): Total height of the frustum.
             sections (int): Number of radial segments.
             wall_thickness (float): Thickness of the walls (makes a hollow frustum if not equal to zero).
-            engine (BooleanEngineType): Which engine to use for boolean subtraction (only used for hollow volumes, reccomended to use "manifold" but requires `manifold3d`).
+            engine (BooleanEngineType): Which engine to use for boolean subtraction (only used for hollow volumes, recommended to use "manifold" but requires `manifold3d`).
             base_at_zero (bool): Whether or not to shift the volume so it sits on z=0 instead of underground.
             **kwargs (MeshAttributes): Standard MuJoCo mesh attributes (name, inertia, etc.)
 
@@ -864,7 +864,7 @@ class _MeshCountSpacingDim(_MeshCountSpacing, ABC):
     @property
     def params(self) -> tuple[float, ...]:
         """Packs `count`/`spacing`/`dim` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
-        return (*self.count, *self.spacing, self.dim)
+        return (*self.count, *(float(v) for v in self.spacing), self.dim)
 
 
 class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
@@ -875,7 +875,7 @@ class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
     @property
     def params(self) -> tuple[float, ...]:
         """Packs `count`/`spacing` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
-        return (*self.count, *self.spacing)
+        return (*self.count, *(float(v) for v in self.spacing))
 
     @model_validator(mode="after")
     def validate_count(self) -> Self:
