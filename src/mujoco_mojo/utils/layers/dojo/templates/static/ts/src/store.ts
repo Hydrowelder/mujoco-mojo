@@ -7,6 +7,7 @@ import {
   isHexColor,
   collapseColorAlias,
   createSettingsPanelState,
+  settingsDropdown,
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
 import {
@@ -75,6 +76,7 @@ window.notifTimeAgo = notifTimeAgo;
 // Tailwind's default palette to a lab() string in modern browsers -- a
 // format iro.js can't parse.
 window.themeColor = themeColor;
+window.settingsDropdown = settingsDropdown;
 
 // _settings_panel.html's color-picker wiring isn't bundled TS either (it's
 // built per-field at runtime from the schema, unlike _macros.html's

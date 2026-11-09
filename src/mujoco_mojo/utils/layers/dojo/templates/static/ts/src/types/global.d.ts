@@ -41,6 +41,7 @@ declare global {
     mosaic(): object;
     sensai(): object;
     sensaiMsgData(role: string): object;
+    settingsDropdown(): object;
     downloadSensAIHistory(): void;
     renderMarkdown(text: string): string;
     initSensAICodeBlocks(container: HTMLElement): void;

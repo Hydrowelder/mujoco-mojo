@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   collapseColorAlias,
+  dropdownStyle,
   fieldRangeMessage,
   filterSettingsSections,
   findSettingsField,
@@ -9,6 +13,7 @@ import {
   findSettingsListField,
   isFieldOutOfRange,
   isHexColor,
+  listRowHint,
   looksLikeHttpUrl,
   nearestColorName,
   parseSettingsSchema,
@@ -457,5 +462,129 @@ describe("looksLikeHttpUrl", () => {
 
   it.each([null, undefined, 5, {}])("rejects the non-string %j", (value) => {
     expect(looksLikeHttpUrl(value)).toBe(false);
+  });
+});
+
+describe("listRowHint", () => {
+  const list = () => parseSettingsSchema(schema, values(), valueMeta)[1]!.listFields[0]!;
+
+  it("is the docstring of the row's own choice, whichever control it is for", () => {
+    const models = list();
+    const row = models.items[0]!;
+    row.fields.find((f) => f.widget === "select")!.value = "slow";
+
+    expect(listRowHint(row, models)).toBe("Careful.");
+  });
+
+  it("follows the choice when it changes", () => {
+    const models = list();
+    const row = models.items[0]!;
+    const choice = row.fields.find((f) => f.widget === "select")!;
+
+    choice.value = "fast";
+    expect(listRowHint(row, models)).toBe("Quick.");
+    choice.value = "slow";
+    expect(listRowHint(row, models)).toBe("Careful.");
+  });
+
+  it("falls back to the choice's own description when that option has no docstring", () => {
+    const models = list();
+    const row = models.items[0]!;
+    const choice = row.fields.find((f) => f.widget === "select")!;
+    choice.value = "unlisted";
+
+    expect(listRowHint(row, models)).toBe(choice.description);
+  });
+
+  it("is the list's description for a row with no choice in it", () => {
+    const models = list();
+    const row = { fields: models.items[0]!.fields.filter((f) => f.widget !== "select") };
+
+    expect(listRowHint(row, models)).toBe(models.description);
+  });
+});
+
+describe("dropdownStyle", () => {
+  const trigger = { top: 100, bottom: 124, left: 40, width: 200 };
+  const hintTop = 700;
+  const viewport = 800;
+  const px = (style: string, name: string) => Number(new RegExp(`${name}:(-?[\\d.]+)px`).exec(style)?.[1]);
+
+  it("opens below the trigger, as tall as a list gets when there is room", () => {
+    const style = dropdownStyle(trigger, hintTop, viewport);
+
+    expect(style).toContain("position:fixed");
+    expect(px(style, "top")).toBe(126);
+    expect(px(style, "left")).toBe(40);
+    expect(px(style, "width")).toBe(200);
+    expect(px(style, "max-height")).toBe(240);
+    expect(style).not.toContain("bottom:");
+  });
+
+  it("stops above the hint bar so it never covers it", () => {
+    const low = { top: 480, bottom: 504, left: 40, width: 200 };
+    const style = dropdownStyle(low, hintTop, viewport);
+
+    expect(px(style, "top") + px(style, "max-height")).toBeLessThanOrEqual(hintTop);
+    expect(px(style, "max-height")).toBeLessThan(240);
+    expect(style).not.toContain("bottom:");
+  });
+
+  it("opens above the trigger when there is too little room below it", () => {
+    const low = { top: 600, bottom: 624, left: 40, width: 200 };
+    const style = dropdownStyle(low, hintTop, viewport);
+
+    // its bottom edge sits just above the trigger, from the window's bottom edge
+    expect(px(style, "bottom")).toBe(viewport - low.top + 2);
+    expect(px(style, "max-height")).toBe(240);
+  });
+
+  it("sets top to auto when it opens above, since the dropdown's own class says top: 100%", () => {
+    // a list with `top: 100%` and a `bottom` is placed from its top, off the bottom of the screen
+    const low = { top: 600, bottom: 624, left: 40, width: 200 };
+
+    expect(dropdownStyle(low, hintTop, viewport)).toContain("top:auto;bottom:");
+  });
+
+  it("is never taller than the room above when it opens there", () => {
+    const low = { top: 150, bottom: 174, left: 40, width: 200 };
+    const style = dropdownStyle(low, 190, viewport);
+
+    expect(px(style, "max-height")).toBe(low.top - 8);
+    expect(style).toContain("bottom:");
+  });
+
+  it("stays below when neither side has room but below has more", () => {
+    const style = dropdownStyle({ top: 20, bottom: 44, left: 0, width: 100 }, 120, viewport);
+
+    expect(style).toContain("top:");
+    expect(style).not.toContain("bottom:");
+  });
+});
+
+describe("the settings panel's markup", () => {
+  const template = readFileSync(resolve(import.meta.dirname, "../../../../partials/_settings_panel.html"), "utf-8");
+
+  it("makes both kinds of select a settingsDropdown, which places its list and keeps it with its button", () => {
+    expect(template.match(/x-data="settingsDropdown\(\)"/g)).toHaveLength(2);
+    expect(template.match(/@click="toggle\(\)"/g)).toHaveLength(2);
+    expect(template.match(/@scroll\.window\.capture="open && place\(\)"/g)).toHaveLength(2);
+    expect(template.match(/@resize\.window="open && place\(\)"/g)).toHaveLength(2);
+    expect(template).not.toContain("coords");
+  });
+
+  it("marks the pane the lists scroll in, which hides a list whose button has scrolled out of it", () => {
+    expect(template).toContain("<div data-settings-pane");
+  });
+
+  it("marks the hint bar for a list to measure its room from", () => {
+    expect(template).toContain("<div data-settings-hint");
+  });
+
+  it("shows a list row's choice as the hint while any control in the row is hovered or edited", () => {
+    for (const event of ["@mouseenter", "@focusin"]) {
+      expect(template).toContain(`${event}="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}))"`);
+    }
+    expect(template).toContain('@mouseleave="$store.dojo.hideSettingsHint()"');
   });
 });
