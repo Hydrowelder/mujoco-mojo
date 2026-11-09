@@ -20,6 +20,7 @@ from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
 from mujoco_mojo.utils.log import get_logger
 
 from .deps import SensAIDeps
+from .job_report import trials_that_missed
 from .plot_config_catalog import filter_catalog, plot_config_catalog
 from .plot_config_catalog import find_signals as _find_signals
 from .plot_config_delta import (
@@ -28,6 +29,7 @@ from .plot_config_delta import (
     compact_plot_config,
     remove_plot_signals,
 )
+from .versus import VersusError, change_versus, describe_versus
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,11 @@ edit_signal(name="Bodies/box1/xvelr:y", changes={{"color": "{_EXAMPLE_COLOR}", "
 edit_plot_config(changes={{"title": "Wheel speed", "grid": "none", "rangeX": [0, 5]}})
 - find_signals: look up exact signal names from words. find_signals(query="box2 xvelr")
 - describe_filters: how to write a filter. Call it before adding or changing a filter.
+- set_versus: versus mode, which draws other trials behind this one. Pinning trials, setting a \
+range or naming a requirement turns it on. \
+set_versus(failed_requirement="touchdown_speed") shows the trials that missed that requirement \
+("any" for trials that missed any requirement, "error" for trials that crashed). \
+set_versus(trial_range=[3, 9]). set_versus(pin=[12, 15]). set_versus(enabled=false) turns it off.
 
 Rules:
 - A signal name must be exact: a column name of this trial. To plot "the same" signal for \
@@ -66,6 +73,11 @@ never the pure web color (for cyan, the palette's cyan, not #00ffff). Send anoth
 when the user gives one or no palette color is near what they asked for.
 - Send only what changes. Never send null, except null for rangeX or rangeY to make a range \
 automatic again.
+- Versus mode draws its range and its pinned trials together. To compare only some trials, such \
+as only the ones that failed a requirement, also send no_range=true. To show other trials \
+instead of the ones shown now, also send clear_pins=true. Never write out trial numbers you \
+looked up: failed_requirement finds them. When set_versus says trials were left out, tell the \
+user how many and that asking again adds the next batch.
 - If the request is a question, answer it and call no tool that changes the plot.
 - Execute immediately; never ask for confirmation. If a call is refused, read the reason, \
 fix that and call again. Never repeat a call that was refused.
@@ -242,6 +254,117 @@ async def remove_signals(ctx: RunContext[SensAIDeps], names: list[str]) -> str:
         raise _refusal(ctx, str(exc)) from exc
     ctx.deps.plot_edit_refusal = None
     return _commit(ctx, config, edited)
+
+
+@plot_config_agent.instructions
+async def current_versus(ctx: RunContext[SensAIDeps]) -> str | None:
+    """Versus mode as it is now, rebuilt for every request so it shows a change made a moment ago. Nothing when there is no trial viewer to change it."""
+    if ctx.deps.versus is None:
+        return None
+    job = ctx.deps.job_status
+    return describe_versus(
+        ctx.deps.versus, list(job.trial_nums) if job is not None else None
+    )
+
+
+@plot_config_agent.tool(retries=3)
+async def set_versus(
+    ctx: RunContext[SensAIDeps],
+    enabled: bool | None = None,
+    trial_range: list[int] | None = None,
+    no_range: bool = False,
+    pin: list[int] | None = None,
+    unpin: list[int] | None = None,
+    failed_requirement: str | None = None,
+    clear_pins: bool = False,
+) -> str:
+    """
+    Changes versus mode, which draws other trials' traces behind the open trial's. What you leave out stays as it is, and pinned trials are added to the ones pinned already.
+
+    Args:
+        ctx: The run context holding the dashboard state; it is not something you send.
+        enabled: True to show the comparison traces and false to turn versus mode off, such as true. Leave it out to keep it as it is: pinning trials or setting a range turns it on by itself.
+        trial_range: The first and last trial number to compare, such as [3, 9]. It replaces the range from before. Leave it out to keep the range.
+        no_range: True to compare only the pinned trials, with no range, such as true. Use it with pin or failed_requirement when the user wants only those trials.
+        pin: Trial numbers the user named, to add to the pinned ones, such as [12, 15]. For the trials that failed a requirement use failed_requirement and never write those numbers yourself.
+        unpin: Trial numbers to stop comparing, such as [12].
+        failed_requirement: Pins the trials that missed a requirement, found by the server. A requirement's name or part of it, such as "touchdown_speed", or "any" for the trials that missed any requirement, or "error" for the trials that crashed.
+        clear_pins: True to drop every pinned trial first, such as true, when the user wants other trials instead of the ones shown now.
+
+    Returns:
+        What versus mode is set to now, and how many trials were left out if there were too many to add in one message.
+
+    """
+    state = ctx.deps.versus
+    if state is None:
+        return "Versus mode cannot be changed now: no trial is open in the trial viewer. Tell the user to open a trial and ask again."
+    logger.info(
+        "SensAI set_versus: %s",
+        json.dumps(
+            {
+                "enabled": enabled,
+                "trial_range": trial_range,
+                "no_range": no_range,
+                "pin": pin,
+                "unpin": unpin,
+                "failed_requirement": failed_requirement,
+                "clear_pins": clear_pins,
+            },
+            default=str,
+        )[:500],
+    )
+    job = ctx.deps.job_status
+    known = list(job.trial_nums) if job is not None else None
+    pins = list(pin or [])
+    if failed_requirement:
+        if job is None:
+            return "No job is loaded, so there are no failed trials to look up. Pin the trial numbers the user names instead."
+        found = trials_that_missed(job, failed_requirement)
+        if isinstance(found, str):
+            return found
+        if not found and not (
+            enabled is not None
+            or trial_range is not None
+            or no_range
+            or pin
+            or unpin
+            or clear_pins
+        ):
+            return (
+                f"No trial missed '{failed_requirement}', so there is nothing to show."
+            )
+        pins += found
+    room = max(0, ctx.deps.max_versus_trials - ctx.deps.versus_trials_added)
+    try:
+        change = change_versus(
+            state,
+            room=room,
+            known=known,
+            enabled=enabled,
+            trial_range=trial_range,
+            no_range=no_range,
+            pin=pins,
+            unpin=unpin or [],
+            clear_pins=clear_pins,
+        )
+    except VersusError as exc:
+        logger.info("SensAI set_versus refused: %s", exc)
+        raise _refusal(ctx, str(exc)) from exc
+    ctx.deps.plot_edit_refusal = None
+    ctx.deps.versus = change.state
+    ctx.deps.versus_trials_added += change.added
+    if change.state == state:
+        text = "Nothing changed: versus mode already has those values."
+    else:
+        text = f"Done. {describe_versus(change.state, known)}"
+    if change.left_out:
+        text += (
+            f" {change.left_out} more trial{'s were' if change.left_out != 1 else ' was'} not added: "
+            f"one message adds at most {ctx.deps.max_versus_trials} comparison trials "
+            "(dojo.sensai.max_versus_trials in settings). Tell the user how many were left out "
+            "and that asking again adds the next batch."
+        )
+    return text
 
 
 @plot_config_agent.tool

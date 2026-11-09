@@ -180,13 +180,15 @@ class TestTrialNumbers:
         ],
     )
     def test_runs_become_ranges_in_order(self, nums: list[int], text: str) -> None:
-        assert job_report._numbers(nums) == text
+        assert job_report.trial_numbers(nums) == text
 
     def test_a_long_list_is_cut_and_says_how_many_more(self) -> None:
-        assert job_report._numbers(range(0, 200, 2), limit=3) == "0, 2, 4 and 97 more"
+        assert (
+            job_report.trial_numbers(range(0, 200, 2), limit=3) == "0, 2, 4 and 97 more"
+        )
 
     def test_a_dict_of_trials_gives_its_keys(self) -> None:
-        assert job_report._numbers({3: "a", 1: "b"}) == "1, 3"
+        assert job_report.trial_numbers({3: "a", 1: "b"}) == "1, 3"
 
 
 class TestWhichTrialsAreRunning:
@@ -911,6 +913,80 @@ class TestRequirements:
             assert describe_requirements(job, name) == (
                 "No requirement results yet: none were registered, or no trial has finished."
             )
+
+
+class TestTrialsThatMissed:
+    """The numbers of the trials a requirement failed, for versus mode to pin without the model retyping them."""
+
+    @pytest.fixture
+    def job(self, tmp_path: Path) -> JobStatus:
+        job = new_job(tmp_path, 6)
+        finish(job, 0, 1.0, requirements=[req("touchdown_speed", True)])
+        finish(job, 1, 1.0, Completion.FAILURE, [req("touchdown_speed", False)])
+        finish(
+            job,
+            2,
+            1.0,
+            Completion.FAILURE,
+            [req("touchdown_speed", False), req("landing_position_error", False)],
+        )
+        finish(job, 3, 1.0, Completion.ERROR)
+        return job
+
+    def test_a_requirement_gives_the_trials_that_missed_it(
+        self, job: JobStatus
+    ) -> None:
+        assert job_report.trials_that_missed(job, "touchdown_speed") == [1, 2]
+        assert job_report.trials_that_missed(job, "landing_position_error") == [2]
+
+    def test_a_part_of_one_name_is_enough(self, job: JobStatus) -> None:
+        assert job_report.trials_that_missed(job, "speed") == [1, 2]
+
+    def test_any_gives_the_trials_that_missed_a_requirement_and_error_the_ones_that_crashed(
+        self, job: JobStatus
+    ) -> None:
+        assert job_report.trials_that_missed(job, "any") == [1, 2]
+        assert job_report.trials_that_missed(job, "error") == [3]
+
+    def test_error_is_not_taken_for_the_one_requirement_with_error_in_its_name(
+        self, job: JobStatus
+    ) -> None:
+        """`landing_position_error` contains `error`, and a user asking for the trials that errored did not mean it."""
+        assert job_report.trials_that_missed(job, "error") != [2]
+
+    def test_a_requirement_with_exactly_that_name_wins_over_the_special_word(
+        self, tmp_path: Path
+    ) -> None:
+        job = new_job(tmp_path, 3)
+        finish(job, 0, 1.0, Completion.FAILURE, [req("any", False)])
+        finish(job, 1, 1.0, Completion.FAILURE, [req("other", False)])
+
+        assert job_report.trials_that_missed(job, "any") == [0]
+
+    def test_a_name_no_requirement_has_is_answered_with_the_ones_that_exist(
+        self, job: JobStatus
+    ) -> None:
+        text = job_report.trials_that_missed(job, "fuel")
+
+        assert isinstance(text, str)
+        assert "touchdown_speed" in text
+
+    def test_a_requirement_nobody_missed_gives_no_trials(self, tmp_path: Path) -> None:
+        job = new_job(tmp_path, 2)
+        finish(job, 0, 1.0, requirements=[req("touchdown_speed", True)])
+
+        assert job_report.trials_that_missed(job, "touchdown_speed") == []
+
+    def test_without_requirement_results_a_name_says_so_but_any_still_works(
+        self, tmp_path: Path
+    ) -> None:
+        job = new_job(tmp_path, 2)
+        finish(job, 0, 1.0, Completion.ERROR)
+
+        assert "No requirement results" in str(
+            job_report.trials_that_missed(job, "speed")
+        )
+        assert job_report.trials_that_missed(job, "error") == [0]
 
 
 class TestConfiguration:

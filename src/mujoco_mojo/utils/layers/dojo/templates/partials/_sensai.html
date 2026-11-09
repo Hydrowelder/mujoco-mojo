@@ -1,3 +1,30 @@
+{#
+  one row per tool call, for the list under a reply and for the live list while a request runs. `list_expr` is the Alpine
+  expression for the array of calls. A call a specialist made is indented under the hand-off that started it. each row is
+  cut to one line (the server already collapsed whitespace) and its title holds the whole call and what it returned
+#}
+{% macro tool_call_rows(list_expr) %}
+<template x-for="call in {{ list_expr }}"
+          :key="call.id">
+  <div class="flex items-start gap-2 text-xs font-mono min-w-0"
+       :class="call.agent === 'chat' ? '' : 'pl-4'"
+       :title="toolCallTooltip(call)">
+    <span class="mt-1 w-1.5 h-1.5 shrink-0 rounded-full"
+          :class="toolDotClass(call.status)"></span>
+    <div class="min-w-0 flex-1">
+      <div class="truncate">
+        <span class="text-ink-strong"
+              x-text="call.name"></span>
+        <span class="text-ink-muted"
+              x-text="call.args"></span>
+      </div>
+      <div x-show="call.result"
+           class="truncate text-ink-muted"
+           x-text="call.result"></div>
+    </div>
+  </div>
+</template>
+{% endmacro %}
 <style>
   .sensai-md p {
     margin-bottom: 0.5rem;
@@ -487,6 +514,32 @@
                   </button>
                 </div>
 
+                <!-- the tool calls made to get to this reply, closed until asked for -->
+                <template x-if="msg.role !== 'user' && msg.tool_calls?.length > 0">
+                  <div class="w-full max-w-[85%]">
+                    <button @click="toolsOpen = !toolsOpen"
+                            :aria-expanded="toolsOpen"
+                            class="flex items-center gap-1 text-xs font-mono text-ink-muted hover:text-ink-body px-1 transition-colors cursor-pointer">
+                      <svg class="w-2.5 h-2.5 transition-transform duration-200"
+                           :class="toolsOpen ? '' : '-rotate-90'"
+                           fill="none"
+                           stroke="currentColor"
+                           viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              stroke-width="2.5"
+                              d="M19 9l-7 7-7-7" />
+                      </svg>
+                      <span x-text="toolCallsTitle(msg.tool_calls)"></span>
+                    </button>
+                    <div x-show="toolsOpen"
+                         x-cloak
+                         class="mt-1 rounded-xl border border-subtle bg-surface px-3 py-2 space-y-1.5">
+                      {{ tool_call_rows('msg.tool_calls') }}
+                    </div>
+                  </div>
+                </template>
+
                 <!-- bubble: no constraints when single-line; grows/shrinks when multi-line -->
                 <div x-ref="bubble"
                      class="max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed overflow-hidden"
@@ -518,6 +571,15 @@
             <!-- what shows while a request runs, in the last exchange so its question stays pinned -->
             <template x-if="group.last">
               <div class="space-y-3">
+              <!-- the tool calls the running request has made so far, which become the closed list under its reply -->
+              <div x-show="isRunning(activeId) && toolCalls.length > 0"
+                   x-cloak
+                   class="flex flex-col gap-0.5 items-start">
+                <div class="w-full max-w-[85%] rounded-xl border border-subtle bg-surface px-3 py-2 space-y-1.5">
+                  {{ tool_call_rows('toolCalls') }}
+                </div>
+              </div>
+
               <!-- streaming bubble — shown while model is generating tokens -->
               <div x-show="streaming && isRunning(activeId)"
                    x-cloak

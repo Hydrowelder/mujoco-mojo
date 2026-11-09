@@ -16,6 +16,9 @@
     - Expanded tools for job status querying
     - Fixed bugs when using SensAI to edit plot configs
     - Now includes tabs for multiple chats
+    - Each reply lists the tool calls that produced it, live while it works and under the reply afterward
+    - Can now show other trials in versus mode, such as the ones that failed a requirement
+    - Added the `dojo.sensai.max_requests` and `dojo.sensai.max_versus_trials` settings
 - Fixed `Visual(rgba=VisualRGBA(...))` raising a `TypeError`
 
 > [!WARNING]

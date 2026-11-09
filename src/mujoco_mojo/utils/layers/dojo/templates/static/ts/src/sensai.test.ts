@@ -24,7 +24,9 @@ import {
   titleFromMessage,
   type SensAIMessage,
   type SensAITab,
+  type SensAIToolCall,
 } from "./lib/sensai";
+import type { VersusState } from "./lib/plot-profile";
 
 // the component object itself, not a copy of its logic: its methods are called
 // on a real `sensai()` with the browser's storage and a fake `fetch` behind it
@@ -48,6 +50,7 @@ type SensAI = {
   runningId: string | null;
   queue: string[];
   hasNewResponse: boolean;
+  toolCalls: SensAIToolCall[];
   messages: SensAIMessage[];
   activeTab: SensAITab | undefined;
   toggle(): void;
@@ -115,6 +118,7 @@ interface Call {
     message: string;
     message_history: Array<{ role: string; content: string }>;
     current_plot_config_json: string | null;
+    versus: VersusState | null;
   };
   signal: AbortSignal | undefined;
   reply: Reply;
@@ -126,6 +130,7 @@ let failNextRequest: boolean;
 // the dojo store the component reaches through Alpine, with a copy the tests can watch
 const store = {
   columnManifest: null,
+  versus: null as VersusState | null,
   copyText: vi.fn((_text: string, _message?: string) => Promise.resolve(true)),
 };
 
@@ -509,6 +514,204 @@ describe("a request", () => {
     await sent;
 
     expect(first(s).messages[1]).toMatchObject({ error: true, content: "No response from model." });
+  });
+});
+
+describe("the tool calls of a request", () => {
+  const start = (id: number, name: string, extra: object = {}) => ({
+    id,
+    name,
+    agent: "chat",
+    args: "{}",
+    status: "running",
+    result: null,
+    ...extra,
+  });
+
+  it("are listed while the request runs, each settled as it ends", async () => {
+    const s = await boot();
+    const sent = ask(s, "make it red");
+    await settle();
+
+    const reply = calls[0]!.reply;
+    reply.event("tool_start", start(1, "ask_plot_config_agent", { args: '{"request":"make it red"}' }));
+    reply.event("tool_start", start(2, "edit_signal", { agent: "plot_config" }));
+    await settle();
+    expect(s.toolCalls.map((c) => [c.name, c.status])).toEqual([
+      ["ask_plot_config_agent", "running"],
+      ["edit_signal", "running"],
+    ]);
+
+    reply.event("tool_end", { id: 2, status: "ok", result: "Changed the color." });
+    await settle();
+    expect(s.toolCalls.map((c) => [c.name, c.status, c.result ?? null])).toEqual([
+      ["ask_plot_config_agent", "running", null],
+      ["edit_signal", "ok", "Changed the color."],
+    ]);
+
+    reply.answer("Done.");
+    await sent;
+  });
+
+  it("are kept with the reply, closed to the list the server sent, and are gone from the running list", async () => {
+    const s = await boot();
+    const sent = ask(s, "make it red");
+    await settle();
+    const list = [
+      start(1, "ask_plot_config_agent", { status: "ok", result: "Done." }),
+      start(2, "edit_signal", { agent: "plot_config", status: "ok", result: "Changed." }),
+    ];
+
+    calls[0]!.reply.event("tool_start", start(1, "ask_plot_config_agent"));
+    calls[0]!.reply.answer("Done.", { tool_calls: list });
+    await sent;
+
+    expect(first(s).messages[1]!.tool_calls).toEqual(list);
+    expect(s.toolCalls).toEqual([]);
+  });
+
+  it("are the ones that streamed in when the reply carries no list", async () => {
+    const s = await boot();
+    const sent = ask(s, "question");
+    await settle();
+
+    calls[0]!.reply.event("tool_start", start(1, "get_job_summary", { agent: "job_status" }));
+    calls[0]!.reply.event("tool_end", { id: 1, status: "ok", result: "3 of 10" });
+    await settle();
+    calls[0]!.reply.answer("Three of ten.");
+    await sent;
+
+    expect(first(s).messages[1]!.tool_calls).toEqual([
+      { id: 1, name: "get_job_summary", agent: "job_status", args: "{}", status: "ok", result: "3 of 10" },
+    ]);
+  });
+
+  it("leave a reply that used no tools with no list at all", async () => {
+    const s = await boot();
+    const sent = ask(s, "hello");
+    await settle();
+
+    calls[0]!.reply.answer("Hi.", { tool_calls: [] });
+    await sent;
+
+    expect(first(s).messages[1]).not.toHaveProperty("tool_calls");
+  });
+
+  it("stay with an error, since what it tried is what explains it", async () => {
+    const s = await boot();
+    const sent = ask(s, "question");
+    await settle();
+    const tried = [start(1, "ask_job_status_agent", { status: "failed" })];
+
+    calls[0]!.reply.event("error", { detail: "SensAI stopped after 12 model requests", tool_calls: tried });
+    calls[0]!.reply.answer("");
+    await sent;
+
+    expect(first(s).messages[1]).toMatchObject({ error: true, tool_calls: tried });
+  });
+
+  it("do not carry over into the next request", async () => {
+    const s = await boot();
+    const one = ask(s, "first");
+    await settle();
+    calls[0]!.reply.event("tool_start", start(1, "ask_plot_config_agent"));
+    await settle();
+    calls[0]!.reply.answer("Done.", { tool_calls: [start(1, "ask_plot_config_agent", { status: "ok" })] });
+    await one;
+
+    const two = ask(s, "second");
+    await settle();
+    expect(s.toolCalls).toEqual([]);
+    calls[1]!.reply.answer("Hi.");
+    await two;
+
+    expect(first(s).messages[3]).not.toHaveProperty("tool_calls");
+  });
+});
+
+describe("versus mode and a request", () => {
+  const before: VersusState = { vsEnabled: false, vsRange: [0, 2], vsPinned: [] };
+  const after: VersusState = { vsEnabled: true, vsRange: null, vsPinned: [3, 4] };
+
+  beforeEach(() => {
+    store.versus = null;
+  });
+
+  it("is sent with the message as the trial viewer has it", async () => {
+    store.versus = before;
+    const s = await boot();
+    const sent = ask(s, "compare 3");
+    await settle();
+
+    calls[0]!.reply.answer("ok");
+    await sent;
+
+    expect(calls[0]!.body.versus).toEqual(before);
+  });
+
+  it("is sent as null away from a trial", async () => {
+    const s = await boot();
+    const sent = ask(s, "hi");
+    await settle();
+
+    calls[0]!.reply.answer("ok");
+    await sent;
+
+    expect(calls[0]!.body.versus).toBeNull();
+  });
+
+  it("is changed in the trial viewer by what the reply says, after the plot", async () => {
+    const heard: string[] = [];
+    const listen = (e: Event) => heard.push(e.type);
+    window.addEventListener("mojo-sensai-plot-config", listen);
+    window.addEventListener("mojo-sensai-versus", listen);
+    const detail: VersusState[] = [];
+    window.addEventListener("mojo-sensai-versus", (e) => detail.push((e as CustomEvent<VersusState>).detail));
+    const s = await boot();
+    const sent = ask(s, "compare 3 and 4");
+    await settle();
+
+    calls[0]!.reply.answer("Done.", { plot_config_update: { title: "x" }, versus_update: after });
+    await sent;
+    window.removeEventListener("mojo-sensai-plot-config", listen);
+    window.removeEventListener("mojo-sensai-versus", listen);
+
+    expect(heard).toEqual(["mojo-sensai-plot-config", "mojo-sensai-versus"]);
+    expect(detail).toEqual([after]);
+  });
+
+  it("is what the next request in line starts from, before the trial viewer has loaded the trials", async () => {
+    store.versus = before;
+    const s = await boot();
+    const one = ask(s, "compare 3 and 4");
+    await settle();
+    s.newTab();
+    const two = ask(s, "and what is set now?");
+    await settle();
+
+    calls[0]!.reply.answer("Done.", { versus_update: after });
+    await settle();
+    calls[1]!.reply.answer("ok");
+    await Promise.all([one, two]);
+
+    expect(calls[1]!.body.versus).toEqual(after);
+  });
+
+  it("is left alone by a reply that did not change it", async () => {
+    store.versus = before;
+    let fired = 0;
+    const count = () => fired++;
+    window.addEventListener("mojo-sensai-versus", count);
+    const s = await boot();
+    const sent = ask(s, "what is plotted");
+    await settle();
+
+    calls[0]!.reply.answer("One signal.", { versus_update: null });
+    await sent;
+    window.removeEventListener("mojo-sensai-versus", count);
+
+    expect(fired).toBe(0);
+    expect(store.versus).toEqual(before);
   });
 });
 
@@ -2357,5 +2560,38 @@ describe("opening and closing a message", () => {
     expect(template).not.toContain("max-h-[10000px]");
     expect(template).not.toContain("max-h-14");
     expect(template).not.toMatch(/open = !open/);
+  });
+});
+
+describe("the tool calls in the page", () => {
+  const template = readFileSync(resolve(import.meta.dirname, "../../../partials/_sensai.html"), "utf-8");
+
+  it("are drawn by one set of rows, for the running list and for a reply's", () => {
+    expect(template.match(/\{% macro tool_call_rows\(/g)).toHaveLength(1);
+    expect(template.match(/x-for="call in \{\{ list_expr \}\}"/g)).toHaveLength(1);
+    expect(template).toContain("{{ tool_call_rows('msg.tool_calls') }}");
+    expect(template).toContain("{{ tool_call_rows('toolCalls') }}");
+  });
+
+  it("are listed for the running request in the last exchange, so the question stays pinned while it works", () => {
+    expect(ancestorsOf(template, 'x-show="isRunning(activeId) && toolCalls.length > 0"').slice(-4)).toEqual([
+      "group in exchanges",
+      "sensai-exchange space-y-3 pt-3",
+      "group.last",
+      "space-y-3",
+    ]);
+  });
+
+  it("are in a reply only, above its text, and closed until asked for", () => {
+    const list = template.indexOf("msg.role !== 'user' && msg.tool_calls?.length > 0");
+    expect(list).toBeGreaterThan(template.indexOf('x-data="sensaiMsgData('));
+    expect(list).toBeLessThan(template.indexOf('x-ref="bubble"'));
+    expect(template).toContain('@click="toolsOpen = !toolsOpen"');
+    expect(template).toContain('x-show="toolsOpen"');
+  });
+
+  it("keep a paragraph out of the rows, since a message is measured by its first `.sensai-md` or `p`", () => {
+    const macro = template.slice(template.indexOf("{% macro tool_call_rows("), template.indexOf("{% endmacro %}"));
+    expect(macro).not.toMatch(/<p[\s>]/);
   });
 });

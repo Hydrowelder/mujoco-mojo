@@ -56,6 +56,7 @@ import type {
 // Monitor, Mosaic). Importing it here too - main.js loads on every page -
 // fixes that; ES modules are idempotent, so trial-viewer.ts keeping its own
 // import as well is harmless, not a double-registration.
+import type { VersusState } from "./lib/plot-profile";
 import "./lib/color-picker";
 
 // the npm/module build doesn't auto-start itself the way the old vendored
@@ -108,6 +109,7 @@ document.addEventListener("alpine:init", () => {
     ),
     overlayCount: 0,
     columnManifest: null as ColumnManifest | null,
+    versus: null as VersusState | null,
     loadStartTime: Date.now(),
     isComplete: false,
     isMuted: localStorage.getItem("mojo_muted") !== "false",

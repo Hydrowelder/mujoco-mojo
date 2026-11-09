@@ -7,6 +7,7 @@ import {
   ACTIVE_TAB_KEY,
   STORAGE_KEY,
   TABS_KEY,
+  applyToolEvent,
   blankTab,
   chatHistory,
   chatRequestBody,
@@ -14,6 +15,7 @@ import {
   createSseParser,
   defaultTabTitle,
   enabledFromSettings,
+  finalToolCalls,
   historyExport,
   headerTooltip,
   historyFileName,
@@ -39,8 +41,12 @@ import {
   saveSensAITabs,
   tabsExport,
   titleFromMessage,
+  toolCallTooltip,
+  toolCallsTitle,
+  toolDotClass,
   type SensAIMessage,
   type SensAITab,
+  type SensAIToolCall,
   type SseEvent,
 } from "./sensai";
 
@@ -293,6 +299,7 @@ describe("chatRequestBody", () => {
       rotatable_vectors: [],
       available_quats: [],
       current_plot_config_json: '{"title":"T"}',
+      versus: null,
     });
   });
 
@@ -955,5 +962,204 @@ describe("pinned", () => {
     stubStorage({ read: true, write: () => true });
     expect(loadPinned()).toBe(false);
     expect(() => savePinned(true)).not.toThrow();
+  });
+});
+
+const tool = (over: Partial<SensAIToolCall> = {}): SensAIToolCall => ({
+  id: 1,
+  name: "edit_signal",
+  agent: "plot_config",
+  args: '{"name":"x"}',
+  status: "ok",
+  result: "Changed.",
+  ...over,
+});
+
+describe("chatRequestBody and versus mode", () => {
+  it("sends versus mode as the trial viewer has it", () => {
+    const versus = { vsEnabled: true, vsRange: null, vsPinned: [4] };
+
+    expect(chatRequestBody("hi", [msg()], null, null, versus)).toMatchObject({ versus });
+  });
+
+  it("sends none away from a trial", () => {
+    expect(chatRequestBody("hi", [msg()], null, null)).toMatchObject({ versus: null });
+  });
+});
+
+describe("applyToolEvent", () => {
+  it("adds a call that starts, running, with the agent and arguments it came with", () => {
+    const out = applyToolEvent([], "tool_start", { id: 1, name: "add_signals", agent: "plot_config", args: '{"names":["x"]}' });
+
+    expect(out).toEqual([{ id: 1, name: "add_signals", agent: "plot_config", args: '{"names":["x"]}', status: "running" }]);
+  });
+
+  it("takes a call with no agent or arguments to be the chat agent's, with none", () => {
+    expect(applyToolEvent([], "tool_start", { id: 1, name: "ask_guide_agent" })).toEqual([
+      { id: 1, name: "ask_guide_agent", agent: "chat", args: "", status: "running" },
+    ]);
+  });
+
+  it("keeps calls in the order they started", () => {
+    const one = applyToolEvent([], "tool_start", { id: 1, name: "a" });
+    const two = applyToolEvent(one, "tool_start", { id: 2, name: "b" });
+
+    expect(two.map((c) => c.name)).toEqual(["a", "b"]);
+  });
+
+  it("settles the call with that id and leaves the others", () => {
+    const calls = [tool({ id: 1, status: "running", result: null }), tool({ id: 2, status: "running", result: null })];
+
+    const out = applyToolEvent(calls, "tool_end", { id: 2, status: "rejected", result: "no such field" });
+
+    expect(out[0]).toEqual(calls[0]);
+    expect(out[1]).toMatchObject({ id: 2, status: "rejected", result: "no such field" });
+  });
+
+  it("does not change the list it was given", () => {
+    const calls = [tool({ id: 1, status: "running", result: null })];
+
+    applyToolEvent(calls, "tool_end", { id: 1, status: "ok", result: "x" });
+
+    expect(calls[0]!.status).toBe("running");
+  });
+
+  it("ignores a start that has no id or name, or whose id is already there", () => {
+    const calls = [tool({ id: 1 })];
+
+    expect(applyToolEvent(calls, "tool_start", { name: "a" })).toBe(calls);
+    expect(applyToolEvent(calls, "tool_start", { id: 2 })).toBe(calls);
+    expect(applyToolEvent(calls, "tool_start", { id: 1, name: "again" })).toBe(calls);
+  });
+
+  it("ignores an end for a call that was never started, and any other event", () => {
+    const calls = [tool({ id: 1 })];
+
+    expect(applyToolEvent(calls, "tool_end", { id: 9, status: "ok" })).toEqual(calls);
+    expect(applyToolEvent(calls, "text_delta", { delta: "hi" })).toBe(calls);
+  });
+
+  it("takes an end with no status to have gone through", () => {
+    const out = applyToolEvent([tool({ status: "running", result: null })], "tool_end", { id: 1 });
+
+    expect(out[0]).toMatchObject({ status: "ok", result: null });
+  });
+});
+
+describe("finalToolCalls", () => {
+  it("prefers the list the server sent with the reply", () => {
+    const sent = [tool({ id: 5 })];
+
+    expect(finalToolCalls(sent, [tool({ id: 1 })])).toBe(sent);
+  });
+
+  it("takes the server's empty list as the answer, not a gap to fill", () => {
+    expect(finalToolCalls([], [tool()])).toEqual([]);
+  });
+
+  it("falls back to the streamed calls when the reply has no list", () => {
+    const streamed = [tool()];
+
+    expect(finalToolCalls(undefined, streamed)).toBe(streamed);
+  });
+});
+
+describe("toolCallsTitle", () => {
+  it("counts the calls, in the singular for one", () => {
+    expect(toolCallsTitle([tool()])).toBe("1 tool call");
+    expect(toolCallsTitle([tool(), tool({ id: 2 })])).toBe("2 tool calls");
+  });
+
+  it("says how many were rejected or failed, and only when some were", () => {
+    const calls = [tool({ id: 1 }), tool({ id: 2, status: "rejected" }), tool({ id: 3, status: "rejected" }), tool({ id: 4, status: "failed" })];
+
+    expect(toolCallsTitle(calls)).toBe("4 tool calls, 2 rejected, 1 failed");
+    expect(toolCallsTitle([tool()])).not.toMatch(/rejected|failed/);
+  });
+
+  it("handles a reply with no list", () => {
+    expect(toolCallsTitle(undefined)).toBe("0 tool calls");
+  });
+});
+
+describe("toolDotClass", () => {
+  it("gives each outcome its own color, and a running call a pulse", () => {
+    expect(toolDotClass("ok")).toBe("bg-success-500");
+    expect(toolDotClass("rejected")).toBe("bg-warning-500");
+    expect(toolDotClass("failed")).toBe("bg-danger-500");
+    expect(toolDotClass("running")).toContain("animate-pulse");
+  });
+
+  it("treats a status it does not know as running, so a call is never drawn blank", () => {
+    expect(toolDotClass("something new")).toBe(toolDotClass("running"));
+  });
+});
+
+describe("toolCallTooltip", () => {
+  it("gives the whole call and what it returned", () => {
+    expect(toolCallTooltip(tool())).toBe('edit_signal {"name":"x"}\nReturned: Changed.');
+  });
+
+  it("says a rejected call was rejected, with the reason", () => {
+    expect(toolCallTooltip(tool({ status: "rejected", result: "no such field" }))).toBe(
+      'edit_signal {"name":"x"}\nRejected: no such field',
+    );
+  });
+
+  it("is only the call while it has no result", () => {
+    expect(toolCallTooltip(tool({ status: "running", result: null }))).toBe('edit_signal {"name":"x"}');
+  });
+
+  it("has no trailing space for a call with no arguments", () => {
+    expect(toolCallTooltip(tool({ args: "", result: null }))).toBe("edit_signal");
+  });
+});
+
+describe("the tool calls in a saved history", () => {
+  const NOW = new Date("2026-03-04T05:06:07.000Z");
+
+  it("are in the export beside the reply they belong to", () => {
+    const calls = [tool()];
+
+    const out = historyExport([msg({ role: "assistant", tool_calls: calls })], NOW) as { messages: Array<Record<string, unknown>> };
+
+    expect(out.messages[0]!["tool_calls"]).toEqual(calls);
+  });
+
+  it("are left out of the export when a reply made none", () => {
+    const out = historyExport([msg({ role: "assistant", tool_calls: [] }), msg({ role: "assistant" })], NOW) as {
+      messages: Array<Record<string, unknown>>;
+    };
+
+    expect(out.messages[0]).not.toHaveProperty("tool_calls");
+    expect(out.messages[1]).not.toHaveProperty("tool_calls");
+  });
+
+  it("are not sent to the model as context, which is role and text only", () => {
+    const [m] = chatHistory([msg({ role: "assistant", tool_calls: [tool()] }), msg()]);
+
+    expect(m).toEqual({ role: "assistant", content: "hello" });
+  });
+
+  it("come back from storage with their reply", () => {
+    const tab = blankTab([]);
+    tab.messages = [msg({ role: "assistant", tool_calls: [tool()] })];
+    saveSensAITabs([tab], tab.id);
+
+    expect(loadSensAITabs().tabs[0]!.messages[0]!.tool_calls).toEqual([tool()]);
+  });
+});
+
+describe("the event stream's tool events", () => {
+  it("are read as events of their own, with their payload", () => {
+    const parser = createSseParser();
+
+    const events = parser.feed(
+      'event: tool_start\ndata: {"id":1,"name":"add_signals","agent":"plot_config","args":"{}","status":"running"}\n\n' +
+        'event: tool_end\ndata: {"id":1,"status":"ok","result":"Added."}\n\n',
+    );
+
+    expect(events.map((e) => e.type)).toEqual(["tool_start", "tool_end"]);
+    expect(events[1]!.payload).toEqual({ id: 1, status: "ok", result: "Added." });
   });
 });

@@ -727,3 +727,30 @@ def test_chime_serializes_as_plain_string_in_json_mode() -> None:
 
     path_settings = DojoSettings.model_validate({"chime_source": "./my-sound.mp3"})
     assert path_settings.model_dump(mode="json")["chime_source"] == "my-sound.mp3"
+
+
+def test_the_sensai_limits_default_to_12_requests_and_50_versus_trials() -> None:
+    from mujoco_mojo.settings import SensAISettings
+
+    assert SensAISettings().max_requests == 12
+    assert SensAISettings().max_versus_trials == 50
+
+
+@pytest.mark.parametrize(
+    ("field", "bad"),
+    [
+        ("max_requests", 0),
+        ("max_requests", 51),
+        ("max_versus_trials", 0),
+        ("max_versus_trials", 1001),
+    ],
+)
+def test_the_sensai_limits_refuse_a_value_outside_their_range(
+    field: str, bad: int
+) -> None:
+    from pydantic import ValidationError
+
+    from mujoco_mojo.settings import SensAISettings
+
+    with pytest.raises(ValidationError):
+        SensAISettings.model_validate({field: bad})

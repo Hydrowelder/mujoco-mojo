@@ -8,6 +8,7 @@ import { encodeNamePath } from "./name-path";
 import type { PlotProfile } from "./plot-profile";
 import { refFrameActive, refFrameAvailable, refFrameLabel } from "./ref-frame";
 import { newTabId } from "./tab-session";
+import { versusState } from "./vs-sync";
 import type { PlotTab } from "./plot-tabs";
 
 export function profileUrl(name: string): string {
@@ -59,9 +60,7 @@ export function buildProfilePayload(
     tabs: tabs.map((t) => ({ config: t.config })),
     activeTabIndex,
     // VS is workspace-level - saved once for the whole profile, not per tab
-    vsEnabled: vs.enabled,
-    vsRange: vs.range,
-    vsPinned: vs.pinned,
+    ...versusState(vs),
   };
 }
 

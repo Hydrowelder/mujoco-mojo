@@ -317,6 +317,13 @@ class VisualizationSettings(BaseModel):
         return data
 
 
+DEFAULT_MAX_REQUESTS = 12
+"""The default of `dojo.sensai.max_requests`."""
+
+DEFAULT_MAX_VERSUS_TRIALS = 50
+"""The default of `dojo.sensai.max_versus_trials`."""
+
+
 class SensAIModelEntry(BaseModel):
     """One entry in `SensAISettings.models` - a provider paired with that provider's own model identifier."""
 
@@ -370,6 +377,22 @@ class SensAISettings(BaseModel):
         default="http://localhost:11434/v1",
         title="Base URL",
         description="Only needed if one of the models above uses the Ollama provider. Ollama has no built-in localhost default, unlike every other provider here. Ignored otherwise.",
+    )
+
+    max_requests: int = Field(
+        default=DEFAULT_MAX_REQUESTS,
+        ge=1,
+        le=50,
+        title="Max Model Requests",
+        description="The most model requests one message may make, the chat agent's and its specialists' together. A message over it is stopped with an error. Tool calls are not counted, only requests.",
+    )
+
+    max_versus_trials: int = Field(
+        default=DEFAULT_MAX_VERSUS_TRIALS,
+        ge=1,
+        le=1000,
+        title="Max Versus Trials",
+        description="The most trials one message may add to versus mode, since each loads its data. Pins past it are left out and a later message adds the next batch.",
     )
 
 

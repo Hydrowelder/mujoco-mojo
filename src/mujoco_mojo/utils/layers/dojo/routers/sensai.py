@@ -28,11 +28,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from mujoco_mojo.settings import MujocoMojoSettings, SensAISettings
 from mujoco_mojo.utils.dataframe import ColumnManifest
-from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig
+from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig, VersusState
 from mujoco_mojo.utils.layers.dojo.sensai import (
-    MAX_MODEL_REQUESTS,
+    CHAT_AGENT,
     PlotEditFailed,
     SensAIDeps,
+    ToolTrace,
     build_fallback_model,
     chat_agent,
     usage_limits,
@@ -157,6 +158,9 @@ class ChatRequest(BaseModel):
     current_plot_config_json: str | None = None
     """JSON-serialized PlotConfig currently active in the trial viewer, or None."""
 
+    versus: VersusState | None = None
+    """Versus mode as the trial viewer has it, or None when the message did not come from a trial viewer."""
+
 
 # ---------------------------------------------------------------------------
 # undo - cheap, deterministic, client-side history pop; no LLM involved
@@ -212,12 +216,17 @@ _STOPPED_WHILE: dict[str, tuple[str, str]] = {
 }
 
 
-def _stopped_message(delegate: str | None) -> str:
-    """The error for a message that ran into the request limit, worded for the specialist that was working on it (none known: the chat agent itself)."""
+def _stopped_message(delegate: str | None, max_requests: int) -> str:
+    """The error for a message that ran into the request limit of `max_requests`, worded for the specialist that was working on it (none known: the chat agent itself)."""
     while_, advice = _STOPPED_WHILE.get(
         delegate or "", ("", " Try rephrasing your request.")
     )
-    return f"SensAI stopped after {MAX_MODEL_REQUESTS} model requests without finishing{while_}.{advice}"
+    return f"SensAI stopped after {max_requests} model requests without finishing{while_}.{advice} The limit is dojo.sensai.max_requests in settings."
+
+
+def _tool_calls(trace: ToolTrace) -> list[dict[str, Any]]:
+    """The tool calls the message made, for the `result` or `error` event, so the chat can keep them with the reply."""
+    return [call.model_dump() for call in trace.calls]
 
 
 def _changed_plot_config(
@@ -247,12 +256,15 @@ class _ToolResultCapture:
     """
     Watches every event from a `chat_agent.run_stream` call as it happens.
 
-    A delegation tool call (`ask_job_status_agent` and friends) takes a while - it's a whole nested agent run - so as soon as one starts, its label is pushed onto `queue` as a `tool_call` SSE event for the frontend to show as a "thinking" indicator; `routed_to` is recorded from the matching result event.
+    A delegation tool call (`ask_job_status_agent` and friends) takes a while - it's a whole nested agent run - so as soon as one starts, its label is pushed onto `queue` as a `tool_call` SSE event for the frontend to show as a "thinking" indicator; `routed_to` is recorded from the matching result event. Every tool call, this agent's and the specialists', is also recorded in `trace`, which is what the chat lists under the reply.
 
     """
 
-    def __init__(self, queue: asyncio.Queue[dict[str, str] | None]) -> None:
+    def __init__(
+        self, queue: asyncio.Queue[dict[str, str] | None], trace: ToolTrace
+    ) -> None:
         self._queue = queue
+        self._trace = trace
         self.routed_to: str = "general"
         # the specialist the chat agent last handed a request to, which is the one
         # at work if the message then runs out of model requests
@@ -261,7 +273,7 @@ class _ToolResultCapture:
     async def __call__(
         self, ctx: RunContext[SensAIDeps], events: AsyncIterable[AgentStreamEvent]
     ) -> None:
-        async for event in events:
+        async for event in self._trace.tap(CHAT_AGENT, events):
             if isinstance(event, FunctionToolCallEvent):
                 logger.info(
                     "SensAI %s: %s", event.part.tool_name, str(event.part.args)[:300]
@@ -315,6 +327,9 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
         job_status=shared.CURRENT_JOB,
         column_manifest=column_manifest,
         current_plot_config=current_plot_config,
+        versus=body.versus,
+        max_requests=settings.dojo.sensai.max_requests,
+        max_versus_trials=settings.dojo.sensai.max_versus_trials,
     )
 
     model = build_fallback_model()
@@ -345,7 +360,15 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
         # concurrently with the latter, rather than only being able to report
         # tool calls after the fact once the whole run finishes.
         queue: asyncio.Queue[dict[str, str] | None] = asyncio.Queue()
-        capture = _ToolResultCapture(queue)
+
+        async def emit(event: str, payload: dict[str, Any]) -> None:
+            await queue.put({"event": event, "data": json.dumps(payload)})
+
+        # every tool call of the message, the specialists' included, is recorded and
+        # sent as it starts and ends, and the whole list goes with the reply
+        trace = ToolTrace(emit=emit)
+        deps.trace = trace
+        capture = _ToolResultCapture(queue, trace)
         accumulated = ""
         answering_model: str | None = None
         stream_exc: Exception | None = None
@@ -363,7 +386,7 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                     message_history=message_history,
                     event_stream_handler=capture,
                     usage=usage,
-                    usage_limits=usage_limits(),
+                    usage_limits=usage_limits(deps.max_requests),
                 ) as streamed:
                     async for delta in streamed.stream_text(
                         delta=True, debounce_by=None
@@ -388,7 +411,7 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                 stream_exc = exc
                 logger.warning(
                     "SensAI chat stopped at the limit of %d model requests: %s",
-                    MAX_MODEL_REQUESTS,
+                    deps.max_requests,
                     exc,
                 )
             except Exception as exc:
@@ -396,6 +419,7 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                 logger.warning("SensAI chat run_stream failed", exc_info=True)
             finally:
                 logger.info("SensAI chat made %d model request(s).", usage.requests)
+                trace.finish()
                 await queue.put(None)
 
         producer = asyncio.create_task(_produce_text())
@@ -413,17 +437,23 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
 
         if not accumulated:
             if isinstance(stream_exc, UsageLimitExceeded):
-                detail = _stopped_message(capture.delegate)
+                detail = _stopped_message(capture.delegate, deps.max_requests)
             elif stream_exc:
                 detail = f"No response from model: {stream_exc}"
             else:
                 detail = "No response from model."
-            yield {"event": "error", "data": json.dumps({"detail": detail})}
+            yield {
+                "event": "error",
+                "data": json.dumps(
+                    {"detail": detail, "tool_calls": _tool_calls(trace)}
+                ),
+            }
             return
 
         plot_config_update = _changed_plot_config(
             current_plot_config, deps.current_plot_config
         )
+        versus_update = deps.versus if deps.versus != body.versus else None
         yield {
             "event": "result",
             "data": json.dumps(
@@ -434,8 +464,14 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                         if plot_config_update is not None
                         else None
                     ),
+                    "versus_update": (
+                        versus_update.model_dump(mode="json")
+                        if versus_update is not None
+                        else None
+                    ),
                     "routed_to": capture.routed_to,
                     "model": answering_model,
+                    "tool_calls": _tool_calls(trace),
                 }
             ),
         }

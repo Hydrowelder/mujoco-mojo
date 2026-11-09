@@ -42,6 +42,8 @@ export const PLACEHOLDER_EXAMPLES: readonly string[] = [
   "Use a log scale on the y axis",
   "Add a vertical line at 2 seconds",
   "Label the y axis Speed",
+  "Show the failed trials in versus mode",
+  "Compare this trial with trials 3 and 7",
   // the signals
   "What signals are available?",
   "List the velocity signals",

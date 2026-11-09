@@ -22,6 +22,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    RetryPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -36,12 +37,20 @@ from pydantic_ai.models.function import (
     FunctionModel,
 )
 
+from mujoco_mojo.settings import (
+    DEFAULT_MAX_REQUESTS,
+    DEFAULT_MAX_VERSUS_TRIALS,
+    SensAISettings,
+)
 from mujoco_mojo.utils.dataframe import ColumnManifest
-from mujoco_mojo.utils.layers.dojo.plot_config import PLOT_COLORS, PlotConfig
+from mujoco_mojo.utils.layers.dojo.plot_config import (
+    PLOT_COLORS,
+    PlotConfig,
+    VersusState,
+)
 from mujoco_mojo.utils.layers.dojo.routers import mosaic
 from mujoco_mojo.utils.layers.dojo.routers import sensai as sensai_router
 from mujoco_mojo.utils.layers.dojo.sensai import (
-    MAX_MODEL_REQUESTS,
     SensAIDeps,
     chat_agent,
     column_manifest_agent,
@@ -163,6 +172,8 @@ def make_deps(
     config: PlotConfig | None,
     columns: list[str] | None = None,
     job: JobStatus | None = None,
+    versus: VersusState | None = None,
+    max_versus_trials: int = DEFAULT_MAX_VERSUS_TRIALS,
 ) -> SensAIDeps:
     manifest: ColumnManifest = {
         "all": COLUMNS if columns is None else columns,
@@ -171,7 +182,11 @@ def make_deps(
         "column_metadata": {},
     }
     return SensAIDeps(
-        job_status=job, column_manifest=manifest, current_plot_config=config
+        job_status=job,
+        column_manifest=manifest,
+        current_plot_config=config,
+        versus=versus,
+        max_versus_trials=max_versus_trials,
     )
 
 
@@ -1397,7 +1412,13 @@ class TestWhatTheModelIsTold:
     """The model only sees what pydantic-ai passes on: a tool's summary and each parameter's description. A docstring's `Examples:` section is dropped, which is how a model once had no idea what shape to send."""
 
     EDITING_TOOLS = frozenset(
-        {"add_signals", "remove_signals", "edit_signal", "edit_plot_config"}
+        {
+            "add_signals",
+            "remove_signals",
+            "edit_signal",
+            "edit_plot_config",
+            "set_versus",
+        }
     )
 
     @staticmethod
@@ -1680,12 +1701,250 @@ class TestProfiles:
         assert sorted(seen[0]) == ["a", "folder/b"]
 
 
-class _Sensai(BaseModel):
-    enabled: bool = True
+class TestSettingVersus:
+    VERSUS = VersusState(vs_enabled=False, vs_range=(0, 2), vs_pinned=[])
+
+    @staticmethod
+    def failing(
+        tmp_path: Path, n: int = 6, failing: tuple[int, ...] = (1, 2)
+    ) -> JobStatus:
+        """A job of `n` trials in which the `failing` ones missed `speed`."""
+        job = make_job(tmp_path, {}, n_trial=n)
+        for trial_num in range(n):
+            missed = trial_num in failing
+            job.update_trial(
+                TrialStatus(
+                    trial_num=trial_num,
+                    completion=Completion.FAILURE if missed else Completion.SUCCESS,
+                    requirements=[
+                        RequirementResult(name="speed", passed=not missed, message="")
+                    ],
+                ),
+                save=False,
+            )
+        return job
+
+    def run(self, deps: SensAIDeps, *calls: tuple[str, dict[str, Any]]) -> list[str]:
+        """Runs the plot agent through `calls` and returns what each tool told the model."""
+        told: list[str] = []
+
+        def step(tool: str, args: dict[str, Any]) -> Step:
+            def run(messages: list[ModelMessage]) -> ModelResponse:
+                last = messages[-1]
+                if isinstance(last, ModelRequest):
+                    told.extend(
+                        str(p.content)
+                        for p in last.parts
+                        if isinstance(p, (ToolReturnPart, RetryPromptPart))
+                    )
+                return ModelResponse(parts=[ToolCallPart(tool, args)])
+
+            return run
+
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            last = messages[-1]
+            assert isinstance(last, ModelRequest)
+            told.extend(
+                str(p.content)
+                for p in last.parts
+                if isinstance(p, (ToolReturnPart, RetryPromptPart))
+            )
+            return ModelResponse(parts=[TextPart("ok")])
+
+        run_plot_agent(
+            scripted(*(step(tool, args) for tool, args in calls), finish), deps
+        )
+        return told
+
+    def test_the_trials_that_missed_a_requirement_are_pinned_and_it_is_turned_on(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
+
+        self.run(
+            deps, ("set_versus", {"failed_requirement": "speed", "no_range": True})
+        )
+
+        assert deps.versus == VersusState(
+            vs_enabled=True, vs_range=None, vs_pinned=[1, 2]
+        )
+
+    def test_without_no_range_the_old_range_stays_as_well(self, tmp_path: Path) -> None:
+        deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
+
+        self.run(deps, ("set_versus", {"failed_requirement": "speed"}))
+
+        assert deps.versus == VersusState(
+            vs_enabled=True, vs_range=(0, 2), vs_pinned=[1, 2]
+        )
+
+    def test_the_reply_says_what_versus_is_set_to(self, tmp_path: Path) -> None:
+        deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
+
+        [told] = self.run(
+            deps, ("set_versus", {"failed_requirement": "speed", "no_range": True})
+        )[:1]
+
+        assert told == (
+            "Done. Versus mode is on: no range, 2 pinned (1-2), comparing 2 trials."
+        )
+
+    def test_trials_past_the_limit_are_left_out_and_the_model_is_told_how_many(
+        self, tmp_path: Path
+    ) -> None:
+        job = self.failing(tmp_path, n=130, failing=tuple(range(10, 130)))
+        deps = make_deps(
+            make_config(), job=job, versus=self.VERSUS, max_versus_trials=50
+        )
+
+        [told] = self.run(
+            deps, ("set_versus", {"failed_requirement": "speed", "no_range": True})
+        )[:1]
+
+        assert deps.versus is not None
+        assert deps.versus.vs_pinned == list(range(10, 60))
+        assert "70 more trials were not added" in told
+        assert "at most 50" in told
+        assert "asking again adds the next batch" in told
+
+    def test_asking_again_in_the_next_message_adds_the_next_batch(
+        self, tmp_path: Path
+    ) -> None:
+        job = self.failing(tmp_path, n=130, failing=tuple(range(10, 130)))
+        first = make_deps(
+            make_config(), job=job, versus=self.VERSUS, max_versus_trials=50
+        )
+        self.run(
+            first, ("set_versus", {"failed_requirement": "speed", "no_range": True})
+        )
+
+        second = make_deps(
+            make_config(), job=job, versus=first.versus, max_versus_trials=50
+        )
+        self.run(
+            second, ("set_versus", {"failed_requirement": "speed", "no_range": True})
+        )
+
+        assert second.versus is not None
+        assert second.versus.vs_pinned == list(range(10, 110))
+
+    def test_one_message_has_one_allowance_however_many_calls_it_makes(
+        self, tmp_path: Path
+    ) -> None:
+        job = self.failing(tmp_path, n=130, failing=tuple(range(10, 130)))
+        deps = make_deps(
+            make_config(), job=job, versus=self.VERSUS, max_versus_trials=40
+        )
+
+        self.run(
+            deps,
+            ("set_versus", {"pin": list(range(10, 40)), "no_range": True}),
+            ("set_versus", {"pin": list(range(40, 70))}),
+        )
+
+        assert deps.versus is not None
+        assert len(deps.versus.vs_pinned) == 40
+        assert deps.versus_trials_added == 40
+
+    def test_a_requirement_that_does_not_exist_is_answered_with_the_real_ones(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
+
+        [told] = self.run(deps, ("set_versus", {"failed_requirement": "fuel"}))[:1]
+
+        assert "No requirement is named 'fuel'" in told
+        assert "speed" in told
+        assert deps.versus == self.VERSUS
+
+    def test_a_requirement_no_trial_missed_changes_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(
+            make_config(), job=self.failing(tmp_path, failing=()), versus=self.VERSUS
+        )
+
+        [told] = self.run(deps, ("set_versus", {"failed_requirement": "speed"}))[:1]
+
+        assert "No trial missed 'speed'" in told
+        assert deps.versus == self.VERSUS
+
+    def test_failed_trials_cannot_be_looked_up_without_a_job(self) -> None:
+        deps = make_deps(make_config(), versus=self.VERSUS)
+
+        [told] = self.run(deps, ("set_versus", {"failed_requirement": "speed"}))[:1]
+
+        assert "No job is loaded" in told
+        assert deps.versus == self.VERSUS
+
+    def test_without_a_trial_viewer_it_says_so_and_changes_nothing(self) -> None:
+        deps = make_deps(make_config(), versus=None)
+
+        [told] = self.run(deps, ("set_versus", {"enabled": True}))[:1]
+
+        assert "no trial is open in the trial viewer" in told
+        assert deps.versus is None
+
+    def test_a_refused_change_goes_back_to_the_model_and_is_remembered(self) -> None:
+        deps = make_deps(make_config(), versus=self.VERSUS)
+
+        [told] = self.run(deps, ("set_versus", {"trial_range": [1, 2, 3]}))[:1]
+
+        assert "two trial numbers" in told
+        assert deps.plot_edit_refusal is not None
+        assert deps.versus == self.VERSUS
+
+    def test_a_good_change_clears_the_remembered_refusal(self) -> None:
+        deps = make_deps(make_config(), versus=self.VERSUS)
+
+        self.run(
+            deps,
+            ("set_versus", {"trial_range": [1, 2, 3]}),
+            ("set_versus", {"enabled": True}),
+        )
+
+        assert deps.plot_edit_refusal is None
+        assert deps.versus == VersusState(
+            vs_enabled=True, vs_range=(0, 2), vs_pinned=[]
+        )
+
+    def test_a_trial_the_job_does_not_have_is_refused(self, tmp_path: Path) -> None:
+        deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
+
+        [told] = self.run(deps, ("set_versus", {"pin": [99]}))[:1]
+
+        assert "no trial 99" in told
+        assert deps.versus == self.VERSUS
+
+    def test_the_model_is_shown_versus_only_when_it_can_be_changed(self) -> None:
+        shown: list[str] = []
+
+        def look(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            shown.append(instructions(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        run_plot_agent(
+            FunctionModel(look),
+            make_deps(
+                make_config(),
+                versus=VersusState(vs_enabled=True, vs_range=None, vs_pinned=[4]),
+            ),
+        )
+        run_plot_agent(FunctionModel(look), make_deps(make_config(), versus=None))
+
+        assert "Versus mode is on: no range, 1 pinned (4)" in shown[0]
+        assert "Versus mode" not in shown[1]
+
+    def test_the_prompt_shows_how_to_ask_for_only_some_trials(self) -> None:
+        _tools, prompt = TestWhatTheModelIsTold.offered_tools_and_prompt()
+
+        assert "set_versus(failed_requirement=" in prompt
+        assert "no_range=true" in prompt
+        assert "clear_pins=true" in prompt
 
 
 class _Dojo(BaseModel):
-    sensai: _Sensai = _Sensai()
+    sensai: SensAISettings = SensAISettings(enabled=True)
 
 
 class _Settings(BaseModel):
@@ -2054,7 +2313,7 @@ class TestChatRoute:
         data = self.chat(client, monkeypatch, model)
 
         assert requests == 6
-        assert requests < MAX_MODEL_REQUESTS
+        assert requests < DEFAULT_MAX_REQUESTS
         assert data["message"] == "Added."
 
     def chat_error(
@@ -2144,13 +2403,13 @@ class TestChatRoute:
 
         detail = self.chat_error(client, monkeypatch, model)
 
-        assert f"stopped after {MAX_MODEL_REQUESTS} model requests" in detail
+        assert f"stopped after {DEFAULT_MAX_REQUESTS} model requests" in detail
         assert while_ in detail
         assert advice in detail
         # the message must describe what was actually going on: a job question
         # was once told that "the plot was left as it was"
         assert not_said not in detail
-        assert len(requests) <= MAX_MODEL_REQUESTS
+        assert len(requests) <= DEFAULT_MAX_REQUESTS
 
     def test_a_chat_agent_that_never_stops_is_cut_off_by_its_own_limit(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -2172,8 +2431,8 @@ class TestChatRoute:
 
         detail = self.chat_error(client, monkeypatch, model)
 
-        assert f"stopped after {MAX_MODEL_REQUESTS} model requests" in detail
-        assert len(requests) == MAX_MODEL_REQUESTS
+        assert f"stopped after {DEFAULT_MAX_REQUESTS} model requests" in detail
+        assert len(requests) == DEFAULT_MAX_REQUESTS
 
     def test_the_result_names_the_model_that_answered(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -2377,6 +2636,344 @@ class TestChatRoute:
 
         assert data["routed_to"] == "undo"
         assert data["plot_config_update"] is None
+
+    @staticmethod
+    def events(response_text: str) -> list[tuple[str, dict[str, Any]]]:
+        """Every event in an SSE response, in the order it was sent."""
+        found: list[tuple[str, dict[str, Any]]] = []
+        event = ""
+        for line in response_text.splitlines():
+            if line.startswith("event:"):
+                event = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                found.append((event, json.loads(line.split(":", 1)[1].strip())))
+        return found
+
+    def post(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+        model: Model,
+        message: str = "do it",
+        versus: dict[str, Any] | None = None,
+    ) -> str:
+        """The body of the response to one chat message."""
+        monkeypatch.setattr(sensai_router, "build_fallback_model", lambda: model)
+        response = client.post(
+            "/sensai/chat",
+            json={
+                "message": message,
+                "all_columns": COLUMNS,
+                "current_plot_config_json": make_config().model_dump_json(),
+                "versus": versus,
+            },
+        )
+        assert response.status_code == 200
+        return response.text
+
+    def test_the_reply_lists_the_tool_calls_the_chat_agent_and_the_specialist_made(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="rename"), say("Renamed it.")],
+            [call("edit_plot_config", changes={"title": "hello"}), say("Renamed.")],
+        )
+
+        calls = self.chat(client, monkeypatch, model)["tool_calls"]
+
+        assert [(c["id"], c["agent"], c["name"], c["status"]) for c in calls] == [
+            (1, "chat", "ask_plot_config_agent", "ok"),
+            (2, "plot_config", "edit_plot_config", "ok"),
+        ]
+        assert json.loads(calls[0]["args"]) == {"request": "rename"}
+        assert json.loads(calls[1]["args"]) == {"changes": {"title": "hello"}}
+        assert calls[1]["result"]
+
+    @pytest.mark.parametrize(
+        ("ask", "tool", "args", "agent", "finish"),
+        [
+            (
+                "ask_plot_config_agent",
+                "find_signals",
+                {"query": "velocity"},
+                "plot_config",
+                say("Found it."),
+            ),
+            (
+                "ask_column_manifest_agent",
+                "get_available_signals",
+                {},
+                "column_manifest",
+                # this agent ends by returning the manifest, which is an output tool and not a call to list
+                call("final_result"),
+            ),
+            (
+                "ask_guide_agent",
+                "search_guides",
+                {"query": "slurm"},
+                "guide",
+                say("Found it."),
+            ),
+            (
+                "ask_job_status_agent",
+                "get_job_summary",
+                {},
+                "job_status",
+                say("Found it."),
+            ),
+        ],
+    )
+    def test_each_specialists_own_calls_are_labeled_with_its_route(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+        ask: str,
+        tool: str,
+        args: dict[str, Any],
+        agent: str,
+        finish: Step,
+    ) -> None:
+        """The route names are written in the chat agent's tools and in the router, so this fails if the two drift apart."""
+        model = self.router_model(
+            [call(ask, request="x"), say("Done.")],
+            [call(tool, **args), finish],
+        )
+
+        data = self.chat(client, monkeypatch, model)
+
+        assert [c["agent"] for c in data["tool_calls"]] == ["chat", agent]
+        assert data["routed_to"] == agent
+
+    def test_a_question_with_no_tools_has_an_empty_list(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model([say("Hello.")], [])
+
+        assert self.chat(client, monkeypatch, model)["tool_calls"] == []
+
+    def test_a_refused_edit_is_listed_as_rejected_with_the_reason(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="x"), say("Could not.")],
+            [call("edit_plot_config", changes={"bogus": 1}), say("I could not.")],
+        )
+
+        calls = self.chat(client, monkeypatch, model)["tool_calls"]
+
+        edit = calls[1]
+        assert edit["name"] == "edit_plot_config"
+        assert edit["status"] == "rejected"
+        assert "bogus" in edit["result"]
+        assert "\n" not in edit["result"]
+
+    def test_the_calls_are_streamed_as_they_start_and_end_before_the_reply(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="rename"), say("Renamed it.")],
+            [call("edit_plot_config", changes={"title": "hello"}), say("Renamed.")],
+        )
+
+        events = self.events(self.post(client, monkeypatch, model))
+        names = [name for name, _ in events]
+
+        # the delegation starts first, then the specialist's call begins and ends, then the
+        # delegation ends, all before the chat agent's own words
+        starts = [data for name, data in events if name == "tool_start"]
+        ends = [data for name, data in events if name == "tool_end"]
+        assert [s["name"] for s in starts] == [
+            "ask_plot_config_agent",
+            "edit_plot_config",
+        ]
+        assert [e["id"] for e in ends] == [2, 1]
+        assert all(e["status"] == "ok" for e in ends)
+        assert names.index("tool_end") < names.index("text_delta")
+        assert names[-1] == "result"
+        # the label for the thinking indicator is still sent for the hand-off
+        assert ("tool_call", {"label": "Reading the plot configuration..."}) in events
+
+    def test_a_plot_agent_that_gave_up_still_lists_what_it_tried(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The hand-off never returns (it raises, and its reason is the reply), so it is closed as failed, with the refused edits under it."""
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="add box2")],
+            [call("edit_plot_config", changes={"yAxes": None})] * 4,
+        )
+
+        calls = self.chat(client, monkeypatch, model)["tool_calls"]
+
+        assert calls[0]["name"] == "ask_plot_config_agent"
+        assert calls[0]["status"] == "failed"
+        assert calls[0]["result"] is None
+        edits = [c["status"] for c in calls[1:]]
+        # each refused edit is told to the model, and the one it was about to retry when
+        # it ran out of tries was never answered
+        assert edits[:-1] == ["rejected"] * (len(edits) - 1)
+        assert "rejected" in edits
+        assert edits[-1] == "failed"
+
+    def test_a_message_stopped_at_the_request_limit_lists_what_it_tried(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            itertools.repeat(call("ask_job_status_agent", request="longest")),
+            itertools.repeat(call("get_job_summary")),
+        )
+
+        text = self.post(client, monkeypatch, model)
+
+        error = self.error(text)
+        assert "stopped after" in error["detail"]
+        calls = error["tool_calls"]
+        assert calls
+        assert {c["agent"] for c in calls} == {"chat", "job_status"}
+        # the call the limit cut short is not left looking as if it were still running
+        assert "running" not in {c["status"] for c in calls}
+
+    def test_an_undo_lists_no_tool_calls(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def refuse(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            raise AssertionError("the model must not be called for an undo")
+
+        data = self.chat(
+            client, monkeypatch, FunctionModel(refuse), message="undo that"
+        )
+
+        assert "tool_calls" not in data
+
+    def test_a_versus_change_is_sent_to_the_browser(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="compare 3"), say("Done.")],
+            [call("set_versus", pin=[3]), say("Done.")],
+        )
+
+        text = self.post(
+            client,
+            monkeypatch,
+            model,
+            versus={"vsEnabled": False, "vsRange": [0, 2], "vsPinned": []},
+        )
+
+        assert self.result(text)["versus_update"] == {
+            "vsEnabled": True,
+            "vsRange": [0, 2],
+            "vsPinned": [3],
+        }
+
+    def test_versus_is_not_sent_when_the_message_changed_nothing_in_it(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="what is plotted"), say("One.")],
+            [say("One signal.")],
+        )
+
+        text = self.post(
+            client,
+            monkeypatch,
+            model,
+            versus={"vsEnabled": False, "vsRange": [0, 2], "vsPinned": []},
+        )
+
+        assert self.result(text)["versus_update"] is None
+
+    def test_a_message_from_a_page_with_no_trial_viewer_cannot_change_versus(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="compare 3"), say("Cannot.")],
+            [call("set_versus", pin=[3]), say("Cannot.")],
+        )
+
+        assert (
+            self.result(self.post(client, monkeypatch, model))["versus_update"] is None
+        )
+
+    def test_what_the_browser_sends_reaches_the_agent(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[str] = []
+
+        def look(messages: list[ModelMessage]) -> ModelResponse:
+            seen.append(instructions(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="what is versus"), say("Off.")],
+            [look],
+        )
+
+        self.post(
+            client,
+            monkeypatch,
+            model,
+            versus={"vsEnabled": True, "vsRange": [4, 1], "vsPinned": [9, 7]},
+        )
+
+        assert "Versus mode is on: range 1-4, 2 pinned (7, 9)" in seen[0]
+
+    @staticmethod
+    def with_settings(
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        max_requests: int = DEFAULT_MAX_REQUESTS,
+        max_versus_trials: int = DEFAULT_MAX_VERSUS_TRIALS,
+    ) -> None:
+        sensai = SensAISettings(
+            enabled=True,
+            max_requests=max_requests,
+            max_versus_trials=max_versus_trials,
+        )
+        settings = _Settings(dojo=_Dojo(sensai=sensai))
+        monkeypatch.setattr(sensai_router, "MujocoMojoSettings", lambda: settings)
+
+    @pytest.mark.parametrize("limit", [3, 20])
+    def test_the_request_limit_is_the_one_in_settings(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch, limit: int
+    ) -> None:
+        """A looping model is stopped at whatever `dojo.sensai.max_requests` says, lower or higher than the default."""
+        self.with_settings(monkeypatch, max_requests=limit)
+        requests: list[int] = []
+
+        def counted(step: Step) -> Step:
+            def run(messages: list[ModelMessage]) -> ModelResponse:
+                requests.append(1)
+                return step(messages)
+
+            return run
+
+        model = self.router_model(
+            itertools.repeat(counted(call("ask_plot_config_agent", request="again"))),
+            itertools.repeat(counted(say("nothing to do"))),
+        )
+
+        detail = self.error(self.post(client, monkeypatch, model))["detail"]
+
+        assert f"stopped after {limit} model requests" in detail
+        assert len(requests) == limit
+
+    def test_the_versus_limit_is_the_one_in_settings(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.with_settings(monkeypatch, max_versus_trials=2)
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="compare"), say("Done.")],
+            [call("set_versus", pin=[5, 6, 7, 8], no_range=True), say("Done.")],
+        )
+
+        text = self.post(
+            client,
+            monkeypatch,
+            model,
+            versus={"vsEnabled": False, "vsRange": [0, 2], "vsPinned": []},
+        )
+
+        assert self.result(text)["versus_update"]["vsPinned"] == [5, 6]
 
 
 class TestLogging:
@@ -2582,16 +3179,22 @@ class TestLogging:
 
 class TestStoppedMessage:
     def test_a_message_with_no_specialist_at_work_says_to_rephrase(self) -> None:
-        message = sensai_router._stopped_message(None)
+        message = sensai_router._stopped_message(None, DEFAULT_MAX_REQUESTS)
 
         assert message == (
-            f"SensAI stopped after {MAX_MODEL_REQUESTS} model requests without finishing."
+            f"SensAI stopped after {DEFAULT_MAX_REQUESTS} model requests without finishing."
             " Try rephrasing your request."
+            " The limit is dojo.sensai.max_requests in settings."
         )
 
     def test_a_tool_that_is_not_a_specialist_is_treated_as_none_at_work(self) -> None:
-        assert sensai_router._stopped_message("something_else") == (
-            sensai_router._stopped_message(None)
+        assert sensai_router._stopped_message("something_else", 12) == (
+            sensai_router._stopped_message(None, 12)
+        )
+
+    def test_the_message_names_the_limit_it_stopped_at(self) -> None:
+        assert "stopped after 30 model requests" in sensai_router._stopped_message(
+            None, 30
         )
 
 

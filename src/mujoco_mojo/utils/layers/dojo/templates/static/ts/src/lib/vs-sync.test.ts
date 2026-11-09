@@ -8,8 +8,10 @@ import {
   missingColumns,
   orderedRange,
   parseStoredVs,
+  versusState,
   vsActiveColumns,
   vsChipClass,
+  vsDraftFromUpdate,
   vsNeedsFetch,
   vsTargetIds,
 } from "./vs-sync";
@@ -267,5 +269,41 @@ describe("vsChipClass", () => {
 
   it("is success colored for an id with no number", () => {
     expect(chip("weird")).toContain("bg-success-50");
+  });
+});
+
+describe("versusState", () => {
+  it("names the settings as a profile saves them", () => {
+    expect(versusState({ enabled: true, range: [2, 5], pinned: [9] })).toEqual({
+      vsEnabled: true,
+      vsRange: [2, 5],
+      vsPinned: [9],
+    });
+  });
+});
+
+describe("vsDraftFromUpdate", () => {
+  it("turns SensAI's change into the header's draft", () => {
+    expect(vsDraftFromUpdate({ vsEnabled: true, vsRange: [1, 4], vsPinned: [7, 9] }, 3, [0, 0])).toEqual({
+      enabled: true,
+      range: [1, 4],
+      pinned: [7, 9],
+    });
+  });
+
+  it("makes no range the open trial alone, which is never compared with itself", () => {
+    expect(vsDraftFromUpdate({ vsEnabled: true, vsRange: null, vsPinned: [7] }, 3, [0, 10]).range).toEqual([3, 3]);
+  });
+
+  it("keeps the range it had when there is no open trial to stand in", () => {
+    expect(vsDraftFromUpdate({ vsEnabled: true, vsRange: null, vsPinned: [] }, Number.NaN, [0, 10]).range).toEqual([0, 10]);
+  });
+
+  it("copies the pinned trials instead of sharing the update's list", () => {
+    const update = { vsEnabled: false, vsRange: [0, 1] as [number, number], vsPinned: [5] };
+
+    vsDraftFromUpdate(update, 0, [0, 0]).pinned.push(6);
+
+    expect(update.vsPinned).toEqual([5]);
   });
 });

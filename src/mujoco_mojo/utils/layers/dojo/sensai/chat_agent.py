@@ -8,6 +8,7 @@ from pydantic_ai import (
     UnexpectedModelBehavior,
     UsageLimits,
 )
+from pydantic_ai.agent import EventStreamHandler
 from pydantic_ai.models import Model
 
 from mujoco_mojo.utils.dataframe import ColumnManifest
@@ -41,17 +42,18 @@ not add anything the guides did not say.
 
 logger = get_logger(__name__)
 
-MAX_MODEL_REQUESTS = 12
-"""The most model requests one chat message may make in all, the chat agent's and its specialists' together. A request takes one to three (route it, edit, answer) and a refused edit adds one to three more, so this leaves room to correct a mistake or two. When a model loops, or rate limits make every request cost several attempts, it is what stops the message from sending dozens."""
-
 
 class PlotEditFailed(Exception):
     """The plot agent could not make the change. The message is what to tell the user, and the chat agent is not asked to put it in its own words: a model that was told the change failed would keep sending the same request to the plot agent again."""
 
 
-def usage_limits() -> UsageLimits:
-    """The cap on model requests for one chat message, to pass to the chat agent's run and to each specialist's run so that the specialists count against the same total (they share the run's `usage`)."""
-    return UsageLimits(request_limit=MAX_MODEL_REQUESTS)
+def usage_limits(max_requests: int) -> UsageLimits:
+    """
+    The cap on model requests for one chat message, to pass to the chat agent's run and to each specialist's run so that the specialists count against the same total (they share the run's `usage`).
+
+    `max_requests` is `dojo.sensai.max_requests`. A request takes one to three (route it, edit, answer) and a refused edit adds one to three more, so the default of 12 leaves room to correct a mistake or two. When a model loops, or rate limits make every request cost several attempts, it is what stops the message from sending dozens.
+    """
+    return UsageLimits(request_limit=max_requests)
 
 
 chat_agent: Agent[SensAIDeps, str] = Agent(
@@ -69,6 +71,14 @@ def _delegate_model(ctx: RunContext[SensAIDeps]) -> Model | None:
 
     """
     return ctx.model if isinstance(ctx.model, Model) else None
+
+
+def _watch(
+    ctx: RunContext[SensAIDeps], route: str
+) -> EventStreamHandler[SensAIDeps] | None:
+    """The handler that records the tool calls of the specialist at `route` for the chat to show, or None when this message is not being traced (a run made outside the Dojo's chat route)."""
+    trace = ctx.deps.trace
+    return trace.handler(route) if trace is not None else None
 
 
 @chat_agent.tool
@@ -89,7 +99,8 @@ async def ask_job_status_agent(ctx: RunContext[SensAIDeps], request: str) -> str
         model=_delegate_model(ctx),
         deps=ctx.deps,
         usage=ctx.usage,
-        usage_limits=usage_limits(),
+        usage_limits=usage_limits(ctx.deps.max_requests),
+        event_stream_handler=_watch(ctx, "job_status"),
     )
     return result.output
 
@@ -114,7 +125,8 @@ async def ask_column_manifest_agent(
         model=_delegate_model(ctx),
         deps=ctx.deps,
         usage=ctx.usage,
-        usage_limits=usage_limits(),
+        usage_limits=usage_limits(ctx.deps.max_requests),
+        event_stream_handler=_watch(ctx, "column_manifest"),
     )
     return result.output
 
@@ -139,7 +151,8 @@ async def ask_guide_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
         model=_delegate_model(ctx),
         deps=ctx.deps,
         usage=ctx.usage,
-        usage_limits=usage_limits(),
+        usage_limits=usage_limits(ctx.deps.max_requests),
+        event_stream_handler=_watch(ctx, "guide"),
     )
     return result.output
 
@@ -150,7 +163,8 @@ async def ask_plot_config_agent(ctx: RunContext[SensAIDeps], request: str) -> st
     Forward a plot request to the plot-config agent and return what it did or found.
 
     Use this for any request about the trial viewer plot: reading its current state, changing \
-    it (colors, axes, grid, signals, filters, ...), or loading a saved plot profile. The plot \
+    it (colors, axes, grid, signals, filters, ...), loading a saved plot profile, or versus mode \
+    (showing other trials, such as the ones that failed a requirement, behind this one). The plot \
     itself is updated by the agent; you only report what it says.
 
     Args:
@@ -168,7 +182,8 @@ async def ask_plot_config_agent(ctx: RunContext[SensAIDeps], request: str) -> st
             model=_delegate_model(ctx),
             deps=ctx.deps,
             usage=ctx.usage,
-            usage_limits=usage_limits(),
+            usage_limits=usage_limits(ctx.deps.max_requests),
+            event_stream_handler=_watch(ctx, "plot_config"),
         )
     except UnexpectedModelBehavior as exc:
         # the model kept repeating a refused call until it ran out of tries; its reason

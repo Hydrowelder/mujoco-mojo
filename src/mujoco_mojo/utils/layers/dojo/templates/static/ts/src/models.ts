@@ -29,6 +29,7 @@ export type {
 } from "./lib/settings-panel";
 import type { SettingsPanelState } from "./lib/settings-panel";
 import type { ColumnMetadata } from "./lib/column-metadata.generated";
+import type { VersusState } from "./lib/plot-profile";
 
 export type { ColumnMetadata, TransformType } from "./lib/column-metadata.generated";
 
@@ -283,6 +284,9 @@ export interface DojoStore extends SettingsPanelState {
   overlayCount: number;
   // set by the trial viewer, null on every other page
   columnManifest: ColumnManifest | null;
+  // versus mode as the trial viewer has it, which SensAI sends with a message
+  // and changes through a reply; null on every other page
+  versus: VersusState | null;
   loadStartTime: number;
   isComplete: boolean;
   isMuted: boolean;

@@ -103,7 +103,7 @@ def fmt_duration(seconds: float) -> str:
     return f"{text} ({' '.join(parts)})"
 
 
-def _numbers(trial_nums: Iterable[int], limit: int = _MAX_NUMBERS) -> str:
+def trial_numbers(trial_nums: Iterable[int], limit: int = _MAX_NUMBERS) -> str:
     """Trial numbers as `0-9, 11, 14-15`, cut after `limit` of them with how many more there are."""
     nums = sorted(trial_nums)
     shown, more = nums[:limit], len(nums) - limit
@@ -302,7 +302,9 @@ def describe_breakdown(job: JobStatus, at: datetime) -> str:
         ("Running", sorted(running_nums)),
         ("Waiting to start", waiting),
     ]
-    return "\n".join(f"{name} ({len(nums)}): {_numbers(nums)}" for name, nums in rows)
+    return "\n".join(
+        f"{name} ({len(nums)}): {trial_numbers(nums)}" for name, nums in rows
+    )
 
 
 def describe_running(job: JobStatus, at: datetime) -> str:
@@ -420,25 +422,62 @@ def describe_errored(job: JobStatus) -> str:
             no_error.append(trial_num)
         else:
             causes.setdefault(cause, []).append((trial_num, _stage(status)))
-    lines = [f"{len(errored)} trials errored: {_numbers(n for n, _ in errored)}."]
+    lines = [f"{len(errored)} trials errored: {trial_numbers(n for n, _ in errored)}."]
     if causes:
         lines.append("What the logs say went wrong, most common first:")
         for cause, items in sorted(causes.items(), key=lambda c: (-len(c[1]), c[0])):
             nums = [n for n, _ in items]
             stages = " or ".join(sorted({stage for _, stage in items}))
             lines.append(
-                f"  {cause}: {_plural(nums)} {_numbers(nums)}, broke while {stages}"
+                f"  {cause}: {_plural(nums)} {trial_numbers(nums)}, broke while {stages}"
             )
     if no_error:
         lines.append(
-            f"  No error in the log of {_plural(no_error)} {_numbers(no_error)}."
+            f"  No error in the log of {_plural(no_error)} {trial_numbers(no_error)}."
         )
     if no_log:
-        lines.append(f"  No log file for {_plural(no_log)} {_numbers(no_log)}.")
+        lines.append(f"  No log file for {_plural(no_log)} {trial_numbers(no_log)}.")
     if len(errored) > _MAX_LOGS_READ:
         lines.append(f"  Only the first {_MAX_LOGS_READ} logs were read.")
     lines.append("get_trial_log gives one trial's whole log, with the traceback.")
     return "\n".join(lines)
+
+
+def _pick_requirement(names: list[str], name: str) -> str | None:
+    """The requirement `name` means: the one with exactly that name (ignoring case), else the only one whose name contains it, else None."""
+    wanted = name.strip().lower()
+    exact = [n for n in names if n.lower() == wanted]
+    partial = [n for n in names if wanted in n.lower()]
+    chosen = exact or (partial if len(partial) == 1 else [])
+    return chosen[0] if chosen else None
+
+
+def trials_that_missed(job: JobStatus, requirement: str) -> list[int] | str:
+    """
+    The numbers of the trials that missed `requirement`, in order, or the sentence that says why there are none to give.
+
+    `requirement` is a requirement's name or part of it. The special words `any` (every trial that missed one or more requirements) and `error` (the trials that crashed, which are not the same set: an errored trial never reached its requirements) are read as words only when no requirement has exactly that name, and before a part of a name is tried, so a requirement called `landing_position_error` cannot swallow `error`.
+    """
+    names = [r["name"] for r in job.requirement_summary]
+    key = requirement.strip().lower()
+    exact = [n for n in names if n.lower() == key]
+    if not exact and key == "any":
+        return sorted(job.failed_trial_nums)
+    if not exact and key == "error":
+        return sorted(job.error_trial_nums)
+    if not names:
+        return "No requirement results yet: none were registered, or no trial has finished."
+    wanted = exact[0] if exact else _pick_requirement(names, requirement)
+    if wanted is None:
+        return f"No requirement is named '{requirement}'. The requirements are: {', '.join(names)}."
+    return sorted(
+        {
+            trial_num
+            for trial_num, status in _statuses(job)
+            for result in status.requirements
+            if result.name == wanted and not result.passed
+        }
+    )
 
 
 def describe_requirements(job: JobStatus, name: str = "") -> str:
@@ -455,12 +494,9 @@ def describe_requirements(job: JobStatus, name: str = "") -> str:
         ]
         return "\n".join(lines)
     names = [r["name"] for r in summary]
-    exact = [n for n in names if n.lower() == name.strip().lower()]
-    partial = [n for n in names if name.strip().lower() in n.lower()]
-    chosen = exact or (partial if len(partial) == 1 else [])
-    if not chosen:
+    wanted = _pick_requirement(names, name)
+    if wanted is None:
         return f"No requirement is named '{name}'. The requirements are: {', '.join(names)}."
-    wanted = chosen[0]
     row = next(r for r in summary if r["name"] == wanted)
     missed: dict[int, str] = {}
     for trial_num, status in _statuses(job):
@@ -471,7 +507,7 @@ def describe_requirements(job: JobStatus, name: str = "") -> str:
         f"{wanted}: failed in {row['n_failed']} of {row['n_trials']} trials (pass rate {row['pass_rate']:.1%})."
     ]
     if missed:
-        lines.append(f"Failed in trials: {_numbers(missed)}.")
+        lines.append(f"Failed in trials: {trial_numbers(missed)}.")
         reasons = Counter(" ".join(m.split())[:_REASON_LENGTH] for m in missed.values())
         lines.append("Reasons given:")
         lines += [

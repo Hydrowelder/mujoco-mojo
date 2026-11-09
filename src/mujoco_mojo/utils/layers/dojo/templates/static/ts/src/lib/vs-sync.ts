@@ -5,6 +5,33 @@
 import { refFrameActive } from "./ref-frame";
 import { trialOutcome } from "./trial-status";
 import type { PlotConfig } from "./plot-config.generated";
+import type { PlotProfile, VersusState } from "./plot-profile";
+
+// the trial viewer's versus settings as a profile saves them and SensAI is told them
+export function versusState(vs: {
+  enabled: boolean;
+  range: [number, number];
+  pinned: number[];
+}): Pick<PlotProfile, "vsEnabled" | "vsRange" | "vsPinned"> {
+  return { vsEnabled: vs.enabled, vsRange: vs.range, vsPinned: vs.pinned };
+}
+
+// the header's draft for a change SensAI made. no range is the open trial alone,
+// which is never compared with itself, so only the pinned trials are drawn
+export function vsDraftFromUpdate(
+  update: VersusState,
+  openTrial: number,
+  fallbackRange: [number, number],
+): { enabled: boolean; range: [number, number]; pinned: number[] } {
+  const alone: [number, number] = Number.isFinite(openTrial)
+    ? [openTrial, openTrial]
+    : fallbackRange;
+  return {
+    enabled: update.vsEnabled,
+    range: update.vsRange ?? alone,
+    pinned: [...update.vsPinned],
+  };
+}
 
 // a range with its ends in order
 export function orderedRange(range: [number, number]): [number, number] {

@@ -12,12 +12,14 @@ import { renderMath } from "./lib/math";
 import { renderMarkdown } from "./lib/markdown";
 import {
   MAX_TABS,
+  applyToolEvent,
   blankTab,
   bubbleStyle,
   chatRequestBody,
   composerSize,
   createSseParser,
   enabledFromSettings,
+  finalToolCalls,
   fullBubbleHeight,
   groupExchanges,
   headerTooltip,
@@ -37,11 +39,15 @@ import {
   savePinned,
   tabsExport,
   titleFromMessage,
+  toolCallTooltip,
+  toolCallsTitle,
+  toolDotClass,
   BUBBLE_SETTLE_MS,
   SCROLL_HOLD_MS,
   type Exchange,
   type SensAIMessage,
   type SensAITab,
+  type SensAIToolCall,
   type SseEvent,
 } from "./lib/sensai";
 import {
@@ -79,6 +85,9 @@ function sensai() {
     streaming: false,
     streamingContent: "",
     thinkingLabel: null as string | null,
+    // the tool calls the running request has made so far, shown while it works and
+    // kept with its reply once it is done
+    toolCalls: [] as SensAIToolCall[],
     enabled: null as boolean | null,
     input: "",
     // the input's placeholder, which types out examples of what to ask while the
@@ -97,6 +106,9 @@ function sensai() {
     _abort: null as AbortController | null,
     _draining: null as Promise<void> | null,
     headerTooltip,
+    toolCallsTitle,
+    toolDotClass,
+    toolCallTooltip,
 
     get activeTab(): SensAITab | undefined {
       return this.tabs.find((t) => t.id === this.activeId);
@@ -437,6 +449,7 @@ function sensai() {
       this.streaming = false;
       this.streamingContent = "";
       this.thinkingLabel = null;
+      this.toolCalls = [];
       const controller = new AbortController();
       this._abort = controller;
       if (tab.id === this.activeId) this._scrollToLastPrompt();
@@ -457,6 +470,7 @@ function sensai() {
               tab.messages,
               currentPlotConfigJson,
               (Alpine.store("dojo") as DojoStore).columnManifest,
+              (Alpine.store("dojo") as DojoStore).versus,
             ),
           ),
           signal: controller.signal,
@@ -490,6 +504,7 @@ function sensai() {
         this.streaming = false;
         this.streamingContent = "";
         this.thinkingLabel = null;
+        this.toolCalls = [];
         this._flushReveal();
         window.dispatchEvent(new CustomEvent("sensai-remeasure"));
         if (!controller.signal.aborted) this._noteReply(tab);
@@ -511,6 +526,8 @@ function sensai() {
       try {
         if (eventType === "tool_call" && typeof payload.label === "string") {
           this.thinkingLabel = payload.label;
+        } else if (eventType === "tool_start" || eventType === "tool_end") {
+          this.toolCalls = applyToolEvent(this.toolCalls, eventType, payload);
         } else if (eventType === "text_delta" && typeof payload.delta === "string") {
           if (!this.streaming) {
             this.streaming = true;
@@ -521,12 +538,14 @@ function sensai() {
         } else if (eventType === "result") {
           this._flushReveal();
           const content = resultContent(payload.message, this.streamingContent);
+          const toolCalls = finalToolCalls(payload.tool_calls, this.toolCalls);
           tab.messages.push({
             role: "assistant",
             content,
             plot_config_update: payload.plot_config_update ?? null,
             routed_to: payload.routed_to,
             model: payload.model ?? undefined,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
             ts: Date.now(),
           });
           if (payload.plot_config_update) {
@@ -543,21 +562,35 @@ function sensai() {
               detail: payload.plot_config_update,
             }));
           }
+          if (payload.versus_update) {
+            // after the plot update, which the comparison trials' data is fetched for.
+            // the store is told now as well, since the viewer publishes its own once it
+            // has loaded the trials and the next request in line must not start from the old one
+            (Alpine.store("dojo") as DojoStore).versus = payload.versus_update;
+            window.dispatchEvent(new CustomEvent("mojo-sensai-versus", {
+              detail: payload.versus_update,
+            }));
+          }
           if (payload.routed_to === "undo") {
             window.dispatchEvent(new CustomEvent("mojo-sensai-undo"));
           }
           this.thinkingLabel = null;
+          this.toolCalls = [];
           this.streaming = false;
           this.streamingContent = "";
         } else if (eventType === "error") {
           this._flushReveal();
+          // what it tried before it failed is the most useful thing to show with the error
+          const toolCalls = finalToolCalls(payload.tool_calls, this.toolCalls);
           tab.messages.push({
             role: "assistant",
             content: payload.detail ?? "An error occurred.",
             error: true,
+            ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
             ts: Date.now(),
           });
           this.thinkingLabel = null;
+          this.toolCalls = [];
           this.streaming = false;
           this.streamingContent = "";
         }
@@ -780,6 +813,9 @@ function sensaiMsgData(role: string, isLastUser = false) {
     settled: true,
     fullHeight: 0,
     copied: false,
+    // whether the reply's list of tool calls is open: it starts closed, since most
+    // readers want the answer and only some want how it was reached
+    toolsOpen: false,
     _role: role,
     get bubbleStyle(): string {
       return bubbleStyle({

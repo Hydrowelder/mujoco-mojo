@@ -96,7 +96,7 @@ import {
   selectRange,
   toggleSelection,
 } from "./lib/tab-session";
-import type { PlotProfile } from "./lib/plot-profile";
+import type { PlotProfile, VersusState } from "./lib/plot-profile";
 import {
   closedPlotTabEntry,
   duplicatePlotTab as copyPlotTab,
@@ -135,8 +135,10 @@ import {
   missingColumns,
   orderedRange,
   parseStoredVs,
+  versusState,
   vsActiveColumns,
   vsChipClass as chipClass,
+  vsDraftFromUpdate,
   vsNeedsFetch,
   vsTargetIds,
 } from "./lib/vs-sync";
@@ -2821,6 +2823,11 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       window.addEventListener("mojo-sensai-undo", () => {
         this.undo();
       });
+
+      window.addEventListener("mojo-sensai-versus", (e) => {
+        const detail = (e as CustomEvent<VersusState>).detail;
+        if (detail && typeof detail === "object") void this._applySensAIVersus(detail);
+      });
     },
 
     // -----------------------------------------------------------------------
@@ -2842,6 +2849,36 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.vsDraft.enabled = false;
       this.vsDraft.range = [...range];
       this.vsDraft.pinned = [...pinned];
+      this._publishVersus();
+    },
+
+    // shares the applied versus settings with SensAI, which sends them with each message
+    _publishVersus() {
+      (Alpine.store("dojo") as DojoStore).versus = versusState({
+        enabled: this.vs.enabled,
+        range: [...this.vs.range],
+        pinned: [...this.vs.pinned],
+      });
+    },
+
+    // applies a change SensAI made as the header's Apply does: into the draft, then
+    // synced. turned off, there is nothing to load
+    async _applySensAIVersus(update: VersusState) {
+      const draft = vsDraftFromUpdate(
+        update,
+        trialNumber(this.trialId),
+        this.vsDraft.range,
+      );
+      this.vsDraft.enabled = draft.enabled;
+      this.vsDraft.range = draft.range;
+      this.vsDraft.pinned = draft.pinned;
+      if (draft.enabled) {
+        await this.syncVsRange();
+        return;
+      }
+      this.vs.range = draft.range;
+      this.vs.pinned = [...draft.pinned];
+      this.handleVsToggle();
     },
 
     _initVsState() {
@@ -2857,6 +2894,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     },
 
     _persistVsState() {
+      this._publishVersus();
       try {
         localStorage.setItem(
           "mojo:plot:vs",

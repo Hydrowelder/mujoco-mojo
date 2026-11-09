@@ -4,11 +4,27 @@
 // rules for the composer and the message bubbles.
 
 import type { ColumnManifest } from "../models";
+import type { VersusState } from "./plot-profile";
 import {
   loadTabsFromStorage,
   newTabId,
   persistTabsToStorage,
 } from "./tab-session";
+
+// one tool call made while a message was answered, as the server records it:
+// `agent` is "chat" for a hand-off to a specialist and the specialist's route
+// ("plot_config", "job_status", ...) for its own calls. `args` and `result` are
+// one line each, already cut to a length the chat can preview
+export type SensAIToolStatus = "running" | "ok" | "rejected" | "failed";
+
+export interface SensAIToolCall {
+  id: number;
+  name: string;
+  agent: string;
+  args: string;
+  status: SensAIToolStatus;
+  result?: string | null;
+}
 
 export interface SensAIMessage {
   role: "user" | "assistant";
@@ -18,6 +34,8 @@ export interface SensAIMessage {
   routed_to?: string;
   // the model that wrote an assistant reply, when the server said which
   model?: string;
+  // the tool calls made to get to this reply, in the order they started
+  tool_calls?: SensAIToolCall[];
   ts: number;
 }
 
@@ -28,9 +46,15 @@ export interface SensAIResultPayload {
   model?: string | null;
   detail?: string;
   label?: string;
+  tool_calls?: SensAIToolCall[];
+  // versus mode as SensAI left it, when the message changed it
+  versus_update?: VersusState | null;
 }
 
-export type SensAIEventPayload = SensAIResultPayload & { delta?: string };
+// a `tool_start` event carries the whole call, and a `tool_end` event carries
+// the call's id with how it went, so each is a part of a SensAIToolCall
+export type SensAIEventPayload = SensAIResultPayload &
+  Partial<SensAIToolCall> & { delta?: string };
 
 // the one chat history there was before tabs, read once to become the first tab
 export const STORAGE_KEY = "sensai-messages";
@@ -136,6 +160,92 @@ export function createSseParser(): {
   };
 }
 
+// the calls so far with one server event applied: `tool_start` adds the call
+// (a repeat of an id already there is ignored) and `tool_end` settles the call
+// with that id. an event that does not make sense (a start with no name, an end
+// for a call that was never started) changes nothing
+export function applyToolEvent(
+  calls: SensAIToolCall[],
+  type: string,
+  payload: SensAIEventPayload,
+): SensAIToolCall[] {
+  if (type === "tool_start") {
+    if (
+      typeof payload.id !== "number" ||
+      typeof payload.name !== "string" ||
+      calls.some((c) => c.id === payload.id)
+    ) {
+      return calls;
+    }
+    return [
+      ...calls,
+      {
+        id: payload.id,
+        name: payload.name,
+        agent: payload.agent ?? "chat",
+        args: payload.args ?? "",
+        status: "running",
+      },
+    ];
+  }
+  if (type === "tool_end") {
+    return calls.map((c) =>
+      c.id === payload.id
+        ? {
+            ...c,
+            status: payload.status ?? "ok",
+            result: payload.result ?? null,
+          }
+        : c,
+    );
+  }
+  return calls;
+}
+
+// the calls to keep with a reply: the server's complete list when the reply
+// carried one, else the ones that streamed in while it ran
+export function finalToolCalls(
+  fromServer: SensAIToolCall[] | undefined,
+  streamed: SensAIToolCall[],
+): SensAIToolCall[] {
+  return Array.isArray(fromServer) ? fromServer : streamed;
+}
+
+// the line that opens or closes a reply's list of calls: how many there were,
+// and how many did not go through
+export function toolCallsTitle(calls: SensAIToolCall[] | undefined): string {
+  const list = calls ?? [];
+  const parts = [`${list.length} tool call${list.length === 1 ? "" : "s"}`];
+  const rejected = list.filter((c) => c.status === "rejected").length;
+  const failed = list.filter((c) => c.status === "failed").length;
+  if (rejected > 0) parts.push(`${rejected} rejected`);
+  if (failed > 0) parts.push(`${failed} failed`);
+  return parts.join(", ");
+}
+
+// the color of the dot before a call: it pulses while the call runs, and a call
+// that was turned away or never returned stands out from the ones that went through
+export function toolDotClass(status: string): string {
+  switch (status) {
+    case "ok":
+      return "bg-success-500";
+    case "rejected":
+      return "bg-warning-500";
+    case "failed":
+      return "bg-danger-500";
+    default:
+      return "bg-accent-500 animate-pulse";
+  }
+}
+
+// the tooltip of a call's row: the whole call, and what it returned or why it was
+// turned away, since the row itself cuts each to one line
+export function toolCallTooltip(call: SensAIToolCall): string {
+  const lines = [`${call.name} ${call.args}`.trim()];
+  if (call.result) lines.push(`${call.status === "rejected" ? "Rejected" : "Returned"}: ${call.result}`);
+  return lines.join("\n");
+}
+
 // what the assistant's reply says: the final message if it sent one, else
 // whatever had streamed in by then
 export function resultContent(
@@ -187,6 +297,7 @@ export function chatRequestBody(
   messages: SensAIMessage[],
   currentPlotConfigJson: string | null,
   manifest: ColumnManifest | null,
+  versus: VersusState | null = null,
 ): object {
   return {
     message,
@@ -197,6 +308,9 @@ export function chatRequestBody(
     rotatable_vectors: manifest?.rotatable_vectors ?? [],
     available_quats: manifest?.available_quats ?? [],
     current_plot_config_json: currentPlotConfigJson,
+    // versus mode as the trial viewer has it, so the agent can change it (null
+    // away from a trial, where there is nothing to change)
+    versus,
   };
 }
 
@@ -316,8 +430,8 @@ export function saveOpen(open: boolean): void {
 }
 
 // the chat history file: the export time and each message with its time,
-// sender, text and, when it has them, its error flag, route, model and plot
-// update
+// sender, text and, when it has them, its error flag, route, model, plot
+// update and tool calls
 export function historyExport(messages: SensAIMessage[], now: Date): object {
   return {
     exported_at: now.toISOString(),
@@ -332,6 +446,7 @@ export function historyExport(messages: SensAIMessage[], now: Date): object {
       if (m.model) entry["model"] = m.model;
       if (m.plot_config_update !== undefined)
         entry["plot_config_update"] = m.plot_config_update;
+      if (m.tool_calls?.length) entry["tool_calls"] = m.tool_calls;
       return entry;
     }),
   };
