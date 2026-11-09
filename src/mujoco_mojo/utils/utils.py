@@ -175,8 +175,12 @@ def web_client_available() -> bool:
     Whether the browser viewer can run: MuJoCo has its native `state_payload` bindings, and there is a client to serve, either the one built into the MuJoCo package or the one `MUJOCO_WEB_VIEWER_DIST` points at.
 
     Some builds (e.g. the 4.0.0 Windows wheel) have neither, and a client from `MUJOCO_WEB_VIEWER_DIST` cannot make up for missing bindings.
+
+    The bindings are imported, not looked up with `find_spec`. They are a submodule of MuJoCo's compiled extension that `mujoco.studio.web` registers in `sys.modules` when it is first imported, so there is no file for `find_spec` to find, and it only reports them once something else has imported that package (the first call here used to say no and the second yes).
     """
-    if importlib.util.find_spec("mujoco.studio.web.state_payload") is None:
+    try:
+        importlib.import_module("mujoco.studio.web.state_payload")
+    except ImportError:
         return False
     override = os.environ.get("MUJOCO_WEB_VIEWER_DIST")
     if override and Path(override).is_dir():
