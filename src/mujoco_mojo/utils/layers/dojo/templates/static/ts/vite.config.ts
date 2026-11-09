@@ -49,6 +49,11 @@ function watchTemplates(): Plugin {
   };
 }
 
+// the file with LF line endings, which is how git keeps it. litegraph.js's npm build has CRLF
+// on some lines, so a copy left as it is differs from the committed one on any checkout that
+// has no `core.autocrlf` (CI's), and the check that `static/dist` is current fails on it
+const withLf = (content: string): string => content.replace(/\r\n/g, "\n");
+
 // Dojo has no HTML entry points of its own (Jinja2 templates own the
 // <script>/<link> tags and reference these outputs by fixed path), so every
 // page bundle and the CSS bundle are listed explicitly as Rollup inputs
@@ -79,6 +84,7 @@ export default defineConfig({
           src: "node_modules/litegraph.js/build/litegraph.js",
           dest: "vendored",
           rename: { stripBase: true },
+          transform: withLf,
         },
         {
           src: "node_modules/litegraph.js/css/litegraph.css",
