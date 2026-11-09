@@ -1,7 +1,7 @@
 """
-Finding things in the user guides that ship with the package, for the guide agent SensAI answers "how do I use Mojo" with.
+Finding things in the docs that ship with the package, for the docs agent SensAI answers "how do I use Mojo" with.
 
-The guides are the pages under `docs/user-guides/` of the docs source that ships in the package (`DOCS_SOURCE_DIR`), and the command line reference, read as plain markdown (`utils/docs_text.py` removes the site's markup). This reads them, splits each at its headings into sections, and ranks sections against a question by word (BM25, with the words of a heading counting for more). There are no embeddings and nothing is downloaded, so it works offline and gives the same ranking every time.
+The pages are every `.md` file under `docs/` of the docs source that ships in the package (`DOCS_SOURCE_DIR`): the user guides, the command line reference, the changelog and the rest. Each is known by its path under `docs/`, and is read as plain markdown (`utils/docs_text.py` removes the site's markup). This splits each at its headings into sections, and ranks sections against a question by word (BM25, with the words of a heading counting for more). There are no embeddings and nothing is downloaded, so it works offline and gives the same ranking every time.
 """
 
 from __future__ import annotations
@@ -21,21 +21,22 @@ from mujoco_mojo.utils.docs_text import plain_text
 
 __all__ = [
     "SITE_URL",
-    "Guide",
+    "DocsPage",
     "Hit",
     "Section",
-    "guides",
-    "read_guide",
-    "search_guides",
+    "docs_pages",
+    "read_docs",
+    "search_docs",
     "slugify",
     "table_of_contents",
 ]
 
 SITE_URL = "https://hydrowelder.github.io/mujoco-mojo/"
-"""Where the docs site is, which the guide links are built on."""
+"""Where the docs site is, which the docs links are built on."""
 
 _HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
+_ESCAPED = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|<>~])")
 _WORD = re.compile(r"[a-z0-9]+")
 _STOP_WORDS = frozenset(
     "a about an and are as at be by can do does for from how i if in into is it its me my of "
@@ -48,17 +49,17 @@ _HEADING_WEIGHT = 3
 _BM25_K1 = 1.5
 _BM25_B = 0.75
 
-_MAX_HITS_PER_GUIDE = 2
+_MAX_HITS_PER_PAGE = 2
 _SNIPPET_LENGTH = 220
 _READ_LIMIT = 7000
 
 
 class Section(BaseModel):
-    """The part of a guide under one heading, up to the next heading of any level."""
+    """The part of a page under one heading, up to the next heading of any level."""
 
     path: str
     headings: tuple[str, ...]
-    """The guide's title, then each heading above this one, then this section's own."""
+    """The page's title, then each heading above this one, then this section's own."""
     level: int
     body: str
 
@@ -73,22 +74,22 @@ class Section(BaseModel):
     @property
     def link(self) -> str:
         """Where the section is on the docs site."""
-        base = guide_url(self.path)
+        base = docs_url(self.path)
         return base if self.level == 1 else f"{base}#{slugify(self.title)}"
 
 
-class Guide(BaseModel):
-    """One bundled guide."""
+class DocsPage(BaseModel):
+    """One bundled page of the docs."""
 
     path: str
-    """Its path as a guide, such as `workflow/getting-started.md` (its path under `docs/user-guides/`), or `reference/cli.md` for the command line reference."""
+    """Its path under `docs/`, such as `user-guides/workflow/getting-started.md`, `reference/cli.md` or `changelog.md`."""
     title: str
     text: str
     sections: list[Section]
 
     @property
     def url(self) -> str:
-        return guide_url(self.path)
+        return docs_url(self.path)
 
 
 class Hit(BaseModel):
@@ -106,15 +107,16 @@ def slugify(heading: str) -> str:
     return re.sub(r"[-\s]+", "-", text)
 
 
-def guide_url(path: str) -> str:
-    """The docs site address of the guide at `path`. A path under `reference/` is a page of the site's Reference section, and any other is a user guide."""
+def docs_url(path: str) -> str:
+    """The docs site address of the page at `path` (under `docs/`): `user-guides/workflow/x.md` is at `user-guides/workflow/x/`, and an `index.md` is the address of its folder."""
     page = path.removesuffix(".md")
-    section = "" if page.startswith("reference/") else "user-guides/"
-    return f"{SITE_URL}{section}{page}/"
+    if page == "index":
+        return SITE_URL
+    return f"{SITE_URL}{page.removesuffix('/index')}/"
 
 
 def _split_sections(path: str, text: str) -> tuple[str, list[Section]]:
-    """The title of a guide, and its sections in order."""
+    """The title of a page, and its sections in order."""
     stack: list[tuple[int, str]] = []
     sections: list[Section] = []
     heading: tuple[int, str] | None = None
@@ -143,48 +145,46 @@ def _split_sections(path: str, text: str) -> tuple[str, list[Section]]:
         level = len(found["hashes"])
         while stack and stack[-1][0] >= level:
             stack.pop()
-        heading = (level, found["title"])
+        # `mujoco\_mojo` is how a heading writes the underscore in `mujoco_mojo`
+        heading = (level, _ESCAPED.sub(r"\1", found["title"]))
         stack.append(heading)
         body = []
     close()
+    if not sections and text.strip():
+        # a page with no heading at all is one section, named by its path
+        body_text = text.strip("\n")
+        sections = [Section(path=path, headings=(path,), level=1, body=body_text)]
     title = sections[0].title if sections else path
     return title, sections
 
 
-def _guide_files(directory: Path) -> dict[str, Path]:
-    """The pages of the docs source in `directory` that are guides, each by the path it is known by: the pages under `docs/user-guides/` by their path there, and the command line reference as `reference/cli.md`. The rest of the docs (the home page, the changelog, the API reference stubs) are not guides."""
+def _docs_files(directory: Path) -> dict[str, Path]:
+    """Every page of the docs source in `directory`, each by its path under `docs/`."""
     docs = directory / "docs"
-    found = {
-        file.relative_to(docs / "user-guides").as_posix(): file
-        for file in (docs / "user-guides").rglob("*.md")
-    }
-    reference = docs / "reference" / "cli.md"
-    if reference.is_file():
-        found["reference/cli.md"] = reference
-    return found
+    return {file.relative_to(docs).as_posix(): file for file in docs.rglob("*.md")}
 
 
 @cache
-def guides(directory: Path = DOCS_SOURCE_DIR) -> tuple[Guide, ...]:
-    """Every guide in the docs source in `directory`, in path order."""
-    found: list[Guide] = []
-    # sorted by the parts of the path, as the files were when they were read from a folder, so a guide comes before the folder of the same name
+def docs_pages(directory: Path = DOCS_SOURCE_DIR) -> tuple[DocsPage, ...]:
+    """Every page of the docs source in `directory`, in path order."""
+    found: list[DocsPage] = []
+    # sorted by the parts of the path, as the files were when they were read from a folder, so a page comes before the folder of the same name
     for path, file in sorted(
-        _guide_files(directory).items(), key=lambda item: Path(item[0]).parts
+        _docs_files(directory).items(), key=lambda item: Path(item[0]).parts
     ):
         text = plain_text(file)
         title, sections = _split_sections(path, text)
-        found.append(Guide(path=path, title=title, text=text, sections=sections))
+        found.append(DocsPage(path=path, title=title, text=text, sections=sections))
     return tuple(found)
 
 
 def table_of_contents(directory: Path = DOCS_SOURCE_DIR) -> str:
-    """One line per guide, its path and title, for the agent's instructions."""
-    return "\n".join(f"- {g.path}: {g.title}" for g in guides(directory))
+    """One line per page, its path and title, for the agent's instructions."""
+    return "\n".join(f"- {g.path}: {g.title}" for g in docs_pages(directory))
 
 
 def _stem(word: str) -> str:
-    """The word with a common ending taken off, so `running`, `runs` and `run` meet. Crude on purpose: it only has to make a question's words and the guide's agree."""
+    """The word with a common ending taken off, so `running`, `runs` and `run` meet. Crude on purpose: it only has to make a question's words and the page's agree."""
     for ending in ("ing", "ed", "es", "s"):
         if word.endswith(ending) and len(word) - len(ending) >= 3:
             word = word[: -len(ending)]
@@ -235,7 +235,7 @@ class _Index:
 
 @cache
 def _index(directory: Path) -> _Index:
-    return _Index([s for g in guides(directory) for s in g.sections])
+    return _Index([s for g in docs_pages(directory) for s in g.sections])
 
 
 def _snippet(section: Section, terms: set[str]) -> str:
@@ -266,10 +266,10 @@ def _snippet(section: Section, terms: set[str]) -> str:
     return best
 
 
-def search_guides(
+def search_docs(
     query: str, limit: int = 5, directory: Path = DOCS_SOURCE_DIR
 ) -> list[Hit]:
-    """The sections that best answer `query`, best first, at most two from any one guide. Empty when no word of the query is in the guides."""
+    """The sections that best answer `query`, best first, at most two from any one page. Empty when no word of the query is in the docs."""
     terms = set(_terms(query))
     if not terms:
         return []
@@ -283,50 +283,48 @@ def search_guides(
         key=lambda pair: (-pair[0], pair[1]),
     )
     hits: list[Hit] = []
-    per_guide: Counter[str] = Counter()
+    per_page: Counter[str] = Counter()
     for score, i in ranked:
         section = index.sections[i]
-        if per_guide[section.path] >= _MAX_HITS_PER_GUIDE:
+        if per_page[section.path] >= _MAX_HITS_PER_PAGE:
             continue
-        per_guide[section.path] += 1
+        per_page[section.path] += 1
         hits.append(Hit(section=section, score=score, snippet=_snippet(section, terms)))
         if len(hits) == limit:
             break
     return hits
 
 
-def _find_guide(path: str, directory: Path) -> Guide | None:
-    """The guide a path names. A model rarely writes it exactly, so a leading `docs/` or `user-guides/`, a missing `.md` and a bare file name are all accepted."""
-    wanted = path.strip().strip("/")
-    for prefix in ("docs/", "user-guides/"):
-        wanted = wanted.removeprefix(prefix)
+def _find_docs_page(path: str, directory: Path) -> DocsPage | None:
+    """The page a path names. A model rarely writes it exactly, so a leading `docs/`, a missing `.md` and the end of a path (down to a bare file name) are all accepted."""
+    wanted = path.strip().strip("/").removeprefix("docs/")
     wanted = wanted.removesuffix(".md") + ".md"
-    every = guides(directory)
-    for guide in every:
-        if guide.path == wanted:
-            return guide
+    every = docs_pages(directory)
+    for page in every:
+        if page.path == wanted:
+            return page
     ends = [g for g in every if g.path.endswith("/" + wanted)]
     return ends[0] if len(ends) == 1 else None
 
 
-def _find_section(guide: Guide, name: str) -> int | None:
+def _find_section(page: DocsPage, name: str) -> int | None:
     """The position of the section called `name` (its exact title, then any title that contains it), ignoring case."""
     wanted = name.strip().lower()
     for pred in (
         lambda t: t.lower() == wanted,
         lambda t: wanted in t.lower(),
     ):
-        for i, section in enumerate(guide.sections):
+        for i, section in enumerate(page.sections):
             if pred(section.title):
                 return i
     return None
 
 
-def _section_text(guide: Guide, i: int) -> str:
+def _section_text(page: DocsPage, i: int) -> str:
     """A section and the sections under it, with their headings."""
-    first = guide.sections[i]
+    first = page.sections[i]
     parts = []
-    for section in guide.sections[i:]:
+    for section in page.sections[i:]:
         if section is not first and section.level <= first.level:
             break
         parts.append(
@@ -335,44 +333,40 @@ def _section_text(guide: Guide, i: int) -> str:
     return "\n\n".join(parts)
 
 
-def read_guide(
+def read_docs(
     path: str,
     section: str = "",
     limit: int = _READ_LIMIT,
     directory: Path = DOCS_SOURCE_DIR,
 ) -> str:
     """
-    A guide, or one section of it, with its title and docs site link on top.
+    A page, or one section of it, with its title and docs site link on top.
 
-    A guide longer than `limit` characters is cut there with a note listing its sections, so a reader can ask for one. A path or section that is not there is answered with what is, not an error.
+    A page longer than `limit` characters is cut there with a note listing its sections, so a reader can ask for one. A path or section that is not there is answered with what is, not an error.
     """
-    guide = _find_guide(path, directory)
-    if guide is None:
-        every = [g.path for g in guides(directory)]
+    page = _find_docs_page(path, directory)
+    if page is None:
+        every = [g.path for g in docs_pages(directory)]
         close = difflib.get_close_matches(
             path.strip().strip("/"), every, n=3, cutoff=0.4
         )
         hint = f" Closest: {', '.join(close)}." if close else ""
-        return (
-            f"There is no guide at '{path}'.{hint} The guides are: {', '.join(every)}."
-        )
-    top = f"{guide.title} ({guide.url})\n\n"
+        return f"There is no page at '{path}'.{hint} The pages are: {', '.join(every)}."
+    top = f"{page.title} ({page.url})\n\n"
     if section:
-        i = _find_section(guide, section)
+        i = _find_section(page, section)
         if i is None:
-            titles = ", ".join(s.title for s in guide.sections)
-            return f"{top}This guide has no section called '{section}'. Its sections are: {titles}."
-        text = _section_text(guide, i)
-        top = (
-            f"{guide.title} > {guide.sections[i].title} ({guide.sections[i].link})\n\n"
-        )
+            titles = ", ".join(s.title for s in page.sections)
+            return f"{top}This page has no section called '{section}'. Its sections are: {titles}."
+        text = _section_text(page, i)
+        top = f"{page.title} > {page.sections[i].title} ({page.sections[i].link})\n\n"
     else:
-        text = guide.text.strip("\n")
+        text = page.text.strip("\n")
     if len(text) <= limit:
         return top + text
-    titles = ", ".join(s.title for s in guide.sections)
+    titles = ", ".join(s.title for s in page.sections)
     cut = text[:limit].rsplit("\n", 1)[0]
     return (
-        f"{top}{cut}\n\n[Cut here. The guide's sections are: {titles}. "
-        "Call read_guide again with the path and section set to one of them.]"
+        f"{top}{cut}\n\n[Cut here. The page's sections are: {titles}. "
+        "Call read_docs again with the path and section set to one of them.]"
     )

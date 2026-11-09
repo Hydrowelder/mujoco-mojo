@@ -54,7 +54,7 @@ from mujoco_mojo.utils.layers.dojo.sensai import (
     SensAIDeps,
     chat_agent,
     column_manifest_agent,
-    guide_agent,
+    docs_agent,
     job_status_agent,
     plot_config_agent,
 )
@@ -719,14 +719,14 @@ class TestJobAgent:
         assert "\\" not in prompt
 
 
-def run_guide_agent(model: FunctionModel) -> str:
+def run_docs_agent(model: FunctionModel) -> str:
     return asyncio.run(
-        guide_agent.run("do it", model=model, deps=make_deps(None))
+        docs_agent.run("do it", model=model, deps=make_deps(None))
     ).output
 
 
-class TestGuideAgent:
-    """The agent that answers "how do I use Mojo" from the user guides that ship with the package."""
+class TestDocsAgent:
+    """The agent that answers "how do I use Mojo" from the docs that ship with the package."""
 
     @staticmethod
     def results(*calls: Step) -> list[Any]:
@@ -740,7 +740,7 @@ class TestGuideAgent:
 
             return run
 
-        run_guide_agent(
+        run_docs_agent(
             scripted(
                 calls[0], *[collecting(c) for c in calls[1:]], collecting(say("done"))
             )
@@ -748,11 +748,11 @@ class TestGuideAgent:
         return seen
 
     def test_a_search_lists_the_matches_with_their_path_section_and_link(self) -> None:
-        seen = self.results(call("search_guides", query="submit a job to SLURM"))
+        seen = self.results(call("search_docs", query="submit a job to SLURM"))
 
         text = str(seen[0])
         assert text.startswith(
-            "1. workflow/running-jobs/running-jobs.md | Running Jobs"
+            "1. user-guides/workflow/running-jobs/running-jobs.md | Running Jobs"
         )
         assert (
             "https://hydrowelder.github.io/mujoco-mojo/user-guides/workflow/running-jobs/running-jobs/"
@@ -760,21 +760,21 @@ class TestGuideAgent:
         )
 
     def test_a_search_that_matches_nothing_says_so_and_points_at_the_list(self) -> None:
-        seen = self.results(call("search_guides", query="zzzqqq"))
+        seen = self.results(call("search_docs", query="zzzqqq"))
 
-        assert "Nothing in the guides matches" in str(seen[0])
+        assert "Nothing in the docs matches" in str(seen[0])
 
-    def test_a_guide_is_read_with_its_link_on_top(self) -> None:
-        seen = self.results(call("read_guide", path="features/pose-context.md"))
+    def test_a_page_is_read_with_its_link_on_top(self) -> None:
+        seen = self.results(call("read_docs", path="features/pose-context.md"))
 
         assert str(seen[0]).startswith(
             "Pose Context (https://hydrowelder.github.io/mujoco-mojo/user-guides/features/pose-context/)"
         )
 
-    def test_a_section_of_a_guide_can_be_read(self) -> None:
+    def test_a_section_of_a_page_can_be_read(self) -> None:
         seen = self.results(
             call(
-                "read_guide",
+                "read_docs",
                 path="workflow/runtime-script.md",
                 section="Video Recording",
             )
@@ -782,15 +782,15 @@ class TestGuideAgent:
 
         assert str(seen[0]).startswith("Runtime Script > Video Recording (")
 
-    def test_a_path_that_is_not_a_guide_is_answered_with_the_guides_not_an_error(
+    def test_a_path_that_is_not_a_page_is_answered_with_the_pages_not_an_error(
         self,
     ) -> None:
-        seen = self.results(call("read_guide", path="workflow/nope.md"))
+        seen = self.results(call("read_docs", path="workflow/nope.md"))
 
-        assert "There is no guide at 'workflow/nope.md'" in str(seen[0])
+        assert "There is no page at 'workflow/nope.md'" in str(seen[0])
         assert "workflow/getting-started.md" in str(seen[0])
 
-    def test_the_instructions_list_the_guides_and_say_to_answer_only_from_them(
+    def test_the_instructions_list_the_pages_and_say_to_answer_only_from_them(
         self,
     ) -> None:
         prompts: list[str] = []
@@ -805,15 +805,20 @@ class TestGuideAgent:
             )
             return ModelResponse(parts=[TextPart("ok")])
 
-        run_guide_agent(FunctionModel(look))
+        run_docs_agent(FunctionModel(look))
 
         prompt = prompts[0]
-        assert "- workflow/getting-started.md: Getting Started" in prompt
-        assert "- features/requirements.md: Requirements Checker" in prompt
-        assert "from the Mojo user guides, and only from them" in prompt
+        assert "- user-guides/workflow/getting-started.md: Getting Started" in prompt
+        assert "- user-guides/features/requirements.md: Requirements Checker" in prompt
+        assert "and only from them" in prompt
         assert "Do not answer from memory" in prompt
-        assert 'search_guides(query="submit a job to SLURM")' in prompt
+        assert 'search_docs(query="submit a job to SLURM")' in prompt
         assert "See [Title](link)" in prompt
+        # the changelog is one of the pages, and the agent is told what it is for
+        assert "- changelog.md: Changelog" in prompt
+        assert "changelog.md lists what changed in each release" in prompt
+        # a backslash at the end of a line of the source continues it; written twice it showed up in the prompt
+        assert "\\" not in prompt
 
     def test_every_parameter_of_a_tool_says_what_to_send_with_an_example(self) -> None:
         tools: dict[str, Any] = {}
@@ -823,9 +828,9 @@ class TestGuideAgent:
                 tools[tool.name] = tool.parameters_json_schema["properties"]
             return ModelResponse(parts=[TextPart("ok")])
 
-        run_guide_agent(FunctionModel(look))
+        run_docs_agent(FunctionModel(look))
 
-        assert set(tools) == {"search_guides", "read_guide"}
+        assert set(tools) == {"search_docs", "read_docs"}
         for name, parameters in tools.items():
             for parameter, schema in parameters.items():
                 assert "such as" in schema.get("description", ""), (name, parameter)
@@ -835,16 +840,16 @@ class TestGuideAgent:
     ) -> None:
         caplog.set_level(logging.INFO)
 
-        run_guide_agent(
+        run_docs_agent(
             scripted(
-                call("search_guides", query="submit a job to SLURM"),
-                call("read_guide", path="workflow/init.md", section="Generated Files"),
+                call("search_docs", query="submit a job to SLURM"),
+                call("read_docs", path="workflow/init.md", section="Generated Files"),
                 say("done"),
             )
         )
 
-        assert "SensAI search_guides 'submit a job to SLURM':" in caplog.text
-        assert "SensAI read_guide: workflow/init.md Generated Files" in caplog.text
+        assert "SensAI search_docs 'submit a job to SLURM':" in caplog.text
+        assert "SensAI read_docs: workflow/init.md Generated Files" in caplog.text
 
 
 class TestEditingThePlot:
@@ -2366,10 +2371,10 @@ class TestChatRoute:
                 "plot",
             ),
             (
-                "ask_guide_agent",
-                "search_guides",
+                "ask_docs_agent",
+                "search_docs",
                 {"query": "slurm"},
-                "while looking through the guides",
+                "while looking through the docs",
                 "one thing at a time",
                 "plot",
             ),
@@ -2541,7 +2546,7 @@ class TestChatRoute:
 
         assert data.get("model") is None
 
-    def test_a_how_to_question_is_answered_from_the_guides(
+    def test_a_how_to_question_is_answered_from_the_docs(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         answer = (
@@ -2549,10 +2554,10 @@ class TestChatRoute:
             "(https://hydrowelder.github.io/mujoco-mojo/user-guides/workflow/running-jobs/running-jobs/)."
         )
         model = self.router_model(
-            [call("ask_guide_agent", request="how do I submit to SLURM?"), say(answer)],
+            [call("ask_docs_agent", request="how do I submit to SLURM?"), say(answer)],
             [
-                call("search_guides", query="submit a job to SLURM"),
-                call("read_guide", path="workflow/running-jobs/running-jobs.md"),
+                call("search_docs", query="submit a job to SLURM"),
+                call("read_docs", path="workflow/running-jobs/running-jobs.md"),
                 say(answer),
             ],
             name="gemini-test-flash",
@@ -2563,14 +2568,14 @@ class TestChatRoute:
         )
 
         assert data["message"] == answer
-        assert data["routed_to"] == "guide"
+        assert data["routed_to"] == "docs"
         assert data["plot_config_update"] is None
         assert data["model"] == "gemini-test-flash"
 
     def test_a_how_to_answer_reaches_the_chat_agent_whole(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """What the guide agent writes is what the chat agent is handed, code block and link included, for it to pass on."""
+        """What the docs agent writes is what the chat agent is handed, code block and link included, for it to pass on."""
         answer = "Run it:\n\n```python\nrunner.run()\n```\n\nSee [Running Jobs](https://x.test/)."
         handed: list[Any] = []
 
@@ -2579,14 +2584,14 @@ class TestChatRoute:
             return ModelResponse(parts=[TextPart("relayed")])
 
         model = self.router_model(
-            [call("ask_guide_agent", request="how do I run?"), relay], [say(answer)]
+            [call("ask_docs_agent", request="how do I run?"), relay], [say(answer)]
         )
 
         self.chat(client, monkeypatch, model)
 
         assert handed == [answer]
 
-    def test_the_chat_agent_is_told_to_send_how_to_questions_to_the_guide_agent(
+    def test_the_chat_agent_is_told_to_send_how_to_questions_to_the_docs_agent(
         self,
     ) -> None:
         prompts: list[str] = []
@@ -2607,8 +2612,8 @@ class TestChatRoute:
             chat_agent.run("hi", model=FunctionModel(look), deps=make_deps(None))
         )
 
-        assert "ask_guide_agent" in tools
-        assert "go to ask_guide_agent" in prompts[0]
+        assert "ask_docs_agent" in tools
+        assert "go to ask_docs_agent" in prompts[0]
         assert "pass it on as it is" in prompts[0]
 
     def test_a_signal_the_trial_lacks_is_refused_because_the_browser_sent_its_columns(
@@ -2708,10 +2713,10 @@ class TestChatRoute:
                 call("final_result"),
             ),
             (
-                "ask_guide_agent",
-                "search_guides",
+                "ask_docs_agent",
+                "search_docs",
                 {"query": "slurm"},
-                "guide",
+                "docs",
                 say("Found it."),
             ),
             (

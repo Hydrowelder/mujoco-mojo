@@ -1,3 +1,5 @@
+# About
+
 **MuJoCo Mojo**[^1] was developed by David Gable to add additional analytical capability to the [MuJoCo](https://mujoco.org/){target:"\_blank"} physics engine. Check out my other work on [my website](https://www.david-gable.com/){target:"\_blank"}.
 
 !!! info "Disclaimer & Attribution"

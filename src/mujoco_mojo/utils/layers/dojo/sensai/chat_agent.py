@@ -16,7 +16,7 @@ from mujoco_mojo.utils.log import get_logger
 
 from .column_manifest_agent import column_manifest_agent
 from .deps import SensAIDeps
-from .guide_agent import guide_agent
+from .docs_agent import docs_agent
 from .job_status_agent import job_status_agent
 from .plot_config_agent import plot_config_agent
 
@@ -35,9 +35,9 @@ them exactly.
 
 Questions about how to use MuJoCo Mojo itself (installing it, writing the generate or \
 runtime scripts, running jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the \
-examples) go to ask_guide_agent. Its answer comes from the Mojo user guides and is already \
-short, so pass it on as it is: keep its steps, its code blocks and its "See" link, and do \
-not add anything the guides did not say.
+examples) and what changed in a release go to ask_docs_agent. Its answer comes from the Mojo \
+docs and is already short, so pass it on as it is: keep its steps, its code blocks and its \
+"See" link, and do not add anything the docs did not say.
 """
 
 logger = get_logger(__name__)
@@ -132,27 +132,27 @@ async def ask_column_manifest_agent(
 
 
 @chat_agent.tool
-async def ask_guide_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
+async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
-    Forward a question about how to use MuJoCo Mojo to the guide agent and return its answer.
+    Forward a question about how to use MuJoCo Mojo, or what changed in a release, to the docs agent and return its answer.
 
-    Use this for "how do I..." and "what is..." questions about Mojo itself: installing it, starting a project, the generate and runtime scripts, running Monte Carlo jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the examples. It answers from the Mojo user guides and links the guide.
+    Use this for "how do I..." and "what is..." questions about Mojo itself: installing it, starting a project, the generate and runtime scripts, running Monte Carlo jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the examples, and what changed in a release. It answers from the Mojo docs (the user guides, the command line reference and the changelog) and links the page.
 
     Args:
-        ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `guide_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.
+        ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `docs_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.
         request: The question, in natural language, such as "how do I submit a job to SLURM?".
 
     Returns:
-        The answer, with the steps or code it found and a link to the guide. Pass it on to the user as it is.
+        The answer, with the steps or code it found and a link to the page. Pass it on to the user as it is.
 
     """
-    result = await guide_agent.run(
+    result = await docs_agent.run(
         request,
         model=_delegate_model(ctx),
         deps=ctx.deps,
         usage=ctx.usage,
         usage_limits=usage_limits(ctx.deps.max_requests),
-        event_stream_handler=_watch(ctx, "guide"),
+        event_stream_handler=_watch(ctx, "docs"),
     )
     return result.output
 

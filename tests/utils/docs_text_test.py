@@ -1,4 +1,4 @@
-"""Tests for reading a page of the docs source as plain markdown, which is how SensAI's guide agent reads the guides. The code of the guides is already in the pages (the docs source generator fills in each include), so this only removes the site's markup."""
+"""Tests for reading a page of the docs source as plain markdown, which is how SensAI's docs agent reads the docs. The code of the guides is already in the pages (the docs source generator fills in each include), so this only removes the site's markup."""
 
 import re
 from pathlib import Path
@@ -12,12 +12,9 @@ DOCS = DOCS_SOURCE_DIR / "docs"
 _INCLUDE_LINE = re.compile(r'^\s*--8<--\s+"', re.MULTILINE)
 
 
-def guide_pages() -> list[Path]:
-    """The pages SensAI reads: the user guides, and the command line reference."""
-    return [
-        *sorted((DOCS / "user-guides").rglob("*.md")),
-        DOCS / "reference" / "cli.md",
-    ]
+def docs_pages() -> list[Path]:
+    """The pages SensAI reads: every page of the docs source."""
+    return sorted(DOCS.rglob("*.md"))
 
 
 class TestCleaning:
@@ -57,29 +54,59 @@ class TestCleaning:
 
         assert clean(text) == "[Open](https://x.test/a)\n"
 
+    def test_front_matter_is_removed_from_the_top_of_a_page_only(self) -> None:
+        assert clean("---\nhide:\n  - navigation\n---\n# Home\n") == "# Home\n"
+        assert clean("a\n\n---\n\nb\n") == "a\n\n---\n\nb\n"
+
+    def test_style_and_script_blocks_are_removed(self) -> None:
+        text = (
+            "a\n<style>\n.x { color: red; }\n</style>\nb\n<script>run()</script>\nc\n"
+        )
+
+        assert clean(text) == "a\n\nb\n\nc\n"
+
+    def test_a_row_of_linked_images_is_removed(self) -> None:
+        badges = (
+            '<p align="center">\n'
+            '  <a href="https://x.test" class="badge-link">\n'
+            '    <img src="https://x.test/a.svg" alt="A">\n'
+            "  </a>\n"
+            '  <a href="https://y.test">\n'
+            '    <img src="https://y.test/b.svg" alt="B">\n'
+            "  </a>\n"
+            "</p>\n"
+        )
+
+        assert clean(f"# Home\n\n{badges}\nText.\n") == "# Home\n\nText.\n"
+
+    def test_a_paragraph_with_words_in_it_is_not_a_badge_row(self) -> None:
+        text = '<p align="center">Read <a href="https://x.test">this</a></p>\n'
+
+        assert clean(text) == text
+
     def test_runs_of_blank_lines_outside_code_become_one(self) -> None:
         text = "a\n\n\n\nb\n\n```\nx\n\n\ny\n```\n"
 
         assert clean(text) == "a\n\nb\n\n```\nx\n\n\ny\n```\n"
 
 
-class TestTheRealGuides:
-    """The guides in the package, so a page that a rule cannot read shows up here and not as a bad answer."""
+class TestTheRealDocs:
+    """The docs in the package, so a page that a rule cannot read shows up here and not as a bad answer."""
 
-    def test_there_are_guides_to_read(self) -> None:
-        assert len(guide_pages()) >= 20
-        assert all(page.is_file() for page in guide_pages())
+    def test_there_are_pages_to_read(self) -> None:
+        assert len(docs_pages()) >= 20
+        assert all(page.is_file() for page in docs_pages())
 
-    def test_no_guide_has_an_include_left(self) -> None:
+    def test_no_page_has_an_include_left(self) -> None:
         """An include that does not resolve, because a file or a section was renamed, would be read as text."""
-        for page in guide_pages():
+        for page in docs_pages():
             text = plain_text(page)
 
             assert not _INCLUDE_LINE.search(text), page.relative_to(DOCS)
 
     def test_no_site_markup_is_left_for_a_plain_reader(self) -> None:
         """Read as plain text, an image is a file that does not ship and a comment is a note for the maintainers."""
-        for page in guide_pages():
+        for page in docs_pages():
             text = plain_text(page)
             where = page.relative_to(DOCS)
 
@@ -104,9 +131,11 @@ class TestTheRealGuides:
 
         assert "Figure: A preview of the **Mosaic** page" in plain_text(page)
 
-    def test_each_guide_opens_with_its_title(self) -> None:
-        """The title is how a reader, and SensAI's table of contents, names the guide."""
-        for page in guide_pages():
+    def test_each_page_opens_with_its_title(self) -> None:
+        """The title is how a reader, and SensAI's table of contents, names the page. `about.md` is a short note with no heading."""
+        for page in docs_pages():
+            if page.name == "about.md":
+                continue
             first = plain_text(page).lstrip().splitlines()[0]
 
             assert first.startswith("# "), (

@@ -995,8 +995,8 @@ describe("applyToolEvent", () => {
   });
 
   it("takes a call with no agent or arguments to be the chat agent's, with none", () => {
-    expect(applyToolEvent([], "tool_start", { id: 1, name: "ask_guide_agent" })).toEqual([
-      { id: 1, name: "ask_guide_agent", agent: "chat", args: "", status: "running" },
+    expect(applyToolEvent([], "tool_start", { id: 1, name: "ask_docs_agent" })).toEqual([
+      { id: 1, name: "ask_docs_agent", agent: "chat", args: "", status: "running" },
     ]);
   });
 

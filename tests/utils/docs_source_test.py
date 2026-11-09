@@ -93,8 +93,10 @@ def test_a_page_holds_the_code_it_includes() -> None:
 
 def test_the_changelog_page_holds_the_changelog() -> None:
     text = (DOCS_SOURCE_DIR / "docs" / "changelog.md").read_text(encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    newest = next(line for line in changelog.splitlines() if line.startswith("## "))
 
-    assert "## Unreleased Version" in text
+    assert newest in text
 
 
 @pytest.fixture

@@ -64,6 +64,7 @@ export const PLACEHOLDER_EXAMPLES: readonly string[] = [
   "How do I install Mojo?",
   "What does mujoco-mojo init do?",
   "What examples are there?",
+  "What changed in the latest version?",
 ];
 
 // how long each step takes: a character typed, a character backspaced (quicker,

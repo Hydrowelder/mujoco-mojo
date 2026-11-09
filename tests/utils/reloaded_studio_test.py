@@ -850,6 +850,7 @@ def test_the_browser_client_is_found_where_the_override_points_or_in_the_package
 def test_a_client_is_no_use_without_the_browser_viewers_bindings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    # the bindings are imported, so a None entry is how a build without them looks
+    monkeypatch.setitem(sys.modules, "mujoco.studio.web.state_payload", None)
     monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path))
     assert not studio_module.web_client_available()

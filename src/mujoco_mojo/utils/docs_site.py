@@ -49,6 +49,16 @@ _PATHS_SETTING = "paths: [src]"
 # the `watch:` list, folders of the repo that a live preview reloads on. a build watches nothing, and the builder refuses a folder that is not there (`src`)
 _WATCH_SETTING = re.compile(r"^watch:[ \t]*\n(?:[ \t]+-[^\n]*\n?)+", re.MULTILINE)
 
+# what the offline build changes, in the config's text. the `offline` plugin makes the site work from the file system, search included, which needs these off: instant navigation and the repository link (the first loads pages and the second reads GitHub, both with `fetch`, which a browser refuses on a `file://` page). the plugin also loads a shim from unpkg.com, unless `extra.polyfills` names a file with `iframe-worker` in its name, so it is pointed at the copy in the docs folder
+_PLUGINS_SETTING = re.compile(r"^plugins:[ \t]*\n", re.MULTILINE)
+_EXTRA_SETTING = re.compile(r"^extra:[ \t]*\n", re.MULTILINE)
+_INSTANT_FEATURES = re.compile(
+    r"^[ \t]*-[ \t]+navigation\.instant(?:\.(?:preview|prefetch|progress))?[ \t]*\n",
+    re.MULTILINE,
+)
+_REPO_URL_SETTING = re.compile(r"^repo_url:.*\n", re.MULTILINE)
+OFFLINE_SHIM = "javascripts/iframe-worker-shim.js"
+
 # the address the online docs are published at. the site is served from `/` here, and the 404 page is the one page that links its styles and scripts by absolute path (from this address' path, `/mujoco-mojo/`), which are not found at that path
 _SITE_URL_SETTING = re.compile(r"^site_url:.*$", re.MULTILINE)
 _LOCAL_SITE_URL = "http://localhost/"
@@ -171,8 +181,22 @@ def link_missing_assets(docs_dir: Path, ref: str) -> int:
     return changed
 
 
+def _make_offline(text: str) -> str:
+    """`text` (a config) with the `offline` plugin on, instant navigation and the repository link removed, and the copy of the iframe-worker shim in the docs folder named as the one to load."""
+    if not _PLUGINS_SETTING.search(text) or not _EXTRA_SETTING.search(text):
+        raise DocsBuildError(
+            "The bundled mkdocs.yml has no `plugins:` or no `extra:` line, so the build cannot make the site work offline. Update `_make_offline` in mujoco_mojo/utils/docs_site.py to match it."
+        )
+    text = _PLUGINS_SETTING.sub("plugins:\n  - offline\n", text, count=1)
+    text = _INSTANT_FEATURES.sub("", text)
+    text = _REPO_URL_SETTING.sub("", text)
+    return _EXTRA_SETTING.sub(
+        f"extra:\n  polyfills:\n    - {OFFLINE_SHIM}\n", text, count=1
+    )
+
+
 def patch_config(config: Path, package_dir: Path) -> None:
-    """Points the two paths in `config` (`mkdocs.yml`) that name the package's source in the repo, the one the API reference is written from and the one the docstrings are read from, at the installed package at `package_dir`, removes the `watch:` list, and makes the site's address a local one. A text edit and not a YAML round trip, since the file has `!!python/name:` tags."""
+    """Points the two paths in `config` (`mkdocs.yml`) that name the package's source in the repo, the one the API reference is written from and the one the docstrings are read from, at the installed package at `package_dir`, removes the `watch:` list, makes the site's address a local one, and makes the site work offline (`_make_offline`). A text edit and not a YAML round trip, since the file has `!!python/name:` tags. Only the copy that is built here is edited: the online docs are built from the repo's own config."""
     text = config.read_text(encoding="utf-8")
     for setting in (_MODULES_SETTING, _PATHS_SETTING):
         if setting not in text:
@@ -187,7 +211,7 @@ def patch_config(config: Path, package_dir: Path) -> None:
     )
     text = _WATCH_SETTING.sub("", text)
     text = _SITE_URL_SETTING.sub(f"site_url: {_LOCAL_SITE_URL}", text)
-    config.write_text(text, encoding="utf-8", newline="")
+    config.write_text(_make_offline(text), encoding="utf-8", newline="")
 
 
 def _copy_source(source_dir: Path, stage: Path) -> None:

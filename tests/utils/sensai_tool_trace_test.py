@@ -187,7 +187,7 @@ class TestRecording:
         trace = ToolTrace()
 
         async def run() -> None:
-            handler = trace.handler("guide")
+            handler = trace.handler("docs")
             # a handler is given the run's context, which it does not use
             ctx = RunContext(deps=None, model=TestModel(), usage=RunUsage())
             await handler(ctx, stream([started("a", "1")]))

@@ -11,6 +11,7 @@ from starlette.testclient import TestClient
 import mujoco_mojo.utils.docs_site as docs_site
 from mujoco_mojo.meta import DOCS_SOURCE_DIR
 from mujoco_mojo.utils.docs_site import (
+    OFFLINE_SHIM,
     DocsBuildError,
     build_docs,
     built_versions,
@@ -242,6 +243,7 @@ def test_an_image_in_a_code_block_is_left_alone(docs: Path) -> None:
 CONFIG = """\
 site_name: Test
 site_url: https://hydrowelder.github.io/mujoco-mojo/
+repo_url: https://github.com/Hydrowelder/mujoco-mojo
 
 watch:
   - docs
@@ -251,7 +253,17 @@ watch:
 nav:
   - Home: index.md
 
+theme:
+  features:
+    - navigation.tabs
+    - navigation.instant
+    # - navigation.instant.preview
+    - navigation.instant.prefetch
+    - navigation.instant.progress
+    - content.code.copy
+
 plugins:
+  - search
   - api-autonav:
       modules: [src/mujoco_mojo]
   - mkdocstrings:
@@ -262,6 +274,9 @@ plugins:
 markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
+
+extra:
+  generator: false
 """
 
 
@@ -281,6 +296,37 @@ def test_the_config_is_pointed_at_the_installed_package(tmp_path: Path) -> None:
     # nothing else is touched, tags included
     assert "!!python/name:material.extensions.emoji.twemoji" in text
     assert "nav:\n  - Home: index.md\n" in text
+
+
+def test_the_site_is_made_to_work_offline(tmp_path: Path) -> None:
+    config = tmp_path / "mkdocs.yml"
+    config.write_text(CONFIG)
+
+    patch_config(config, tmp_path / "mujoco_mojo")
+
+    text = config.read_text()
+    # the plugin is on, ahead of the others
+    assert "plugins:\n  - offline\n  - search\n  - api-autonav:" in text
+    # what it cannot work with is gone: every instant navigation feature (a commented one is left as it was) and the repository link
+    lines = [x.strip() for x in text.splitlines() if not x.strip().startswith("#")]
+    assert not [x for x in lines if x.startswith("- navigation.instant")]
+    assert "repo_url" not in text
+    # the shim it needs is the local copy, not the one it would fetch from unpkg.com
+    assert f"extra:\n  polyfills:\n    - {OFFLINE_SHIM}\n  generator: false" in text
+    # the rest of the theme is as it was
+    assert "    - navigation.tabs\n" in text
+    assert "    - content.code.copy\n" in text
+
+
+@pytest.mark.parametrize("setting", ["plugins:", "extra:"])
+def test_a_config_with_no_plugins_or_extra_to_edit_is_an_error(
+    tmp_path: Path, setting: str
+) -> None:
+    config = tmp_path / "mkdocs.yml"
+    config.write_text(CONFIG.replace(f"\n{setting}\n", "\n# gone\n"))
+
+    with pytest.raises(DocsBuildError, match="_make_offline"):
+        patch_config(config, tmp_path / "mujoco_mojo")
 
 
 def test_a_path_with_a_quote_or_backslash_is_still_valid_yaml(tmp_path: Path) -> None:
@@ -315,6 +361,28 @@ def test_the_config_in_the_bundle_is_one_it_can_edit(tmp_path: Path) -> None:
     assert "src/mujoco_mojo" not in text
     assert "paths: [src]" not in text
     assert "\nwatch:" not in text
+    assert "plugins:\n  - offline\n" in text
+    assert "\n    - navigation.instant" not in text
+    assert "\nrepo_url:" not in text
+
+
+def test_the_shim_the_offline_site_loads_is_in_the_bundle() -> None:
+    """Zensical fetches its own from unpkg.com unless `extra.polyfills` names a file with `iframe-worker` in its name."""
+    shim = DOCS_SOURCE_DIR / "docs" / OFFLINE_SHIM
+
+    assert "iframe-worker" in shim.name
+    assert shim.is_file()
+    assert "MIT license" in shim.read_text(encoding="utf-8")
+
+
+def test_the_online_docs_are_built_as_they_were() -> None:
+    """The offline changes are made to the copy the build works in, never to the config the online docs are built from."""
+    text = (DOCS_SOURCE_DIR / "mkdocs.yml").read_text(encoding="utf-8")
+
+    assert "\n  - offline" not in text
+    assert "\n    - navigation.instant\n" in text
+    assert "\nrepo_url: " in text
+    assert "polyfills" not in text
 
 
 @pytest.fixture
@@ -389,6 +457,7 @@ def test_the_site_is_built_from_a_prepared_copy_and_put_in_place(
     assert cwd.parent == home / "docs"
     assert cwd != source
     assert f'modules: ["{package.as_posix()}"]' in str(call["config"])
+    assert "plugins:\n  - offline\n" in str(call["config"])
     assert f"{RAW}/v2.7.1/docs/assets/shot.jpg" in str(call["page"])
     # the bundle itself was not touched
     assert (source / "docs" / "index.md").read_text() == "![Shot](assets/shot.jpg)\n"

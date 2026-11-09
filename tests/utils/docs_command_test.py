@@ -64,13 +64,13 @@ def test_it_is_a_command_of_the_program() -> None:
 def test_there_is_one_definition_of_where_the_docs_are(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The folder the command prints, the folder SensAI reads its guides from and the folder the generator writes have to be the same one."""
-    from mujoco_mojo.utils.layers.dojo.sensai import guide_catalog
+    """The folder the command prints, the folder SensAI reads its docs from and the folder the generator writes have to be the same one."""
+    from mujoco_mojo.utils.layers.dojo.sensai import docs_catalog
 
     monkeypatch.syspath_prepend(str(SCRIPTS))
     generator = importlib.import_module("gen_docs_source")
 
-    default = inspect.signature(guide_catalog.guides).parameters["directory"].default
+    default = inspect.signature(docs_catalog.docs_pages).parameters["directory"].default
     assert default == DOCS_SOURCE_DIR
     assert generator.OUTPUT_DIR == DOCS_SOURCE_DIR
 
