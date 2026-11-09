@@ -24,7 +24,7 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 !!! tip "Optional Extras"
 
-    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, `mujoco-mojo[sensai]` for the Dojo's SensAI assistant, and `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline)). Install `mujoco-mojo[all]` to get all of them except `docs`.
+    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, `mujoco-mojo[sensai]` for the Dojo's SensAI assistant, and `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline)). Install `mujoco-mojo[all]` to get all of them.
 
 ---
 

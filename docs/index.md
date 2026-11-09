@@ -88,6 +88,7 @@ Install `mujoco-mojo` in your project using the following:
 
     To get the most out of MuJoCo Mojo, select additional extras from this list (or use `[all]` to install all of them):
 
+    - `[docs]`: build the documentation on your own machine (`mujoco-mojo docs build`).
     - `[mesh-decomp]`: concave mesh decomposition via CoACD.
     - `[optimize]`: Bayesian optimization studies powered by Optuna.
     - `[sensai]`: the SensAI assistant in the Dojo.
