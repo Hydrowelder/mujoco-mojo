@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased Version
+## Version 2.8.0 (2026-11-08)
 
 - Added support for [MuJoCo 4.0.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-4-0-0-november-6-2026)
 - `reloaded` now shows your model in MuJoCo Studio, either in its own window (`-ui studio`) or in a web browser (`-ui web`), which also works over SSH. The classic viewer is still there as `-ui opengl`
