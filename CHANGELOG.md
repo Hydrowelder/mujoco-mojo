@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased Version
+
+- The What's Changed window now falls back to a saved or bundled changelog when GitHub can't be reached
+
 ## Version 2.8.0 (2026-11-08)
 
 - Added support for [MuJoCo 4.0.0](https://mujoco.readthedocs.io/en/stable/changelog.html#version-4-0-0-november-6-2026)

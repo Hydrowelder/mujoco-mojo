@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChangelogEntry, ChangelogResponse, JobStatus } from "../models";
 import {
   cancelResult,
+  changelogNotice,
   clearNewFlags,
   confirmResult,
   connectionChange,
@@ -229,6 +230,7 @@ describe("changelog decisions", () => {
     update_available: false,
     show_whats_changed: true,
     is_localhost: false,
+    source: "remote",
     error: null,
     ...over,
   });
@@ -253,6 +255,24 @@ describe("changelog decisions", () => {
 
     it("is true when only one of several entries is new", () => {
       expect(shouldAutoOpenChangelog(data({ entries: [entry(), entry({ is_new: true }), entry()] }), false)).toBe(true);
+    });
+  });
+
+  describe("changelogNotice", () => {
+    it("is empty for a changelog fresh from GitHub", () => {
+      expect(changelogNotice("remote")).toBe("");
+    });
+
+    it("is empty when no changelog loaded, since that has its own error", () => {
+      expect(changelogNotice(null)).toBe("");
+    });
+
+    it("says a saved copy may be out of date", () => {
+      expect(changelogNotice("cache")).toContain("may be out of date");
+    });
+
+    it("says the bundled copy cannot show newer releases", () => {
+      expect(changelogNotice("bundled")).toContain("Newer releases won't show here");
     });
   });
 

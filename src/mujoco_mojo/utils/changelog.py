@@ -1,25 +1,35 @@
 """
 Fetches and parses mujoco-mojo's `CHANGELOG.md` into structured version entries, for Dojo's "What's Changed" footer button and for `scripts/verify_changelog_by_tag.py`'s pre-push check - one parser, so the two can't drift apart.
 
-The changelog is always read live from GitHub; there is no local-file fallback, so a fetch failure is just an error the caller surfaces, the same way any other failed request already is.
+The changelog is read live from GitHub. `fetch_and_parse_changelog` raises when that fails, and `load_changelog` is the caller that never leaves Dojo empty-handed: it falls back to the last copy it fetched successfully (saved under `~/.mujoco-mojo`), then to the changelog that ships inside the package, and says which one it used.
 """
 
 from __future__ import annotations
 
 import re
+import ssl
 import threading
 import time
+import urllib.error
 import urllib.request
+from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel
 
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import DOCS_SOURCE_DIR, MUJOCO_MOJO_DIR
 from mujoco_mojo.utils.log import get_logger
 
 __all__ = [
+    "BUNDLED_CHANGELOG_FILE",
+    "CHANGELOG_CACHE_FILE",
     "CHANGELOG_URL",
     "ChangelogEntry",
+    "ChangelogSource",
+    "ChangelogUnavailable",
+    "LoadedChangelog",
     "fetch_and_parse_changelog",
+    "load_changelog",
     "parse_changelog",
     "read_last_seen_version",
     "version_tuple",
@@ -33,9 +43,20 @@ CHANGELOG_URL = "https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/
 LAST_SEEN_VERSION_FILE = MUJOCO_MOJO_DIR / "last_seen_changelog_version.txt"
 """The latest changelog version the user has explicitly acknowledged (by closing the What's Changed modal on it). Read fresh on every `GET /changelog/data` request, not cached in memory, so a mark-seen write takes effect immediately - both for a later page load in the same Dojo process and across a full restart of it."""
 
+CHANGELOG_CACHE_FILE = MUJOCO_MOJO_DIR / "changelog_cache.md"
+"""The last changelog fetched successfully from GitHub, kept as the raw text so a later parser change still reads it. `load_changelog` falls back to it, marked as possibly out of date, when GitHub can't be reached."""
+
+BUNDLED_CHANGELOG_FILE = DOCS_SOURCE_DIR / "docs" / "changelog.md"
+"""The changelog that ships inside the package, as of the installed version. The last resort for a host that has never reached GitHub, so it can't know about any newer release."""
+
 _FETCH_TIMEOUT_SECONDS = 5.0
 _CACHE_TTL_SECONDS = 30 * 60.0
 """How long a successful fetch is reused before refetching - long enough that several tabs opened in one sitting don't each hit GitHub, short enough to notice a same-day release without restarting Dojo."""
+_RETRY_AFTER_SECONDS = 5 * 60.0
+"""How long a failed fetch is waited out before `fetch_and_parse_changelog` tries GitHub again, so a host that can't reach it doesn't spend the full timeout (and log a failure) on every page load."""
+
+ChangelogSource = Literal["remote", "cache", "bundled"]
+"""Where `load_changelog`'s entries came from: GitHub just now, the copy saved from an earlier fetch, or the changelog that ships with the installed package."""
 
 _HEADING_RE = re.compile(
     r"^##\s+Version\s+(?P<version>\d+\.\d+\.\d+)\s*\((?P<date>[^)]*)\)",
@@ -90,18 +111,59 @@ def _parse_bullets(body: str) -> list[str]:
     return bullets
 
 
-def _fetch_remote_text() -> str:
+def _read_url(context: ssl.SSLContext | None) -> str:
     req = urllib.request.Request(
         CHANGELOG_URL, headers={"User-Agent": "mujoco-mojo-dojo"}
     )
-    with urllib.request.urlopen(req, timeout=_FETCH_TIMEOUT_SECONDS) as resp:
+    with urllib.request.urlopen(
+        req, timeout=_FETCH_TIMEOUT_SECONDS, context=context
+    ) as resp:
         if resp.status != 200:
             raise ValueError(f"Fetching {CHANGELOG_URL} returned status {resp.status}")
         body: bytes = resp.read()
         return body.decode("utf-8")
 
 
+def _certifi_context() -> ssl.SSLContext | None:
+    """A context that trusts certifi's CA bundle, or `None` when certifi isn't installed (it is not a dependency of Mojo itself, only of the extras)."""
+    try:
+        import certifi
+    except ImportError:
+        return None
+    return ssl.create_default_context(cafile=certifi.where())
+
+
+def _fetch_remote_text() -> str:
+    """Reads the changelog with the interpreter's own trust store, and only if that can't verify GitHub's certificate, once more with certifi's. The system store goes first so a host behind a TLS-intercepting proxy, whose CA lives there, keeps working. `SSL_CERT_FILE` and `SSL_CERT_DIR` are honored by the default context already."""
+    try:
+        return _read_url(None)
+    except urllib.error.URLError as exc:
+        if not isinstance(exc.reason, ssl.SSLCertVerificationError):
+            raise
+        context = _certifi_context()
+        if context is None:
+            raise
+        logger.info(
+            "The interpreter's certificates did not verify GitHub, retrying with certifi's"
+        )
+        return _read_url(context)
+
+
+def _describe(exc: BaseException) -> str:
+    """One line for a log or an error message: a network error's reason (`certificate verify failed ...`) rather than urllib's wrapper around it."""
+    if isinstance(exc, urllib.error.URLError) and not isinstance(
+        exc, urllib.error.HTTPError
+    ):
+        return str(exc.reason)
+    return str(exc) or type(exc).__name__
+
+
+class ChangelogUnavailable(RuntimeError):
+    """Raised by `fetch_and_parse_changelog`, without a network request, while a recent failure is still being waited out. The message is that failure's own."""
+
+
 _cache: tuple[float, list[ChangelogEntry]] | None = None
+_failure: tuple[float, str] | None = None
 _cache_lock = threading.Lock()
 
 
@@ -111,9 +173,9 @@ def fetch_and_parse_changelog(*, force_refresh: bool = False) -> list[ChangelogE
 
     Synchronous by design, so it and everything it calls stay plain-function testable with no async test infra (this repo has none); call it from an async endpoint via `starlette.concurrency.run_in_threadpool`.
 
-    Raises on any failure - a network error, a timeout, a non-200 response, or a 200 that parses to zero entries (a captive-portal page would otherwise look like an empty changelog instead of a failure). A failure is not cached, so the next call retries.
+    Raises on any failure - a network error, a timeout, a non-200 response, or a 200 that parses to zero entries (a captive-portal page would otherwise look like an empty changelog instead of a failure). After a failure the next calls raise `ChangelogUnavailable` for `_RETRY_AFTER_SECONDS` without touching the network, unless `force_refresh` is set. A success also saves the text to `CHANGELOG_CACHE_FILE` for `load_changelog`'s fallback.
     """
-    global _cache
+    global _cache, _failure
     now = time.monotonic()
     with _cache_lock:
         if (
@@ -122,13 +184,79 @@ def fetch_and_parse_changelog(*, force_refresh: bool = False) -> list[ChangelogE
             and now - _cache[0] < _CACHE_TTL_SECONDS
         ):
             return _cache[1]
-        entries = parse_changelog(_fetch_remote_text())
-        if not entries:
-            raise ValueError(
-                "Remote changelog fetched successfully but parsed to zero entries"
-            )
+        if (
+            not force_refresh
+            and _failure is not None
+            and now - _failure[0] < _RETRY_AFTER_SECONDS
+        ):
+            raise ChangelogUnavailable(_failure[1])
+        try:
+            text = _fetch_remote_text()
+            entries = parse_changelog(text)
+            if not entries:
+                raise ValueError(
+                    "Remote changelog fetched successfully but parsed to zero entries"
+                )
+        except Exception as exc:
+            _failure = (time.monotonic(), _describe(exc))
+            raise
+        _failure = None
         _cache = (now, entries)
+        _save_cache_text(text)
         return entries
+
+
+def _save_cache_text(text: str) -> None:
+    """Best effort: a read-only home just means no saved copy, never a failed request. Written to a sibling file and moved into place, so a second Dojo process never reads half a file."""
+    tmp = CHANGELOG_CACHE_FILE.with_name(CHANGELOG_CACHE_FILE.name + ".tmp")
+    try:
+        CHANGELOG_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(CHANGELOG_CACHE_FILE)
+    except OSError:
+        logger.debug("Couldn't save the changelog copy", exc_info=True)
+
+
+def _parse_file(path: Path) -> list[ChangelogEntry]:
+    """The entries in `path`, or none if it's missing, unreadable or has no version headings."""
+    try:
+        return parse_changelog(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError):
+        return []
+
+
+class LoadedChangelog(BaseModel):
+    entries: list[ChangelogEntry]
+    source: ChangelogSource
+
+
+def load_changelog() -> LoadedChangelog | None:
+    """
+    The changelog from the best place available, newest entry first: GitHub (`fetch_and_parse_changelog`), else the copy saved by the last successful fetch, else the changelog that ships in the package. `source` says which, so a caller can tell the user a copy may be out of date. Returns `None` only if none of the three has an entry.
+
+    A network failure is one warning line, not a traceback, and a failure still being waited out is not logged again. Any other failure (a bad status, a page with no versions) keeps its traceback.
+    """
+    try:
+        return LoadedChangelog(entries=fetch_and_parse_changelog(), source="remote")
+    except ChangelogUnavailable:
+        pass
+    except OSError as exc:
+        logger.warning(
+            "Couldn't fetch the remote changelog (%s), using a saved copy",
+            _describe(exc),
+        )
+    except Exception:
+        logger.warning(
+            "Failed to fetch/parse the remote changelog, using a saved copy",
+            exc_info=True,
+        )
+    entries = _parse_file(CHANGELOG_CACHE_FILE)
+    if entries:
+        return LoadedChangelog(entries=entries, source="cache")
+    entries = _parse_file(BUNDLED_CHANGELOG_FILE)
+    if entries:
+        return LoadedChangelog(entries=entries, source="bundled")
+    return None
 
 
 def read_last_seen_version() -> str | None:

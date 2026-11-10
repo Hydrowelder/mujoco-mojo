@@ -38,6 +38,20 @@ repos:
         stages: [pre-commit]
   - repo: local
     hooks:
+      - id: dojo-build
+        name: Rebuild the committed Dojo frontend (static/dist)
+        # static/dist is committed and is what ships, so a source change needs its rebuild
+        # in the same commit. Tailwind scans the templates for classes, so a template edit
+        # can change main.css. Like gen-docs-source, it fails when it changed something:
+        # stage the result and commit again. Listed after dojo-eslint and dojo-tsc so a
+        # lint or type error shows before a build, and system for the same reason as them
+        entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts run build
+        language: system
+        files: ^src/mujoco_mojo/utils/layers/dojo/templates/
+        pass_filenames: false
+        stages: [pre-commit]
+  - repo: local
+    hooks:
       - id: dojo-vitest
         name: Test the Dojo frontend (Vitest)
         # before a push, not a commit, like the Python tests (act-test below). The

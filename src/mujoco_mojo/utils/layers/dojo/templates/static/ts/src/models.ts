@@ -58,6 +58,11 @@ export interface ChangelogEntry {
   is_new: boolean;
 }
 
+// where the entries came from: GitHub just now, the copy saved by an earlier
+// fetch, or the changelog that ships with the installed package. only "remote"
+// is known to be current
+export type ChangelogSource = "remote" | "cache" | "bundled";
+
 export interface ChangelogResponse {
   entries: ChangelogEntry[];
   installed_version: string;
@@ -65,6 +70,7 @@ export interface ChangelogResponse {
   update_available: boolean;
   show_whats_changed: boolean;
   is_localhost: boolean;
+  source: ChangelogSource | null;
   error: string | null;
 }
 
@@ -268,6 +274,7 @@ export interface DojoStore extends SettingsPanelState {
   changelogOpen: boolean;
   changelogLoading: boolean;
   changelogError: string;
+  changelogNotice: string;
   changelogEntries: ChangelogEntry[];
   changelogInstalledVersion: string;
   changelogLatestVersion: string | null;
