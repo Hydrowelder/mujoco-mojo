@@ -339,6 +339,12 @@ class SensAIModelEntry(BaseModel):
         description="That provider's own identifier for the model, e.g. `gemini-3.5-flash-lite` for Google.",
     )
 
+    base_url: str | None = Field(
+        default=None,
+        title="Base URL",
+        description="Send this entry's requests here instead of the provider's default endpoint, e.g. to a gateway or proxy. Ollama has no default endpoint and needs one. Not every provider accepts one.",
+    )
+
 
 class SensAISettings(BaseModel):
     """Settings for the SensAI assistant embedded in the Dojo dashboard."""
@@ -373,11 +379,26 @@ class SensAISettings(BaseModel):
         description="Models to fall back through, in priority order: earlier entries are tried first. Each provider reads its own credentials from its own environment variable (see each option above).",
     )
 
-    base_url: str = Field(
-        default="http://localhost:11434/v1",
-        title="Base URL",
-        description="Only needed if one of the models above uses the Ollama provider. Ollama has no built-in localhost default, unlike every other provider here. Ignored otherwise.",
-    )
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_removed_shared_base_url(cls, data: Any) -> Any:
+        """`dojo.sensai.base_url` was removed in favor of a `base_url` on each model, and `save()` wrote it into every settings file, so a file that still names it would otherwise stop every `mujoco-mojo` command from starting. It is dropped, with a warning when an Ollama model has no URL of its own and so now needs one."""
+        if not isinstance(data, dict) or "base_url" not in data:
+            return data
+        data = dict(data)
+        data.pop("base_url")
+        entries = data.get("models")
+        if isinstance(entries, list) and any(
+            isinstance(entry, dict)
+            and entry.get("provider") == ModelProvider.OLLAMA
+            and not entry.get("base_url")
+            for entry in entries
+        ):
+            warnings.warn(
+                "`dojo.sensai.base_url` was removed. Set `base_url` on each Ollama model in `dojo.sensai.models` instead, e.g. `http://localhost:11434/v1`.",
+                stacklevel=2,
+            )
+        return data
 
     max_requests: int = Field(
         default=DEFAULT_MAX_REQUESTS,
@@ -1024,6 +1045,14 @@ def _enum_value_descriptions(enum_cls: type[Enum]) -> dict[str, str]:
     return result
 
 
+_PROVIDER_CREDENTIAL_NOTES: dict[ModelProvider, tuple[str, ...]] = {
+    ModelProvider.ANTHROPIC: (
+        "Without a key, `ANTHROPIC_AUTH_TOKEN` is sent as a bearer token instead.",
+    ),
+}
+"""What a provider accepts beyond the environment variable `ModelProvider.env_var_name` finds, which only ever reports one."""
+
+
 class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
     """
     Appends each field's default value to its `description`, so editors that only surface `description` on hover (e.g. VS Code's Even Better TOML) still show it, without hand-duplicating every `Field(default=...)` into its own description text.
@@ -1150,7 +1179,12 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
             descriptions = {
                 **descriptions,
                 **{
-                    member.value: f"Set via the `{env_var}` environment variable."
+                    member.value: " ".join(
+                        (
+                            f"Set via the `{env_var}` environment variable.",
+                            *_PROVIDER_CREDENTIAL_NOTES.get(member, ()),
+                        )
+                    )
                     for member in ModelProvider
                     if (env_var := member.env_var_name) is not None
                 },
@@ -1262,7 +1296,7 @@ class MujocoMojoSettings(BaseSettings):
         Validated by overlaying the new value onto the full currently-effective settings (project + global + env + defaults) and calling `model_validate` on the result - `model_config` forbids extra fields on every fixed-shape settings group, so a typo'd leaf and a wrong-typed value both raise `pydantic.ValidationError` before anything is written. The *validated and re-dumped* leaf value is what actually gets persisted, not the raw `value` argument, so e.g. the CLI's loosely-typed input string `"true"` for a `bool` field is written to TOML as a real boolean, not a quoted string. Only that one changed leaf is written into the project file, keeping it a small, deliberate diff rather than a full mirror of every setting - contrast with `save()`, which always persists every field (correct for the global file, wrong here).
 
         Args:
-            key: Dotted path, e.g. "dojo.sensai.base_url", "assets.symlink", or "slurm.sbatch.account".
+            key: Dotted path, e.g. "dojo.sensai.max_requests", "assets.symlink", or "slurm.sbatch.account".
             value: The value to set, already parsed to its target Python type.
 
         Returns:

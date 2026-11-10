@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import os
 import re
 from enum import IntEnum, StrEnum, unique
 from pathlib import Path
@@ -1463,9 +1465,12 @@ class ModelProvider(StrEnum):
 
         Delegates to `pydantic_ai.models.infer_model` - the same `provider:model` resolution `Agent('google:gemini-3-flash')` uses internally - instead of hand-mapping every provider to its own `Provider`/`Model` class pair here. `infer_model` already owns that mapping (and every provider's exact `Model` subclass) and pydantic_ai keeps it current as it adds providers, so re-deriving it in a `match` statement here only gives us a second copy that can drift out of sync. The provider is otherwise constructed exactly as `Agent('provider:model')` would build it - reading whatever environment variable that provider looks for by default (see `env_var_name`).
 
-        `base_url` only matters for `OLLAMA` (or another self-hosted OpenAI-compatible server pointed at a nonstandard host/port) - `pydantic_ai`'s `OllamaProvider`, unlike most others, has no built-in localhost default and raises without one. Pass it there; leave it `None` for every other provider, since a provider that *does* accept `base_url` (e.g. Google) would silently redirect its real endpoint to whatever's passed. A provider whose constructor doesn't accept `base_url` at all falls back to its own default construction instead, logged as a warning.
+        `base_url` points the provider at an endpoint other than its default: a self-hosted OpenAI-compatible server, an API gateway or a proxy. It is required for `OLLAMA`, whose `pydantic_ai` provider, unlike most others, has no built-in localhost default and raises without one. Leave it `None` to keep the provider's own default endpoint.
+
+        `pydantic_ai`'s `AnthropicProvider` only reads `ANTHROPIC_API_KEY` (sent as an `x-api-key` header) and never `ANTHROPIC_AUTH_TOKEN`, the bearer token that gateways in front of Anthropic's API usually expect. When only `ANTHROPIC_AUTH_TOKEN` is set, the provider is built around an `AsyncAnthropic` client given that token, through `AnthropicProvider(anthropic_client=...)`, the extension point `pydantic_ai` documents for credentials its own constructor doesn't cover. When `ANTHROPIC_API_KEY` is set it is used exactly as before, whether or not a token is also set.
 
         Raises:
+            ValueError: If `base_url` is given but this provider's `pydantic_ai` constructor doesn't accept one. Quietly ignoring it would send requests to an endpoint other than the one asked for.
             ImportError: If the optional package this provider's SDK needs isn't installed - caught broadly rather than narrowed to `ModuleNotFoundError`, since some `pydantic_ai` provider modules (e.g. xAI) catch that themselves and re-raise a plain `ImportError` with a friendlier "pip install ..." message, which a `ModuleNotFoundError`-only handler would miss entirely.
             NotImplementedError: If this member has no `pydantic_ai` provider mapped - every current member does; this only guards a future member added to the enum without a matching `_MODEL_PROVIDER_IDS` entry.
 
@@ -1480,20 +1485,17 @@ class ModelProvider(StrEnum):
             raise NotImplementedError(msg)
 
         def _provider_factory(name: str) -> Provider[Any]:
+            if name == "anthropic" and _anthropic_uses_bearer_token():
+                return _anthropic_bearer_provider(base_url)
             if base_url is None:
                 return infer_provider(name)
             provider_cls = infer_provider_class(name)
-            try:
-                # see build_model's own **kwargs note in the api_key removal history:
-                # not every Provider subclass's __init__ declares base_url, so this is
-                # checked dynamically via the except below, not something a static
-                # signature could confirm.
-                provider_kwargs: dict[str, Any] = {"base_url": base_url}
-                return provider_cls(**provider_kwargs)
-            except TypeError:
-                msg = f"{self.value}'s pydantic_ai provider doesn't accept base_url directly; falling back to its own default construction."
-                logger.warning(msg)
-                return infer_provider(name)
+            if "base_url" not in inspect.signature(provider_cls).parameters:
+                msg = f"{self.value}'s pydantic_ai provider doesn't accept a base_url, so one can't be set for it."
+                logger.error(msg)
+                raise ValueError(msg)
+            provider_kwargs: dict[str, Any] = {"base_url": base_url}
+            return provider_cls(**provider_kwargs)
 
         try:
             return infer_model(
@@ -1526,6 +1528,25 @@ class ModelProvider(StrEnum):
         # since a few providers (Bedrock, Snowflake) don't have one at all.
         names: list[str] = _ENV_VAR_NAME_PATTERN.findall(source)
         return next((name for name in names if not name.endswith("BASE_URL")), None)
+
+
+def _anthropic_uses_bearer_token() -> bool:
+    """Whether the Anthropic provider should authenticate with `ANTHROPIC_AUTH_TOKEN` (an `Authorization: Bearer` header) instead of `ANTHROPIC_API_KEY`: only when the token is set and the key is not, so a setup that works today with a key keeps working."""
+    return bool(os.environ.get("ANTHROPIC_AUTH_TOKEN")) and not os.environ.get(
+        "ANTHROPIC_API_KEY"
+    )
+
+
+def _anthropic_bearer_provider(base_url: str | None) -> Provider[Any]:
+    """Builds `pydantic_ai`'s `AnthropicProvider` around an `AsyncAnthropic` client that sends `ANTHROPIC_AUTH_TOKEN` as a bearer token. With no `base_url` the client uses `ANTHROPIC_BASE_URL`, then Anthropic's public endpoint."""
+    from anthropic import AsyncAnthropic
+    from pydantic_ai.providers.anthropic import AnthropicProvider
+
+    logger.info("Anthropic: authenticating with ANTHROPIC_AUTH_TOKEN (bearer).")
+    client = AsyncAnthropic(
+        auth_token=os.environ["ANTHROPIC_AUTH_TOKEN"], base_url=base_url
+    )
+    return AnthropicProvider(anthropic_client=client)
 
 
 _MODEL_PROVIDER_IDS: dict[ModelProvider, str] = {
