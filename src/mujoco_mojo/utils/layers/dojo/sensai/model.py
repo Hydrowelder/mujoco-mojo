@@ -7,17 +7,16 @@ from pydantic_ai import ModelAPIError
 from pydantic_ai.models.fallback import FallbackModel
 
 from mujoco_mojo.settings import MujocoMojoSettings
-from mujoco_mojo.typing import ModelProvider
 
 
 def build_fallback_model() -> FallbackModel:
     """
     Builds the `FallbackModel` shared by every SensAI agent from `SensAISettings.models`, in the priority order the user configured there - the first `(provider, model name)` pair is tried first, and each later one is only used if every earlier one errors.
 
-    Each entry's `Model` comes from `ModelProvider.build_model`, which builds that entry's provider exactly as `Agent('provider:model')` would - reading whatever environment variable that provider looks for by default (see `ModelProvider.env_var_name`) - except for an `OLLAMA` entry, which gets `SensAISettings.base_url` explicitly: unlike most providers, `pydantic_ai`'s `OllamaProvider` has no built-in `localhost` default and raises without one. Only `OLLAMA` gets this - passing it to a provider that also happens to accept `base_url` (e.g. Google) would silently redirect that provider's real endpoint to Ollama's URL instead.
+    Each entry's `Model` comes from `ModelProvider.build_model`, which builds that entry's provider exactly as `Agent('provider:model')` would - reading whatever environment variable that provider looks for by default (see `ModelProvider.env_var_name`) - and sends its requests to the entry's own `base_url` when it has one. Every provider is treated alike, Ollama included: an entry with no `base_url` keeps its provider's own default endpoint.
 
     Raises:
-        ValueError: If `SensAISettings.models` is empty - `FallbackModel` needs at least one model to try.
+        ValueError: If `SensAISettings.models` is empty - `FallbackModel` needs at least one model to try - or an entry sets a `base_url` its provider doesn't accept.
 
     """
     settings = MujocoMojoSettings().dojo.sensai
@@ -26,12 +25,7 @@ def build_fallback_model() -> FallbackModel:
         raise ValueError(msg)
 
     models = [
-        entry.provider.build_model(
-            entry.model_name,
-            base_url=settings.base_url
-            if entry.provider is ModelProvider.OLLAMA
-            else None,
-        )
+        entry.provider.build_model(entry.model_name, base_url=entry.base_url)
         for entry in settings.models
     ]
 

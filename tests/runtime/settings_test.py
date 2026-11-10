@@ -609,7 +609,7 @@ def test_set_project_value_preserves_siblings_and_comments(
         "#:schema settings.schema.json\n"
         "[dojo.sensai]\n"
         "# pinned for this project's demo\n"
-        'base_url = "http://localhost:9999/v1"\n',
+        "max_requests = 7\n",
         encoding="utf-8",
     )
 
@@ -617,7 +617,7 @@ def test_set_project_value_preserves_siblings_and_comments(
 
     content = project_path.read_text()
     assert "# pinned for this project's demo" in content
-    assert 'base_url = "http://localhost:9999/v1"' in content
+    assert "max_requests = 7" in content
     assert "enabled = true" in content
 
 

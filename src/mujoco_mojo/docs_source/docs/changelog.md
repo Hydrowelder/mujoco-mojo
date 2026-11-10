@@ -3,6 +3,11 @@
 ## Unreleased Version
 
 - The What's Changed window now falls back to a saved or bundled changelog when GitHub can't be reached
+- Each `dojo.sensai.models` entry now has its own `base_url`, so a model can go through a gateway or proxy
+- SensAI's Anthropic provider now accepts `ANTHROPIC_AUTH_TOKEN` when `ANTHROPIC_API_KEY` is not set
+
+> [!WARNING]
+> - **Breaking:** `dojo.sensai.base_url` is gone. Set `base_url` on each Ollama model in `dojo.sensai.models` instead
 
 ## Version 2.8.0 (2026-11-08)
 
