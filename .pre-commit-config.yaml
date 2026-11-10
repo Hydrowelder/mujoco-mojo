@@ -54,8 +54,8 @@ repos:
     hooks:
       - id: dojo-vitest
         name: Test the Dojo frontend (Vitest)
-        # before a push, not a commit, like the Python tests (act-test below). The
-        # tests also read the Jinja templates, so a template change runs them too
+        # before a push, not a commit. The tests also read the Jinja templates, so a
+        # template change runs them too
         entry: npm --prefix src/mujoco_mojo/utils/layers/dojo/templates/static/ts test
         language: system
         files: ^src/mujoco_mojo/utils/layers/dojo/templates/(static/ts/(src/.*\.ts|vitest\.config\.ts|tsconfig\.json|package-lock\.json)|[^/]+\.html|partials/.*\.html)$
@@ -175,11 +175,18 @@ repos:
         # hardlink-or-copy step and can hand one container a half-written
         # package file. Real GitHub Actions runners don't hit this since
         # each matrix job gets its own isolated VM.
+        #
+        # manual, not pre-push: it takes minutes (three Python versions, each in a fresh
+        # container), and git push opens its SSH connection before the pre-push hooks
+        # run, so GitHub dropped the idle connection and the push failed after every
+        # hook had passed. CI runs the same job after the push. Run it on demand with
+        # `pre-commit run act-test --hook-stage manual`. always_run because a manual
+        # run has no staged files for a `files` pattern to match
         entry: act -j test --concurrent-jobs 1
         language: system
-        stages: [pre-push]
+        stages: [manual]
         pass_filenames: false
-        files: ^(src/|tests/|pyproject\.toml|uv\.lock)
+        always_run: true
   - repo: local
     hooks:
       - id: requirements-no-local-paths
