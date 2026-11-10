@@ -23,6 +23,7 @@ import {
 } from "./lib/notifications";
 import {
   cancelResult,
+  changelogNotice,
   clearNewFlags,
   confirmResult,
   connectionChange,
@@ -93,6 +94,7 @@ document.addEventListener("alpine:init", () => {
     changelogOpen: false,
     changelogLoading: false,
     changelogError: "",
+    changelogNotice: "",
     changelogEntries: [],
     changelogInstalledVersion: "",
     changelogLatestVersion: null,
@@ -205,6 +207,7 @@ document.addEventListener("alpine:init", () => {
     async fetchChangelog() {
       this.changelogLoading = true;
       this.changelogError = "";
+      this.changelogNotice = "";
       try {
         const resp = await fetchWithTimeout("/changelog/data", {}, 8000);
         if (!resp.ok) throw new Error(`Request failed (${resp.status})`);
@@ -214,6 +217,7 @@ document.addEventListener("alpine:init", () => {
         this.changelogLatestVersion = data.latest_version;
         this.changelogUpdateAvailable = data.update_available;
         this.changelogShowWhatsChanged = data.show_whats_changed;
+        this.changelogNotice = changelogNotice(data.source);
         // shared with the Settings panel's own fields - same underlying
         // fact about this request, whichever endpoint happens to load
         // first this session should seed it, not just /settings's own

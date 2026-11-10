@@ -2,7 +2,7 @@
 // be tested without alpine: server connection changes, the job-status stream,
 // page-load timing, the changelog, and what the confirm dialog answers.
 
-import type { ChangelogEntry, ChangelogResponse, JobStatus } from "../models";
+import type { ChangelogEntry, ChangelogResponse, ChangelogSource, JobStatus } from "../models";
 
 // the saved choice if there is one, else the server's default
 export function initialFullscreen(
@@ -120,6 +120,20 @@ export function nextPhraseIndex(current: number, count: number, rand: () => numb
 // panel is not already open
 export function shouldAutoOpenChangelog(data: ChangelogResponse, settingsOpen: boolean): boolean {
   return data.show_whats_changed && !settingsOpen && data.entries.some((e) => e.is_new);
+}
+
+// what the changelog modal says when its entries are not fresh from GitHub, or
+// an empty string when they are (or when no changelog could be loaded, which
+// has its own error)
+export function changelogNotice(source: ChangelogSource | null): string {
+  switch (source) {
+    case "cache":
+      return "Couldn't reach GitHub, so this is the last changelog saved on this machine. It may be out of date.";
+    case "bundled":
+      return "Couldn't reach GitHub, so this is the changelog that came with your installed version. Newer releases won't show here.";
+    default:
+      return "";
+  }
 }
 
 // closing the changelog only needs to tell the server a version was seen when

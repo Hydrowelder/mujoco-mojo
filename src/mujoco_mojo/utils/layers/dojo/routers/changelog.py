@@ -11,7 +11,8 @@ from mujoco_mojo.__about__ import __version__
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.utils.changelog import (
     ChangelogEntry,
-    fetch_and_parse_changelog,
+    ChangelogSource,
+    load_changelog,
     read_last_seen_version,
     version_tuple,
     write_last_seen_version,
@@ -32,23 +33,28 @@ class ChangelogResponse(BaseModel):
     entries: list[ChangelogEntryOut]
     installed_version: str
     latest_version: str | None
-    """The newest version named in the changelog, or None if it couldn't be fetched."""
+    """The newest version named in the changelog, or None if no changelog could be loaded."""
     update_available: bool
     """Whether `latest_version` is newer than `installed_version` - independent of `is_new`/acknowledgment, and true across restarts until the user actually upgrades."""
     show_whats_changed: bool
     is_localhost: bool
     """Whether this request came from the machine running Dojo - the What's Changed toggle only writes to settings.toml when this is true, same restriction as the Settings panel."""
+    source: ChangelogSource | None = None
+    """Where `entries` came from: `remote` (GitHub, just now), `cache` (the copy saved by an earlier fetch) or `bundled` (the changelog that ships with the installed package). Only `remote` is known to be current. None when no changelog could be loaded at all."""
     error: str | None = None
 
 
 @router.get("/data")
 async def get_changelog_data(request: Request) -> ChangelogResponse:
-    try:
-        entries_in = await run_in_threadpool(fetch_and_parse_changelog)
-        error = None
-    except Exception:
-        logger.warning("Failed to fetch/parse the remote changelog", exc_info=True)
-        entries_in, error = [], "Couldn't load the changelog from GitHub right now."
+    loaded = await run_in_threadpool(load_changelog)
+    if loaded is None:
+        logger.warning(
+            "No changelog could be loaded from GitHub, a saved copy or the package"
+        )
+        entries_in, source = [], None
+        error = "Couldn't load the changelog from GitHub right now."
+    else:
+        entries_in, source, error = loaded.entries, loaded.source, None
 
     # read fresh every request, not cached in memory: a mark-seen write
     # (below) then takes effect immediately, for a later page load in this
@@ -71,6 +77,7 @@ async def get_changelog_data(request: Request) -> ChangelogResponse:
         and version_tuple(latest_version) > version_tuple(__version__),
         show_whats_changed=MujocoMojoSettings().dojo.show_whats_changed,
         is_localhost=shared.is_localhost(request),
+        source=source,
         error=error,
     )
 

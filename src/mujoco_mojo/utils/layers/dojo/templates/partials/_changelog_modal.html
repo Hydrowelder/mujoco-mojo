@@ -62,6 +62,11 @@
            class="mx-6 mt-4 px-4 py-3 rounded-lg border border-danger-400 dark:border-danger-500/50 bg-danger-50 dark:bg-danger-900/20 text-xs text-danger-700 dark:text-danger-300 shrink-0"
            x-text="$store.dojo.changelogError"></div>
 
+      <!-- fallback notice: the entries are a saved or bundled copy, not fresh from GitHub -->
+      <div x-show="$store.dojo.changelogNotice"
+           class="mx-6 mt-4 px-4 py-3 rounded-lg border border-warning-400 dark:border-warning-500/50 bg-warning-50 dark:bg-warning-900/20 text-xs text-warning-700 dark:text-warning-300 shrink-0"
+           x-text="$store.dojo.changelogNotice"></div>
+
       <!-- loading -->
       <div x-show="$store.dojo.changelogLoading"
            class="px-6 py-10 text-center text-sm font-mono text-ink-muted">
