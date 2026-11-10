@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased Version
+## Version 2.8.1 (2026-11-09)
 
 - The What's Changed window now falls back to a saved or bundled changelog when GitHub can't be reached
 - Each `dojo.sensai.models` entry now has its own `base_url`, so a model can go through a gateway or proxy
