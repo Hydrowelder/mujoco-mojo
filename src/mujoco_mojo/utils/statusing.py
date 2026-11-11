@@ -274,6 +274,16 @@ class TrialStatus(MojoBaseModel):
         ]
         return max(ends, default=None)
 
+    @property
+    def run_started(self) -> datetime | None:
+        """When the trial began generating or solving, whichever came first, or `None` if it has not begun. A trial that is only claimed (just `pending` has a start) has not begun running."""
+        starts = [
+            step.started
+            for step in (self.generating, self.solving)
+            if step.started is not None
+        ]
+        return min(starts, default=None)
+
 
 def _json_value(value: object) -> object:
     """The value itself when it is plain JSON, so `1.5` stays a number and `'fast'` a string, and its `repr` for anything else, so the status file can always be written."""
@@ -621,11 +631,56 @@ class JobStatus(MojoBaseModel):
         if self.n_remaining <= 0 or avg_sec == 0:
             return timedelta(0)
 
-        # the number of processors used will change the estimate!
-        waves_remaining = math.ceil(self.n_remaining / max(1, self.n_proc))
-        total_remaining_seconds = waves_remaining * avg_sec
+        # how many trials run at once changes the estimate! see `parallelism`
+        parallelism = self.parallelism
+        if self.execution_mode is ExecutionMode.LOCAL:
+            # a local pool starts its trials in waves of `n_proc`
+            total_remaining_seconds = (
+                math.ceil(self.n_remaining / parallelism) * avg_sec
+            )
+        else:
+            # the scheduler decides when each trial starts, so there are no waves to count
+            total_remaining_seconds = self.n_remaining * avg_sec / parallelism
 
         return timedelta(seconds=int(total_remaining_seconds))
+
+    @property
+    def parallelism(self) -> float:
+        """
+        How many trials run at once, which turns one trial's average duration into the job's throughput and time remaining.
+
+        A local run has `n_proc` of them. For a job whose trials are run by other processes, such as the array tasks of a SLURM job, `n_proc` means nothing: it is the local default unless the user happened to set it for something else, and how many tasks run at once is up to the scheduler and changes as the cluster fills and empties. So it is measured instead, as the average number of trials in flight since the job began (see `_measured_parallelism`), and is `n_proc` only until a trial has run.
+        """
+        fallback = float(max(1, self.n_proc))
+        if self.execution_mode is ExecutionMode.LOCAL:
+            return fallback
+        measured = self._measured_parallelism()
+        return fallback if measured is None else measured
+
+    def _measured_parallelism(self) -> float | None:
+        """
+        The average number of trials in flight since the job began, or `None` before any trial has run.
+
+        It is the time the trials spent running, each from its first step to its end (or to now if it has not ended), divided by how long the job has run: 20 trials that each ran for the whole of a 150 second job give 20. Only the part of a trial inside the job's span counts, so a trial from an earlier run of a resumed job does not. A finished job's span ends when it did, not now, so its value does not fade as time passes.
+        """
+        now = datetime.now(UTC)
+        until = self.start_time + self.elapsed if self.is_done else now
+        span = (until - self.start_time).total_seconds()
+        if span <= 0:
+            return None
+
+        with self._lock:
+            statuses = list(self._cache.values())
+
+        busy = 0.0
+        for status in statuses:
+            began = status.run_started
+            ended = now if status.completion == Completion.INCOMPLETE else status.ended
+            if began is None or ended is None:
+                continue
+            inside = min(ended, until) - max(began, self.start_time)
+            busy += max(0.0, inside.total_seconds())
+        return busy / span if busy > 0 else None
 
     @property
     def n_done(self) -> int:
@@ -967,27 +1022,30 @@ class JobStatus(MojoBaseModel):
         """
         Reconstructs cumulative outcome counts over the job's wall-clock life, for the monitor's stacked progress histogram.
 
-        Each trial's completion time is taken as the latest recorded step end (`started + elapsed`). A trial that is still `INCOMPLETE` but has begun generating or solving counts as "running" from that start time onward rather than "pending"; claimed-but-not-yet-started trials (only `pending.started` set) still count as pending. The axis runs from job start to now if any trial is currently running, or to the last completion event if the job is idle/abandoned (so a stalled job doesn't render a flat tail stretching to now). For each of `n_bins` evenly spaced timestamps in that range, the bin reports how many trials had succeeded, failed requirements, errored, or were running by that time; everything else is pending.
+        Each trial's completion time is taken as the latest recorded step end (`started + elapsed`). A trial counts as "running" from the moment it began generating or solving until it ends, or until now if it has not ended, so a trial that has since finished still shows as running over the time it ran. Claimed-but-not-yet-started trials (only `pending.started` set) count as pending. The axis runs from job start to now if any trial is currently running, or to the last completion event if the job is idle/abandoned (so a stalled job doesn't render a flat tail stretching to now). For each of `n_bins` evenly spaced timestamps in that range, the bin reports how many trials had succeeded, failed requirements, errored, or were running at that time; everything else is pending.
         """
         with self._lock:
             statuses = list(self._cache.values())
 
         events: list[tuple[datetime, Completion]] = []
-        running_starts: list[datetime] = []
+        # (began, ended) for every trial that has begun; `ended` is None while it is still going
+        runs: list[tuple[datetime, datetime | None]] = []
         for s in statuses:
+            run_start = s.run_started
             if s.completion == Completion.INCOMPLETE:
-                run_start = s.generating.started or s.solving.started
                 if run_start is not None:
-                    running_starts.append(run_start)
+                    runs.append((run_start, None))
                 continue
             if (ended := s.ended) is not None:
                 events.append((ended, s.completion))
+                if run_start is not None:
+                    runs.append((run_start, ended))
 
-        if not events and not running_starts:
+        if not events and not runs:
             return []
 
         start = self.start_time
-        if running_starts:
+        if any(stop is None for _, stop in runs):
             # the job is actively progressing right now: let the axis track
             # "now" rather than freezing at the last completion event
             end = datetime.now(UTC)
@@ -1008,7 +1066,9 @@ class JobStatus(MojoBaseModel):
             n_s = sum(1 for ts, c in events if ts <= t and c == Completion.SUCCESS)
             n_f = sum(1 for ts, c in events if ts <= t and c in FAILED_COMPLETIONS)
             n_e = sum(1 for ts, c in events if ts <= t and c == Completion.ERROR)
-            n_r = sum(1 for rs in running_starts if rs <= t)
+            n_r = sum(
+                1 for began, stop in runs if began <= t and (stop is None or t < stop)
+            )
             bins.append(
                 {
                     "t": (t - start).total_seconds(),
@@ -1027,20 +1087,16 @@ class JobStatus(MojoBaseModel):
             )
         return bins
 
-    def to_monitor_json(self, n_proc: int | None = None) -> dict[str, Any]:
+    def to_monitor_json(self) -> dict[str, Any]:
         """Returns a lightweight summary optimized for the Alpine.js dashboard."""
         from mujoco_mojo.runtime.signal_manager import SignalManager
-
-        # We trigger the disk refresh here so the data is fresh
-        # obj = self.model_validate_json((self.workdir / JOB_STATUS_FNAME).read_text())
-        # obj.refresh_from_disk(n_proc=obj.n_proc if n_proc is None else n_proc)
 
         avg_seconds = self.average_trial_duration.total_seconds()
 
         # Avoid divide by zero if no trials have finished yet
         throughput = 0
         if avg_seconds > 0:
-            throughput = (60.0 / avg_seconds) * self.n_proc
+            throughput = (60.0 / avg_seconds) * self.parallelism
 
         success_tns = self.success_trial_nums
         failed_tns = self.failed_trial_nums
