@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased Version
+
+- Fixed the Monitor's trials per minute, time remaining, and ETA for SLURM jobs, which assumed one trial ran at a time
+- Fixed the Monitor's trial timeline showing a finished trial as running only while it was still going
+
 ## Version 2.8.1 (2026-11-09)
 
 - The What's Changed window now falls back to a saved or bundled changelog when GitHub can't be reached

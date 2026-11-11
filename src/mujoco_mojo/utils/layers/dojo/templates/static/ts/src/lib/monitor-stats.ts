@@ -83,7 +83,7 @@ export function statCards(status: JobStatus): StatCard[] {
       color: "text-accent-500",
       subValue: `${status.throughput} trials/min - ${n_trial} trials total`,
       tooltip:
-        "Trials that have not finished yet. Throughput is derived from the average duration of completed trials (successes and failures; errors excluded) and the number of processors.",
+        "Trials that have not finished yet. Throughput is derived from the average duration of completed trials (successes and failures; errors excluded) and the number of trials running at once: the processors for a local run, measured for a SLURM job.",
     },
     {
       label: status.is_complete ? "Finished" : "Est. Remaining",
