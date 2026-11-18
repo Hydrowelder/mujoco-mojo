@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased Version
+## Version 2.8.2 (2026-11-17)
 
 - Fixed the Monitor's trials per minute, time remaining, and ETA for SLURM jobs, which assumed one trial ran at a time
 - Fixed the Monitor's trial timeline showing a finished trial as running only while it was still going
