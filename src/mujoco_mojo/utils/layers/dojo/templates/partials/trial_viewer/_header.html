@@ -262,7 +262,7 @@
                           x-text="vsDraft.enabled ? `VS. #${Math.min(vsDraft.range[0],vsDraft.range[1])}-${Math.max(vsDraft.range[0],vsDraft.range[1])} · ${vsInRangeCount()}${vsDraft.pinned.length ? ` +${vsDraft.pinned.length}` : ''}` : 'VS.'"></span>
 
                     <template x-if="vsDraft.enabled">
-                        <button @click.stop="syncVsRange()"
+                        <button @click.stop="applyVs()"
                                 :disabled="vsLoading"
                                 class="ml-auto px-2 h-6 bg-accent-500 hover:bg-accent-600 text-white text-xs font-black uppercase tracking-widest rounded-xl transition-all active:scale-95 flex items-center gap-1.5 disabled:opacity-50 shrink-0">
                             <span x-show="!vsLoading">Apply</span>

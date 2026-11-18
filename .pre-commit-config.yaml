@@ -76,6 +76,25 @@ repos:
         stages: [pre-push]
   - repo: local
     hooks:
+      - id: gen-dojo-screenshots
+        name: Update the Dojo screenshots in the docs (Playwright)
+        # before a push, not a commit: it starts a Dojo and takes every shot in both themes,
+        # minutes in all once the jobs it shows are cached (the first run also runs them).
+        # --changed-only replaces an image only when it shows something different, which is
+        # what lets it settle: the footer's version and a pixel of noise do not count. A push
+        # stops when it replaced any, so commit the images and push again. It needs Chromium
+        # once (`uv run playwright install chromium`), and `SKIP=gen-dojo-screenshots git
+        # push` skips it. system, as gen-docs-models above, for a script that imports
+        # mujoco_mojo; the project environment holds Playwright (the dev group) and, as for
+        # the ty hook, the extras that Morph and SensAI need (--frozen leaves uv.lock alone)
+        entry: uv run --frozen --all-extras python scripts/gen_dojo_screenshots.py --changed-only
+        language: system
+        files: ^(src/mujoco_mojo/utils/layers/dojo/(templates/(.*\.html|static/ts/src/.*\.(ts|css))|.*\.py)|scripts/(gen_dojo_screenshots|dojo_screenshots_job)\.py|docs/user-guides/(workflow/monte_carlo_example|features/optimization_example)\.py)$
+        exclude: \.test\.ts$
+        pass_filenames: false
+        stages: [pre-push]
+  - repo: local
+    hooks:
       - id: copy-docs-examples
         name: Copy Docs Examples to Examples
         entry: python scripts/copy_docs_examples_to_examples.py

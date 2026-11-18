@@ -34,9 +34,7 @@ class BumperData(UserData):
 
 # --8<-- [start:signature]
 def my_check(
-    mojo_model: MojoModel,
-    state: MjState,
-    df: MojoDataFrame | None,
+    mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
 ) -> tuple[bool | None, str]:
     """Every requirement takes `(mojo_model, state, df)` and returns `(passed, message)`."""
     # passed: True = satisfied, False = violated, None = no verdict yet
@@ -48,9 +46,7 @@ def my_check(
 
 # --8<-- [start:end_of_trial_check]
 def check_max_height(
-    mojo_model: MojoModel,
-    state: MjState,
-    df: MojoDataFrame | None,
+    mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
 ) -> tuple[bool, str]:
     """Passes when the robot's peak height stayed under 2 m for the whole trial."""
     assert df is not None  # end-of-trial checks always receive the telemetry frame
@@ -88,18 +84,14 @@ def register_with_decorator(rm: RuntimeManager) -> None:
     # --8<-- [start:decorator]
     @rm.requirement()  # name inferred: "check_settle_time"
     def check_settle_time(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool, str]:
         """Passes when the simulation ran for at least one second."""
         return state.data.time > 1.0, f"final sim time = {state.data.time:.3f} s"
 
     @rm.requirement("avg_speed_ok")  # explicit name
     def check_avg_speed(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool, str]:
         """Passes when the average forward speed met the per-trial target."""
         target = mojo_model.get_user_data(BumperData).min_speed
@@ -121,9 +113,7 @@ def register_live_check_and_react(rm: RuntimeManager, state: MjState) -> None:
     # --8<-- [start:live]
     @rm.requirement(every=100)
     def upright(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool, str]:
         """Passes while the base stays above 5 cm."""
         # df is None during live checks; use state directly
@@ -175,9 +165,7 @@ def run_with_latching(rm: RuntimeManager, state: MjState) -> None:
     # latch_on_pass, which must be opted into explicitly
     @rm.requirement(every=23, latch_on_pass=True, latch_on_fail=True)
     def check_expensive_requirement(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool | None, str]:
         """Runs a very expensive function."""
         value = very_expensive_function(state)
@@ -201,9 +189,7 @@ def run_with_successful_early_termination(rm: RuntimeManager, state: MjState) ->
     # --8<-- [start:terminate_on_pass]
     @rm.requirement(every=25, terminate_on_pass=True)
     def reached_goal(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool | None, str]:
         """Ends the trial successfully once the base gets within 10 cm of the goal."""
         handoff = mojo_model.get_user_data(BumperData)
@@ -250,9 +236,7 @@ def register_parametric_check(rm: RuntimeManager) -> None:
     # --8<-- [start:user_data]
     @rm.requirement("clearance_ok")
     def check_clearance(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool, str]:
         """Passes if the chassis never dipped below the generated clearance threshold."""
         min_clearance = mojo_model.get_user_data(BumperData).min_ground_clearance
@@ -273,9 +257,7 @@ def register_final_state_check(rm: RuntimeManager) -> None:
     # --8<-- [start:final_state]
     @rm.requirement("reached_goal")
     def check_goal(
-        mojo_model: MojoModel,
-        state: MjState,
-        df: MojoDataFrame | None,
+        mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
     ) -> tuple[bool, str]:
         """Passes if the base finished within 10 cm of the goal position."""
         handoff = mojo_model.get_user_data(BumperData)

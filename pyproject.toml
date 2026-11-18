@@ -81,6 +81,7 @@ dev = [
     "mujoco-mojo[docs]",
     "optuna-dashboard>=0.20.0",
     "optuna>=4.8.0",
+    "playwright>=1.65.0",
     "pybind11-stubgen>=2.5.5",
     "pyright[nodejs]>=1.1.411",
     "pytest>=9.1.1",

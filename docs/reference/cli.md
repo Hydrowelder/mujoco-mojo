@@ -27,7 +27,7 @@ Initialize a new empty mujoco-mojo project.
 
 Writes these to the current directory: a `simulation.py` scaffold, the `run.sh` and `reloaded.sh` scripts, a project settings file, and an `AGENTS.md` that points coding agents at the user guides (an existing `AGENTS.md` is left alone). The scaffold contains stub implementations of **generate**, **runtime**, and **UserData**. Pass `--optimizer` to also include an **objective** stub.
 
-```bash
+```bash linenums="0"
 mujoco-mojo init [OPTIONS]
 ```
 
@@ -43,7 +43,7 @@ Run a development session in a terminal UI, with the model shown in a MuJoCo vie
 
 Regenerates and reloads the MJCF model on command, or whenever your source files change, for rapid prototyping.
 
-```bash
+```bash linenums="0"
 mujoco-mojo reloaded [OPTIONS]
 ```
 
@@ -76,7 +76,7 @@ Launch the Mojo Dojo to monitor the progress of a running job.
 
 This command reads status files in the workdir to give live updates.
 
-```bash
+```bash linenums="0"
 mujoco-mojo dojo [OPTIONS] WORKDIR
 ```
 
@@ -101,7 +101,7 @@ mujoco-mojo dojo [OPTIONS] WORKDIR
 
 Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.).
 
-```bash
+```bash linenums="0"
 mujoco-mojo run [OPTIONS] COMMAND [ARGS]...
 ```
 
@@ -120,7 +120,7 @@ Execute a Monte Carlo campaign.
 
 This command handles the directory setup, distribution salting, and parallel execution of physics trials.
 
-```bash
+```bash linenums="0"
 mujoco-mojo run monte-carlo [OPTIONS]
 ```
 
@@ -152,7 +152,7 @@ Execute a single trial.
 
 This command handles the directory setup, distribution salting, and execution of exactly one physics trial (trial 0, the nominal run, unless `--trial-num` targets a different one).
 
-```bash
+```bash linenums="0"
 mujoco-mojo run single [OPTIONS]
 ```
 
@@ -184,7 +184,7 @@ Keep a job's status current until it finishes.
 
 For jobs whose trials are run by other processes, such as the tasks of a SLURM job. They only write their own trial's status, so **job_status.json** (elapsed time, trial durations) and the runtime report would otherwise stay as they were at submission. This checks the trials every few seconds and updates both, and exits by itself once every trial is done. Safe to stop with Ctrl+C and start again; the job is not affected.
 
-```bash
+```bash linenums="0"
 mujoco-mojo run watch-workdir [OPTIONS]
 ```
 
@@ -204,7 +204,7 @@ Execute an automated Design Optimization study.
 
 This command uses Optuna to intelligently navigate the search space defined by `model.design_float` and `model.design_categorical` calls within your generator.
 
-```bash
+```bash linenums="0"
 mujoco-mojo run optimization [OPTIONS]
 ```
 
@@ -241,7 +241,7 @@ mujoco-mojo run optimization [OPTIONS]
 
 Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`.
 
-```bash
+```bash linenums="0"
 mujoco-mojo settings [OPTIONS] COMMAND [ARGS]...
 ```
 
@@ -260,7 +260,7 @@ Initialize a settings file with defaults.
 
 Writes `~/.mujoco-mojo/settings.toml` (or, with **--project**, `./.mujoco-mojo/settings.toml`) plus a **settings.schema.json** and **.taplo.toml** colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
 
-```bash
+```bash linenums="0"
 mujoco-mojo settings init [OPTIONS]
 ```
 
@@ -277,7 +277,7 @@ Display settings.
 
 By default, resolves values from all sources in priority order (environment variables, project settings file, global settings file, then defaults) and shows the resulting effective settings, with the API key masked. Pass **--scope project** or **--scope global** to instead show the raw, unmerged contents of just that one file (also masked).
 
-```bash
+```bash linenums="0"
 mujoco-mojo settings show [OPTIONS]
 ```
 
@@ -295,7 +295,7 @@ Example: `mujoco-mojo settings set dojo.sensai.enabled true`
 
 Add **--project** to write only the changed key into this project's local override file, leaving everything else there untouched.
 
-```bash
+```bash linenums="0"
 mujoco-mojo settings set [OPTIONS] KEY VALUE
 ```
 
@@ -318,7 +318,7 @@ Reset settings back to their defaults.
 
 Without **--project**: overwrites every value in `~/.mujoco-mojo/settings.toml` with its default (comments you've added by hand are kept). With **--project**: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
 
-```bash
+```bash linenums="0"
 mujoco-mojo settings reset [OPTIONS]
 ```
 
@@ -332,7 +332,7 @@ mujoco-mojo settings reset [OPTIONS]
 
 Find the documentation that ships with this version of mujoco-mojo, and build and browse its site.
 
-```bash
+```bash linenums="0"
 mujoco-mojo docs [OPTIONS] COMMAND [ARGS]...
 ```
 
@@ -351,7 +351,7 @@ Print the folder that holds the documentation source.
 
 It is the same pages and `mkdocs.yml` as the online docs, as markdown, for the version you have installed, so it needs no network. The guides are in `docs/user-guides/` and the command line reference is `docs/reference/cli.md`. The images are left out. Only the path is printed, for scripts and coding assistants to use. To read the pages as a site, see `docs serve`.
 
-```bash
+```bash linenums="0"
 mujoco-mojo docs path [OPTIONS]
 ```
 
@@ -361,7 +361,7 @@ Build the documentation site for this version of mujoco-mojo.
 
 The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
 
-```bash
+```bash linenums="0"
 mujoco-mojo docs build [OPTIONS]
 ```
 
@@ -377,7 +377,7 @@ Browse the documentation site in a web browser.
 
 Serves the site built by `docs build`. If this version's docs are not built yet they are built first, which needs the `docs` extra (`pip install mujoco-mojo[docs]`) once; after that nothing extra is needed.
 
-```bash
+```bash linenums="0"
 mujoco-mojo docs serve [OPTIONS]
 ```
 
@@ -395,6 +395,6 @@ List the documentation sites that are built.
 
 One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
 
-```bash
+```bash linenums="0"
 mujoco-mojo docs list [OPTIONS]
 ```

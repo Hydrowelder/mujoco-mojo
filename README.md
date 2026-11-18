@@ -128,7 +128,7 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 #### Monitor: Real-Time Oversight
 
 - **Live Progress Tracking:** Dynamic progress bars and color-coded status cards provide a high-level view of your Monte Carlo runs.
-- **Success/Failure Analytics:** Automatic categorization of trials with built-in data integrity checks to identify "empty" vs. "failed" runs.
+- **Success, Failure and Error Analytics:** Every trial lands in one of three outcomes, so a run that missed a requirement is never confused with one that crashed, and a timeline shows how the job progressed.
 - **Sensory Feedback:** Optional audio cues and visual celebrations let you know exactly when a multi-hour job hits 100%.
 - **Deep-Linked Navigation:** Jump straight from the monitor to any individual trial in the viewer with one click.
 
@@ -140,6 +140,13 @@ A zero-dependency, offline-first web suite for monitoring and analyzing your sim
 - **State Persistence & Sharing:** Every view is captured in a shareable, compressed URL by pasting a link to share your exact configuration.
 - **Pro-Grade Tooling:** Built-in JSON configuration editor, drag-and-drop config restoration, and multi-format exports (SVG, PNG, CSV).
 - **Keyboard-First Design:** Full hotkey support for warping between trials and managing views without leaving the home row.
+- **Trial Details:** Under every plot, the trial's animation, where its random draws fell in their distributions, its requirements and its logs.
+- **Signal Lab:** Build new signals after the run by wiring recorded signals through filters, arithmetic and frame changes on a canvas.
+
+#### Morph and SensAI
+
+- **Morph:** For optimization jobs, an embedded Optuna Dashboard shows how the search converged and which parameters mattered.
+- **SensAI:** An optional assistant (bring your own model) that answers questions about your job, edits your plot, and explains how to use Mojo from the docs that ship with it.
 
 ### Reloaded
 

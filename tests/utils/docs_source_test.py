@@ -63,9 +63,18 @@ def test_the_config_is_a_copy_of_the_one_in_the_repo() -> None:
     ).read_bytes()
 
 
+def _nav_block(config: str) -> str:
+    """The `nav:` section of the config, up to the next top-level key, so a file listed elsewhere in it (under `watch:`, say) is not read as a page."""
+    match = re.search(r"^nav:[ \t]*\n(.*?)(?=^\S)", config, re.MULTILINE | re.DOTALL)
+    assert match is not None
+    block = match.group(1)
+    assert isinstance(block, str)
+    return block
+
+
 def test_every_page_of_the_nav_is_in_the_bundle() -> None:
     config = (DOCS_SOURCE_DIR / "mkdocs.yml").read_text(encoding="utf-8")
-    pages = _NAV_PAGE.findall(config)
+    pages = _NAV_PAGE.findall(_nav_block(config))
 
     assert len(pages) >= 20
     assert [p for p in pages if not (DOCS_SOURCE_DIR / "docs" / p).is_file()] == []

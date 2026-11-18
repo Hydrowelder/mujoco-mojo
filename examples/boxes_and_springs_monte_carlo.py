@@ -259,7 +259,7 @@ if __name__ == "__main__":
         generator=generate,
         runtime=runtime,
         workdir=workdir,
-        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1),
+        config=mojo.utils.MonteCarloConfig(n_trial=10, n_proc=1, resume=False),
     )
 
     runner.run(clean_workdir=True)

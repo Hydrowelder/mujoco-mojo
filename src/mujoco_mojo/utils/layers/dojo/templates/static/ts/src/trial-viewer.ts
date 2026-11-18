@@ -2873,7 +2873,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this.vsDraft.range = draft.range;
       this.vsDraft.pinned = draft.pinned;
       if (draft.enabled) {
-        await this.syncVsRange();
+        await this.applyVs();
         return;
       }
       this.vs.range = draft.range;
@@ -2920,6 +2920,15 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         store.errorTrialNums,
         store.failureTrialNums,
       );
+    },
+
+    // pressing Apply: fetches the comparison and draws the plot with it. The
+    // config watcher used to draw it, when versus lived in `config` and Apply
+    // changed `config.vsEnabled`; `vs` is outside `config` now, so nothing else
+    // redraws the plot once the comparison has arrived
+    async applyVs() {
+      await this.syncVsRange();
+      void this.renderPlot();
     },
 
     async syncVsRange() {

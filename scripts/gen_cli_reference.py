@@ -206,7 +206,7 @@ def _section(path: list[str], command: Any) -> str:
     blocks = [f"{level} `{' '.join(path)}`"]
     if command.help:
         blocks.append(markdown_text(command.help))
-    blocks.append(f"```bash\n{usage_line(path, command)}\n```")
+    blocks.append(f'```bash linenums="0"\n{usage_line(path, command)}\n```')
     arguments = _visible_params(command, "argument")
     if arguments:
         blocks.append("**Arguments**\n\n" + _arguments_table(arguments))

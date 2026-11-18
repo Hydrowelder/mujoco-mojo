@@ -1,0 +1,30 @@
+/*
+ * roboto, the font the Dojo's text is set in, so the UI looks the same on every
+ * machine instead of taking whichever font its system resolves the stack to.
+ *
+ * these are the variable builds from @fontsource-variable/roboto, one file per
+ * style that holds every weight (the UI uses 400, 600, 700 and 900). only the
+ * latin subset is declared, which is the Dojo's own text and every name and
+ * unit it shows: a character outside it falls back to the next font in the
+ * stack, and the package's other subsets (cyrillic, greek, ...) stay out of
+ * the build. the font is licensed under the SIL open font license 1.1, whose
+ * text is copied next to it in the build output (see vite.config.ts).
+ */
+
+@font-face {
+  font-family: "Roboto Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/roboto/files/roboto-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Roboto Variable";
+  font-style: italic;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("../../node_modules/@fontsource-variable/roboto/files/roboto-latin-wght-italic.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}

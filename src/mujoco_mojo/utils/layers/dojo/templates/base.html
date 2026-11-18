@@ -563,17 +563,16 @@
              connection+sync pill's height. Overriding to text-xs here
              made this pill genuinely shorter, not just visually different. -->
         <div class="flex items-center gap-1.5 px-3 py-1 font-mono">
-          <!-- the dot's own w-2 h-2 box is always in the flex row (never
-               x-show'd away), same as the connection pill's solid dot -
-               only its opacity/ping toggle with the update state, so
-               this row's content height never depends on whether an
-               update happens to be available. -->
-          <span class="relative flex items-center justify-center w-2 h-2">
-            <span x-show="$store.dojo.changelogUpdateAvailable"
-                  x-cloak
-                  class="absolute inline-flex h-2 w-2 rounded-full bg-accent-400 opacity-75 animate-ping"></span>
-            <span class="relative inline-flex rounded-full h-2 w-2 bg-accent-500 transition-opacity duration-300"
-                  :class="$store.dojo.changelogUpdateAvailable ? 'opacity-100' : 'opacity-0'"></span>
+          <!-- the update dot is only in the row while an update is
+               available, so the version sits flush with the pill's left
+               padding the rest of the time. The row's height does not
+               depend on it: the version text's line-height is taller
+               than the 8px dot either way. -->
+          <span x-show="$store.dojo.changelogUpdateAvailable"
+                x-cloak
+                class="relative flex items-center justify-center w-2 h-2">
+            <span class="absolute inline-flex h-2 w-2 rounded-full bg-accent-400 opacity-75 animate-ping"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-accent-500"></span>
           </span>
           <span>v{{ mojo_version }}</span>
         </div>

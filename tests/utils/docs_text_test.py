@@ -54,6 +54,18 @@ class TestCleaning:
 
         assert clean(text) == "[Open](https://x.test/a)\n"
 
+    def test_a_cross_reference_to_the_api_reference_keeps_only_its_text(self) -> None:
+        text = "Use [`MojoDataFrame.read_parquet(path)`][mujoco_mojo.utils.dataframe.MojoDataFrame.read_parquet] or [from_dict][mujoco_mojo.utils.dataframe.MojoDataFrame.from_dict].\n"
+
+        assert clean(text) == "Use `MojoDataFrame.read_parquet(path)` or from_dict.\n"
+
+    def test_an_ordinary_link_and_a_cross_reference_in_code_are_left_alone(
+        self,
+    ) -> None:
+        text = "See [the guide](a/b.md) and [text](https://x.test).\n\n```python\nvalues = [x][0]\n```\n"
+
+        assert clean(text) == text
+
     def test_front_matter_is_removed_from_the_top_of_a_page_only(self) -> None:
         assert clean("---\nhide:\n  - navigation\n---\n# Home\n") == "# Home\n"
         assert clean("a\n\n---\n\nb\n") == "a\n\n---\n\nb\n"

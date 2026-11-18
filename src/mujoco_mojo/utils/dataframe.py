@@ -113,13 +113,6 @@ class _MojoFrame(pl.DataFrame):
     """
 
     @classmethod
-    def from_metadata(
-        cls, path: Path | str, *args: Any, **kwargs: Any
-    ) -> MojoDataFrame:
-        """Instantiates a zero-row DataFrame for fast schema discovery."""
-        return cls.from_pl(pl.read_parquet(source=path, n_rows=0, *args, **kwargs))
-
-    @classmethod
     def read_parquet(
         cls,
         path: Path | str,
@@ -167,6 +160,12 @@ if TYPE_CHECKING:
     # 2. Polars methods (pl.DataFrame)
     # 3. namespace (MojoFrameProtocol)
     class MojoDataFrame(_MojoFrame):
+        """
+        A Polars `DataFrame` of telemetry, with Mojo's loaders for reading it back from a `telemetry.parquet` file and the `.mojo` namespace (see `MojoNamespace`) for selecting signals, poses, units and reference frames.
+
+        Every Polars `DataFrame` has the namespace once `mujoco_mojo` is imported, and this class adds the loaders and type hints that keep the type through `select`, `filter`, `with_columns` and the rest.
+        """
+
         @property
         def mojo(self) -> MojoNamespace: ...
 
@@ -347,9 +346,11 @@ class MojoNamespace:
         )
 
     def select_custom(self, name: str) -> MojoDataFrame:
+        """Select all signals recorded under a name in the custom category."""
         return self._select_object(SignalCategory.CUSTOM, name)
 
     def select_body(self, name: BodyName) -> MojoDataFrame:
+        """Select all signals belonging to a specific Body (position, velocity, energy and the rest)."""
         return self._select_object(SignalCategory.BODIES, name)
 
     def select_joint(self, name: JointName) -> MojoDataFrame:
@@ -395,6 +396,10 @@ class MojoNamespace:
     def select_flex(self, name: FlexName) -> MojoDataFrame:
         """Select vertex/stress data from a Deformable Flex object."""
         return self._select_object(SignalCategory.DEFORMABLES, name)
+
+    def select_requirement(self, name: str) -> MojoDataFrame:
+        """Select the signals of a requirement that was checked as the run went: its `result`, which is 1.0 for a pass and 0.0 for a fail, held from one check to the next, and NaN before the first verdict."""
+        return self._select_object(SignalCategory.REQUIREMENTS, name)
 
     def _get_base_map(
         self, extra_columns: list[str] | None = None

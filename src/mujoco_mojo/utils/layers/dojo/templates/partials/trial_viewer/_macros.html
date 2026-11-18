@@ -160,15 +160,17 @@ tracking-widest styling every caller's <label> already has - CSS
 
         {% macro color_picker(color_model, ref_name, label, on_change='', width=280, help_expr='') %}
         {%- set box_h = (width * 160) // 280 -%}
+        {# the model with `?.` for each `.`, for the picker's first read and its $watch only. This x-init makes them in $nextTick, which Alpine does not tie to the element, so the $watch outlives it: when the shape editor closes, shapeDraft becomes null and the watcher read `shapeDraft.color` once more, which threw "shapeDraft is null" in the console every time #}
+        {%- set safe_model = color_model | replace('.', '?.') -%}
         <div class="space-y-2"
              x-init="$nextTick(() => {
     const picker = window.mojoCreateColorPicker(
         $refs.{{ ref_name }},
         {{ width }},
         {{ box_h }},
-        {{ color_model }} || window.themeColor('accent-500'),
+        {{ safe_model }} || window.themeColor('accent-500'),
     );
-    $watch('{{ color_model }}', value => {
+    $watch('{{ safe_model }}', value => {
         if (value && value !== picker.color.hexString) picker.color.set(value);
     });
     picker.on('color:change', color => {

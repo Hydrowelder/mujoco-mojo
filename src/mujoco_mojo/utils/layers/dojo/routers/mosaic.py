@@ -894,7 +894,7 @@ def _column_metadata_fields() -> list[dict[str, Any]]:
 @lru_cache(maxsize=128)
 def _get_mojo_df(path: Path, mtime: float) -> MojoDataFrame:
     """Zero-row MojoDataFrame for schema queries, cached by path and mtime."""
-    return MojoDataFrame.from_metadata(path)
+    return MojoDataFrame.read_parquet(path, n_rows=0)
 
 
 @lru_cache(maxsize=128)
