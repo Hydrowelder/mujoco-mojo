@@ -5,7 +5,7 @@ It runs `scripts/dojo_screenshots_job.py` to make a Monte Carlo job and an optim
 
 The shots are dealt out to several worker processes (`--workers`), each with its own Dojo, home and browser, because the shots are independent and one after another they take minutes.
 
-`--changed-only` is what the pre-push hook runs: it takes every shot into a scratch folder and replaces an image in the docs only when it shows something different, which is the only way a rerun can settle (a Dojo draws the time of each job, and the same page is never quite the same pixels twice). It exits 1 when it replaced any, so the push stops and the images can be committed.
+`--changed-only` takes every shot into a scratch folder and replaces an image in the docs only when it shows something different, so a rerun does not rewrite every image (a Dojo draws the time of each job, and the same page is never quite the same pixels twice). It exits 1 when it replaced any.
 
 The finished jobs are cached (see `--cache-dir`), because they do not depend on the Dojo: changing the Dojo and taking the shots again reuses them. A job runs again when the scripts that define it change, or with `--refresh-jobs`, which is what to do after changing how the library records a run.
 
@@ -25,7 +25,7 @@ Usage:
     python scripts/gen_dojo_screenshots.py --scale 2             # twice the pixels, for sharper text
     python scripts/gen_dojo_screenshots.py --workers 1           # one process, to watch a shot with --headed
     python scripts/gen_dojo_screenshots.py --refresh-jobs        # run the jobs again
-    python scripts/gen_dojo_screenshots.py --changed-only        # rewrite only the images that changed (the hook)
+    python scripts/gen_dojo_screenshots.py --changed-only        # rewrite only the images that changed
     python scripts/gen_dojo_screenshots.py --headed              # watch it work
 
 The docs pages name each image, so a new shot is a function below with the `shot` decorator, and a figure on the page that points at `<theme>-<name>.jpg`. Everything here reads the Dojo's own markup (button titles, headings, element ids), so a shot that stops working after a UI change is fixed by finding the new title or heading.
@@ -1331,7 +1331,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--changed-only",
         action="store_true",
-        help="replace an image only when it shows something different, and exit 1 when any was replaced (what the pre-push hook runs)",
+        help="replace an image only when it shows something different, and exit 1 when any was replaced",
     )
     parser.add_argument(
         "--refresh-jobs",
