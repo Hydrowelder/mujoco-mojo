@@ -4,6 +4,18 @@
 
 - Fixed the Monitor's trials per minute, time remaining, and ETA for SLURM jobs, which assumed one trial ran at a time
 - Fixed the Monitor's trial timeline showing a finished trial as running only while it was still going
+- Fixed versus mode not drawing the other trials' lines after pressing Apply
+- Fixed a console error each time the Shapes Editor closed
+- Updated the Dojo guides for the Monitor's errors and timeline, and added guides for Trial Details, the Signal Lab, SensAI, and Morph
+- Added a MojoDataFrame guide, which links to the API reference, where `MojoDataFrame` and its loaders are now documented
+- Added `select_requirement` to the `.mojo` namespace of a `MojoDataFrame`
+- SensAI can now answer questions about the settings
+- The guides now link the classes, methods and commands they name to the API and command line references
+- Fixed the boxes and springs docs example failing with "clean_workdir and resume are mutually exclusive"
+- The Dojo now ships with the Roboto font, so it looks the same on every machine
+
+> [!WARNING]
+> - **Breaking:** `MojoDataFrame.from_metadata` is gone. Use `MojoDataFrame.read_parquet(path, n_rows=0)`, which reads the same frame with no rows
 
 ## Version 2.8.1 (2026-11-09)
 

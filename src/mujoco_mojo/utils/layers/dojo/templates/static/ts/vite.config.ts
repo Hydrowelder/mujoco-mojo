@@ -91,6 +91,13 @@ export default defineConfig({
           dest: "vendored",
           rename: { stripBase: true },
         },
+        // the license of the shipped roboto (styles/fonts.css), which asks
+        // that its text travel with the font files
+        {
+          src: "node_modules/@fontsource-variable/roboto/LICENSE",
+          dest: ".",
+          rename: { stripBase: true, name: "roboto-LICENSE.txt" },
+        },
         // marks static/dist/ as a package for hatchling's wheel build to
         // pick up, matching static/__init__.py and static/vendored/__init__.py
         {
@@ -153,6 +160,14 @@ export default defineConfig({
   },
   build: {
     outDir: resolve(import.meta.dirname, "../dist"),
+    // the fonts of styles/fonts.css are inlined into main.css as data URLs, at
+    // any size. dist/ is served at /mojo-static/dist/, not at the site's root
+    // where Vite writes a CSS url() by default, so a font file there would be a
+    // 404, and the cure for that (a relative base, or renderBuiltUrl) changes
+    // how Vite resolves the preload hints of every JS chunk too. inlined, a
+    // font needs no URL, and it is there when the CSS is, so the text is never
+    // drawn in one font and then swapped to another
+    assetsInlineLimit: (file) => (file.endsWith(".woff2") ? true : undefined),
     emptyOutDir: true,
     sourcemap: true,
     target: "es2020",

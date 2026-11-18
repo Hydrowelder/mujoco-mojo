@@ -6,10 +6,17 @@ repo_name: mujoco-mojo
 remote_branch: gh-pages
 remote_name: origin
 
+# what `zensical serve` rebuilds on, beyond the pages themselves. Zensical walks every file
+# under each folder named here and resolves each path on every build, so a folder with
+# thousands of files costs seconds: `src` holds the Dojo frontend's node_modules (about
+# 15,000 files), and listing it made a build of a few seconds take over 30. It is not
+# needed for the API pages, since Zensical already watches the Python modules under
+# mkdocstrings' `paths` (`src`). The two files that pages include from outside `docs`
+# are listed instead
 watch:
   - docs
-  - src
-  - scripts
+  - scripts/generated
+  - CHANGELOG.md
 
 nav:
   - Home: index.md
@@ -28,6 +35,11 @@ nav:
               - user-guides/features/dojo/dojo.md
               - Monitor: user-guides/features/dojo/monitor.md
               - Mosaic: user-guides/features/dojo/mosaic.md
+              - Trial Details: user-guides/features/dojo/trial-details.md
+              - Signal Lab: user-guides/features/dojo/signal-lab.md
+              - SensAI: user-guides/features/dojo/sensai.md
+              - Morph: user-guides/features/dojo/morph.md
+          - MojoDataFrame: user-guides/features/mojo-dataframe.md
           - Optimization: user-guides/features/optimization.md
           - Reloaded: user-guides/features/reloaded.md
           - Pose Context: user-guides/features/pose-context.md
@@ -105,6 +117,10 @@ plugins:
   - api-autonav:
       modules: [src/mujoco_mojo]
       nav_section_title: Reference
+      # the Dojo frontend's npm packages sit inside the package tree, and some (katex,
+      # flatted) ship Python helper scripts in folders with no __init__.py, which the
+      # plugin would otherwise warn about on every build
+      on_implicit_namespace_package: skip
       module_options:
         # the top-level package re-exports every mjcf type through __all__, which
         # would render the whole mjcf API on this one page, so show only its docstring

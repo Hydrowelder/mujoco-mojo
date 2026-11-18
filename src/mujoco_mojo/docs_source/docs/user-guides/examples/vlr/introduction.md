@@ -25,7 +25,7 @@ To begin, make a new project directory and run the following code to have Mojo b
 mujoco-mojo init
 ```
 
-This will initialize your project with a mock Python file, some helpful bash scripts to make running Mojo easier, and a settings file so you can customize your project settings (see `mujoco-mojo settings --help` for more options).
+This will initialize your project with a mock Python file, some helpful bash scripts to make running Mojo easier, and a settings file so you can customize your project settings (see [`mujoco-mojo settings --help`](../../../reference/cli.md#mujoco-mojo-settings) for more options).
 
 ---
 

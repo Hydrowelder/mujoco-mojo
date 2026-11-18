@@ -18,8 +18,8 @@ In a standard Monte Carlo script, you use `mojo_model.sample_dist()` to represen
 
 Mojo supports two primary types of design variables within your generate script:
 
-- `DesignFloat`: For continuous parameters like spring stiffness, mass, or damping ratios.
-- `DesignCategorical`: For discrete choices like material types (`['steel', 'aluminum']`) or solver methods.
+- [`DesignFloat`][stochas.DesignFloat]: For continuous parameters like spring stiffness, mass, or damping ratios.
+- [`DesignCategorical`][stochas.DesignCategorical]: For discrete choices like material types (`['steel', 'aluminum']`) or solver methods.
 
 ???+ example "Example: Defining Design Variables"
 
@@ -62,7 +62,7 @@ The **Objective Function** is the "grade" you give to a simulation. It is a stan
     ) -> float:
     ```
 
-A valid objective function must accept the `MojoModel`, the `Path` to the telemetry outputs requested during runtime, and an `MjState` object.
+A valid objective function must accept the [`MojoModel`][mujoco_mojo.mojo_model.MojoModel], the `Path` to the telemetry outputs requested during runtime, and an [`MjState`][mujoco_mojo.mj_state.MjState] object.
 
 ???+ example "Example: Scoring Performance"
 
@@ -96,7 +96,7 @@ A valid objective function must accept the `MojoModel`, the `Path` to the teleme
 
 ## Running the Optimizer
 
-Optimization jobs are launched via the `mujoco-mojo run optimization` command (instead of `monte-carlo`). This engine orchestrates the feedback loop between your `generate` script, your `runtime` script, and your `objective` function.
+Optimization jobs are launched via the [`mujoco-mojo run optimization`](../../reference/cli.md#mujoco-mojo-run-optimization) command (instead of `monte-carlo`). This engine orchestrates the feedback loop between your `generate` script, your `runtime` script, and your `objective` function.
 
 ### Key Command Line Arguments
 
@@ -137,7 +137,9 @@ Once you find a promising "neighborhood," you can resume the job with `--refine-
 
 ## Post-Processing
 
-One difference you may notice with `mujoco-mojo dojo` is the new **Morph** tab not present for Monte-Carlo jobs. This new tab allows you to view the history of your optimization using [`optuna-dashboard`](https://github.com/optuna/optuna-dashboard).
+Open the finished (or running) job in the [Dojo](dojo/dojo.md) with [`mujoco-mojo dojo ./optimization_study`](../../reference/cli.md#mujoco-mojo-dojo). An optimization job has everything a Monte Carlo job has: the [Monitor](dojo/monitor.md) follows the study's progress, and the [Mosaic](dojo/mosaic.md) opens the telemetry of any trial, so you can lay the best trial against the first in versus mode.
+
+It also has a **Morph** tab, which a Monte Carlo job does not. [Morph](dojo/morph.md) shows the history of your optimization using [`optuna-dashboard`](https://github.com/optuna/optuna-dashboard): how the score improved, which design variables mattered, and where the search looked.
 
 Morph reads the study's storage database, which an optimization job writes to its workdir by default. Running with `--no-storage` turns it off.
 

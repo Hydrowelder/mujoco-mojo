@@ -4,7 +4,7 @@
 
     While the [Generate Script](generate-script.md) builds the world, the **Runtime Script** defines its execution. This is where you apply forces, execute control logic, and decide what data is worth saving.
 
-    The beauty of Mojo is that you don't need to manage the low-level MuJoCo physics state manually; the `RuntimeManager` handles the heavy lifting, ensuring your simulation is stable and your telemetry is perfectly synchronized.
+    The beauty of Mojo is that you don't need to manage the low-level MuJoCo physics state manually; the [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] handles the heavy lifting, ensuring your simulation is stable and your telemetry is perfectly synchronized.
 
     <figure markdown="span">
         ![Runtime final result](../../assets/user-guides/runtime-anim.gif){ width="50%" height="auto" }
@@ -19,7 +19,7 @@
 
 ## The Runtime Function Contract
 
-Like the generate script, the runtime script follows a strict protocol. It receives the `MojoModel` (populated with your `user_data` and `DepPath` objects remapped), the `RuntimeManager` (your primary interface), and the standard MuJoCo model/data objects.
+Like the generate script, the runtime script follows a strict protocol. It receives the [`MojoModel`][mujoco_mojo.mojo_model.MojoModel] (populated with your `user_data` and `DepPath` objects remapped), the [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] (your primary interface), and the standard MuJoCo model/data objects.
 
 ???+ example "Example: MojoRuntime Handle"
 
@@ -38,17 +38,17 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 
 ## The RuntimeManager (`rm`)
 
-The `RuntimeManager` is the orchestrator of your simulation. It is recommended to use it as a context manager (`with runtime_manager as rm:`). This ensures that the results database is properly opened, the clocks are synchronized, and all resources are cleaned up when the trial finishes.
+The [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] is the orchestrator of your simulation. It is recommended to use it as a context manager (`with runtime_manager as rm:`). This ensures that the results database is properly opened, the clocks are synchronized, and all resources are cleaned up when the trial finishes.
 
 ???+ tip "Tip: No Need to Pass `rm` Around"
 
-    While inside the `with runtime_manager as rm:` block, `rm` is also available ambiently. Methods like `register_to_rm()` and `request()` will automatically find the active `RuntimeManager`/`SignalManager` if you don't pass one explicitly, e.g. `spring_force.register_to_rm()` instead of `spring_force.register_to_rm(rm)`. This means helper functions like `add_spring_force()` in the `Handoff` class don't need to accept `rm` as a parameter at all, so long as they're called from within the `with` block.
+    While inside the `with runtime_manager as rm:` block, `rm` is also available ambiently. Methods like `register_to_rm()` and `request()` will automatically find the active `RuntimeManager`/[`SignalManager`][mujoco_mojo.runtime.signal_manager.SignalManager] if you don't pass one explicitly, e.g. `spring_force.register_to_rm()` instead of `spring_force.register_to_rm(rm)`. This means helper functions like `add_spring_force()` in the `Handoff` class don't need to accept `rm` as a parameter at all, so long as they're called from within the `with` block.
 
 ### Defining Loads
 
 This is where the `Handoff` pattern pays off! Since we packed our site references into `user_data` during generation, we can now easily apply complex forces and torques without searching through the MuJoCo model for IDs.
 
-Mojo provides high-level force abstractions like `PointToPointForce`, which automatically handles the math for things like compression springs or hydraulic actuators. When providing reaction sites located on other bodies, the runtime manager also calculates the correct action-reaction forces to apply.
+Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce], which automatically handles the math for things like compression springs or hydraulic actuators. When providing reaction sites located on other bodies, the runtime manager also calculates the correct action-reaction forces to apply.
 
 ???+ example "Example: Applying Custom Forces"
 
@@ -71,13 +71,13 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
     <div class="grid cards" markdown>
 
-    - `GeneralLoad`
+    - [`GeneralLoad`][mujoco_mojo.runtime.load.GeneralLoad]
 
         ---
 
         **6-DOF force and torque**. Defines full spatial dynamics in either a relative frame or local to a site.
 
-        > Think of it as a `VectorForce` and `VectorTorque` combined into one robust plugin.
+        > Think of it as a [`VectorForce`][mujoco_mojo.runtime.load.VectorForce] and [`VectorTorque`][mujoco_mojo.runtime.load.VectorTorque] combined into one robust plugin.
 
     - `PointToPointForce`
 
@@ -87,7 +87,7 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
         > Perfect for modeling linear springs, dampers, or hydraulic actuators where the force vector changes as the bodies move.
 
-    - `ScalarForce`
+    - [`ScalarForce`][mujoco_mojo.runtime.load.ScalarForce]
 
         ---
 
@@ -95,7 +95,7 @@ Mojo provides high-level force abstractions like `PointToPointForce`, which auto
 
         > Ideal for simple directional thrust or piston logic.
 
-    - `ScalarTorque`
+    - [`ScalarTorque`][mujoco_mojo.runtime.load.ScalarTorque]
 
         ---
 
@@ -127,7 +127,7 @@ Forget about the difference between `mj_step` and `mj_forward`. Just call `rm.st
 
 - Advancing the physics.
 - Updating custom Mojo force plugins.
-- Flushing telemetry to the `SignalManager` and recording videos.
+- Flushing telemetry to the [`SignalManager`][mujoco_mojo.runtime.signal_manager.SignalManager] and recording videos.
 - Managing the internal simulation clock for real-time visualization.
 
 ---
@@ -138,9 +138,9 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
 ???+ tip "Tip: Zero-Logic Logging"
 
-    The `.request()` method is available on select Mojo objects. It tells the `SignalManager` to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
+    The `.request()` method is available on select Mojo objects. It tells the [`SignalManager`][mujoco_mojo.runtime.signal_manager.SignalManager] to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
 
-    Custom requests can also be made using the `SignalManager.post()` method! It takes a value and a `Column`, which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
+    Custom requests can also be made using the [`SignalManager.post()`][mujoco_mojo.runtime.signal_manager.SignalManager.post] method! It takes a value and a [`Column`][mujoco_mojo.utils.column.Column], which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
 
     ```python
     nutation = mojo.utils.Column(
@@ -156,7 +156,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     ```
 
-    A signal that holds integer codes, like the state of a controller, can carry labels for them. `ColumnMetadata.from_enum()` builds the labels from an enum class, and the Dojo plots the signal on its own axis named by them:
+    A signal that holds integer codes, like the state of a controller, can carry labels for them. [`ColumnMetadata.from_enum()`][mujoco_mojo.utils.signal_metadata.ColumnMetadata.from_enum] builds the labels from an enum class, and the Dojo plots the signal on its own axis named by them:
 
     ```python
     class Mode(IntEnum):
@@ -191,7 +191,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
 ## Video Recording
 
-If you need visual proof of your simulation (or you just need something for a slide deck), the `VideoRecorder` plugin provides a method to produce high-fidelity MP4s or gifs. They integrate directly with the `RuntimeManager` and use the named cameras defined in your generator.
+If you need visual proof of your simulation (or you just need something for a slide deck), the [`VideoRecorder`][mujoco_mojo.runtime.video_recorder.VideoRecorder] plugin provides a method to produce high-fidelity MP4s or gifs. They integrate directly with the [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] and use the named cameras defined in your generator.
 
 ???+ tip "Tip: Load Debugging"
 

@@ -48,8 +48,8 @@ describe("the built KaTeX, which the Dojo serves from /mojo-static/dist/", () =>
 
 describe("the build's configuration", () => {
   it("has nothing in it for KaTeX: no plugin for its fonts, and no settings made for its stylesheet", () => {
+    // a plugin for its fonts, or a setting for its stylesheet, would name it. the config does name a font file type now, for the Roboto the Dojo ships (see font-build.test.ts), so a font type is not what says it
     expect(config).not.toMatch(/katex/i);
-    expect(config).not.toContain("woff");
   });
 
   it("is not told to build for a folder, which only the stylesheet and its fonts needed", () => {

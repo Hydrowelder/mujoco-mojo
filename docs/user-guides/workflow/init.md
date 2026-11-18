@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    The `mujoco-mojo init` command scaffolds a new project in the current directory, providing ready-to-run starter files for Monte Carlo campaigns or optimization studies.
+    The [`mujoco-mojo init`](../../reference/cli.md#mujoco-mojo-init) command scaffolds a new project in the current directory, providing ready-to-run starter files for Monte Carlo campaigns or optimization studies.
 
 ---
 
@@ -12,17 +12,17 @@
 mujoco-mojo init [--optimizer]
 ```
 
-With no flags, the command generates a standard Monte Carlo project. Pass `--optimizer` to include an `objective` function stub for use with `mujoco-mojo run optimization`.
+With no flags, the command generates a standard Monte Carlo project. Pass `--optimizer` to include an `objective` function stub for use with [`mujoco-mojo run optimization`](../../reference/cli.md#mujoco-mojo-run-optimization).
 
 ---
 
 ## Generated Files
 
-Running `mujoco-mojo init` produces these files in the current directory:
+Running [`mujoco-mojo init`](../../reference/cli.md#mujoco-mojo-init) produces these files in the current directory:
 
 | File            | Purpose                                                       |
 | --------------- | ------------------------------------------------------------- |
-| `simulation.py` | Simulation stubs: `UserData`, `generate`, and `runtime`       |
+| `simulation.py` | Simulation stubs: [`UserData`][mujoco_mojo.mojo_model.UserData], `generate`, and `runtime`       |
 | `run.sh`        | Pre-configured shell script to launch the campaign            |
 | `reloaded.sh`   | Shell script to open the interactive viewer                   |
 | `AGENTS.md`     | Tells coding assistants where the Mojo guides are (see below) |
@@ -33,7 +33,7 @@ It also creates a `.mujoco-mojo/` folder holding the project's settings file (`s
 
 ### For Coding Assistants
 
-`AGENTS.md` is the file that coding assistants such as Codex, Cursor, GitHub Copilot and Claude Code read for instructions about a project. The one `init` writes says where the Mojo docs are, so an assistant that has never seen Mojo can read them instead of guessing. `mujoco-mojo docs path` prints the folder: it holds the pages of this site as markdown, for the version you have installed, and works without a network connection. The images are left out.
+`AGENTS.md` is the file that coding assistants such as Codex, Cursor, GitHub Copilot and Claude Code read for instructions about a project. The one `init` writes says where the Mojo docs are, so an assistant that has never seen Mojo can read them instead of guessing. [`mujoco-mojo docs path`](../../reference/cli.md#mujoco-mojo-docs-path) prints the folder: it holds the pages of this site as markdown, for the version you have installed, and works without a network connection. The images are left out.
 
 If the project already has an `AGENTS.md`, `init` leaves it alone and prints the text to add to it. Claude Code reads `CLAUDE.md` instead of `AGENTS.md` when both exist, so a project with a `CLAUDE.md` needs the line `@AGENTS.md` in it. `init` tells you when that applies.
 
@@ -56,7 +56,7 @@ A machine reached over SSH gets the browser viewer when it is available, which i
 mujoco-mojo init
 ```
 
-`simulation.py` will contain stubs for `generate` and `runtime`. `run.sh` will call `mujoco-mojo run monte-carlo`.
+`simulation.py` will contain stubs for `generate` and `runtime`. `run.sh` will call [`mujoco-mojo run monte-carlo`](../../reference/cli.md#mujoco-mojo-run-monte-carlo).
 
 ---
 
@@ -66,7 +66,7 @@ mujoco-mojo init
 mujoco-mojo init --optimizer
 ```
 
-`simulation.py` will additionally contain an `objective` stub. `run.sh` will call `mujoco-mojo run optimization`.
+`simulation.py` will additionally contain an `objective` stub. `run.sh` will call [`mujoco-mojo run optimization`](../../reference/cli.md#mujoco-mojo-run-optimization).
 
 ---
 

@@ -830,7 +830,7 @@ class TestDocsAgent:
 
         run_docs_agent(FunctionModel(look))
 
-        assert set(tools) == {"search_docs", "read_docs"}
+        assert set(tools) == {"search_docs", "read_docs", "read_settings"}
         for name, parameters in tools.items():
             for parameter, schema in parameters.items():
                 assert "such as" in schema.get("description", ""), (name, parameter)
@@ -850,6 +850,15 @@ class TestDocsAgent:
 
         assert "SensAI search_docs 'submit a job to SLURM':" in caplog.text
         assert "SensAI read_docs: workflow/init.md Generated Files" in caplog.text
+
+    def test_what_it_asked_the_settings_for_is_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        caplog.set_level(logging.INFO)
+
+        run_docs_agent(scripted(call("read_settings", section="dojo"), say("done")))
+
+        assert "SensAI read_settings 'dojo'" in caplog.text
 
 
 class TestEditingThePlot:

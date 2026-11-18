@@ -163,6 +163,21 @@ def test_settings_save_never_writes_a_real_dojo_password(
     assert settings.dojo.password.get_secret_value() == "hunter2"
 
 
+def test_dumping_the_settings_never_returns_a_secret_value() -> None:
+    """A `SecretStr` is masked by every way of dumping the model (python mode, json mode and as a json string), and only `get_secret_value()` gives the real one, so a dump cannot leak a password whatever it is or is not excluded from."""
+    settings = MujocoMojoSettings(
+        dojo=DojoSettings.model_validate({"password": "SUPER_SECRET_VALUE"})
+    )
+
+    dumped = settings.model_dump()["dojo"]["password"]
+    assert isinstance(dumped, SecretStr)
+    assert "SUPER_SECRET_VALUE" not in repr(dumped)
+    assert settings.model_dump(mode="json")["dojo"]["password"] == "**********"
+    assert "SUPER_SECRET_VALUE" not in settings.model_dump_json()
+    assert settings.dojo.password is not None
+    assert settings.dojo.password.get_secret_value() == "SUPER_SECRET_VALUE"
+
+
 def test_dojo_web_response_never_mentions_secret_fields_at_all() -> None:
     """
     The schema and values payload the Dojo web settings panel actually receives (`_dojo_settings_schema`/`_settings_payload`, as served by `GET/POST /settings`) must not contain the literal field name `password` anywhere - not just mask its value - since the frontend has no legitimate need to know this field exists. Regression test for two bugs found while building this: a nested-model field's schema entry re-embeds a whole-object copy of its default one level up (leaking a secret field's name back in after removing it from `properties`), and a value-based `isinstance(value, SecretStr)` check misses `password`, whose default is `None`, not a `SecretStr` instance.

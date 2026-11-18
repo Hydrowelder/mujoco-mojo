@@ -15,7 +15,7 @@
 
 The rocket is composed of a `body` and a set of `landing_gear` and is created with the `Rocket.new()` class method to keep form with the other constructors.
 
-1. `mojo.BodyName`: A simple name to render in the viewer.
+1. [`mojo.BodyName`][mujoco_mojo.typing.BodyName]: A simple name to render in the viewer.
 2. `mojo.GeomCylinder`: The body tube geometry defined with a radius and length
    - Its mass is declared to something reasonable.
 3. `mojo.PoseEuler`: This type sets the initial position and orientation (when combined this is called a pose).

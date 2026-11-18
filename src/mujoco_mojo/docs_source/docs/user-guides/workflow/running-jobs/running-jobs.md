@@ -2,9 +2,9 @@
 
 !!! abstract
 
-    The **Job Runner** is the engine that transforms your local scripts into production-scale data. Whether you need to run a single "golden" simulation for a video or ten thousand Monte Carlo trials across a compute cluster, `mujoco-mojo run` orchestrates the entire lifecycle. This includes environment snapshotting, multi-processing, and automatic resume logic.
+    The **Job Runner** is the engine that transforms your local scripts into production-scale data. Whether you need to run a single "golden" simulation for a video or ten thousand Monte Carlo trials across a compute cluster, [`mujoco-mojo run`](../../../reference/cli.md#mujoco-mojo-run) orchestrates the entire lifecycle. This includes environment snapshotting, multi-processing, and automatic resume logic.
 
-    While jobs can be launched via the Python `MojoRunner` class, it is highly recommended to use the full-featured CLI for better process management and integration with tools like SLURM.
+    While jobs can be launched via the Python [`MojoRunner`][mujoco_mojo.utils.runner.MojoRunner] class, it is highly recommended to use the full-featured CLI for better process management and integration with tools like SLURM.
 
 ---
 
@@ -14,7 +14,7 @@ Mojo uses a single, unified command structure for all job types. By adjusting a 
 
 ### Running a Single Trial
 
-Use `mujoco-mojo run single` when you want to execute exactly one trial. It accepts a single `--trial-num` (not the list form used by `run monte-carlo`, and there's no `--n-trial` since a single run is always one trial). It's the recommended command when running a baseline, re-running an individual trial for inspection, or as the per-task command in a SLURM job array.
+Use [`mujoco-mojo run single`](../../../reference/cli.md#mujoco-mojo-run-single) when you want to execute exactly one trial. It accepts a single `--trial-num` (not the list form used by `run monte-carlo`, and there's no `--n-trial` since a single run is always one trial). It's the recommended command when running a baseline, re-running an individual trial for inspection, or as the per-task command in a SLURM job array.
 
 ```bash linenums="0"
 # Run trial 0 (nominal values)
@@ -58,7 +58,7 @@ mujoco-mojo run monte-carlo \
 
 ## Core Command Arguments
 
-The `monte-carlo` command is the workhorse of the `mujoco-mojo run` CLI.
+The `monte-carlo` command is the workhorse of the [`mujoco-mojo run`](../../../reference/cli.md#mujoco-mojo-run) CLI.
 
 | Argument      | Shortcut | Description                                                                         |
 | :------------ | :------- | :---------------------------------------------------------------------------------- |
@@ -118,7 +118,7 @@ mujoco-mojo run monte-carlo -g sim.generate -r sim.runtime --kwarg mode='fast' -
 
 ???+ warning "Warning: Misspelled Keywords"
 
-    A keyword that none of your functions accept is an error, so a typo such as `--kwarg modee='fast'` stops the job before anything runs instead of being dropped silently. If any one of your functions takes `**kwargs`, it accepts every keyword and this check cannot tell a typo from a real one. The scripts written by `mujoco-mojo init` use `*args, **kwargs`.
+    A keyword that none of your functions accept is an error, so a typo such as `--kwarg modee='fast'` stops the job before anything runs instead of being dropped silently. If any one of your functions takes `**kwargs`, it accepts every keyword and this check cannot tell a typo from a real one. The scripts written by [`mujoco-mojo init`](../../../reference/cli.md#mujoco-mojo-init) use `*args, **kwargs`.
 
 ???+ info "Info: Smart Parsing"
 
@@ -160,7 +160,7 @@ When you launch a job with `--execution-mode slurm`, Mojo starts an orchestratio
 
 #### The SLURM Worker
 
-Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a `mujoco-mojo run single` command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial. The command also passes your `--arg` and `--kwarg` values, and `--padding` with the width of the whole job, so every worker names its folder like the orchestrator expects (`trial_007`, not `trial_7`).
+Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task corresponds to a single trial. The orchestrator generates a [`mujoco-mojo run single`](../../../reference/cli.md#mujoco-mojo-run-single) command for the compute nodes that forces the worker into `local` mode with a single process, using the `$SLURM_ARRAY_TASK_ID` to pick the correct trial. The command also passes your `--arg` and `--kwarg` values, and `--padding` with the width of the whole job, so every worker names its folder like the orchestrator expects (`trial_007`, not `trial_7`).
 
 ???+ tip "Tip: Manual Submissions"
 
@@ -168,7 +168,7 @@ Behind the scenes, Mojo utilizes **SLURM Job Arrays**. Each array task correspon
 
 #### Submitting from Python
 
-The CLI always asks the wizard's questions. When you start a job from Python, there is no terminal to ask them, so give the answers as a `SlurmConfig` and call `MojoRunner.submit_slurm`. It does everything the wizard does once its questions are answered: it sets up the workdir (logs folder, `job_status.json`, global overrides), writes `mujoco_mojo_submit.sh`, and submits it.
+The CLI always asks the wizard's questions. When you start a job from Python, there is no terminal to ask them, so give the answers as a [`SlurmConfig`][mujoco_mojo.utils.slurm.SlurmConfig] and call [`MojoRunner.submit_slurm`][mujoco_mojo.utils.runner.MojoRunner.submit_slurm]. It does everything the wizard does once its questions are answered: it sets up the workdir (logs folder, `job_status.json`, global overrides), writes `mujoco_mojo_submit.sh`, and submits it.
 
 ```python
 from pathlib import Path
@@ -220,15 +220,15 @@ SLURM workers only write their own trial's status, so `job_status.json` stays as
 
 It can be started in the Slurm wizard (which prints the command if you choose to submit by hand) or run on the job's workdir at any time:
 
-```bash
+```bash linenums="0"
 mujoco-mojo run watch-workdir --workdir path/to/workdir
 ```
 
-`Ctrl+C` stops it without affecting the job, and you can start it again later.
+++ctrl+c++ stops it without affecting the job, and you can start it again later.
 
 #### Custom SLURM Settings
 
-The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. These live in the `[slurm]` table of Mojo's settings files, managed with `mujoco-mojo settings <init|show|set|reset>`, and - like every other setting - can be set globally for you, or overridden per project, with the project value winning.
+The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. These live in the `[slurm]` table of Mojo's settings files, managed with [`mujoco-mojo settings <init|show|set|reset>`](../../../reference/cli.md#mujoco-mojo-settings), and - like every other setting - can be set globally for you, or overridden per project, with the project value winning.
 
 **Global defaults** - things about you or your cluster that rarely change (account number, email) belong in `~/.mujoco-mojo/settings.toml`, applied automatically to every submission from any project:
 
@@ -267,14 +267,14 @@ If a key appears in both layers, the project-local value wins - so the example a
 
 The project file is always `.mujoco-mojo/settings.toml`. The `.mujoco-mojo/` directory belongs to the project, so any other project-local file Mojo needs later will sit beside it.
 
-Mojo finds it by checking the current directory, then each parent directory in turn, and uses the **nearest** one. Files further up are not merged in, and the global `~/.mujoco-mojo` directory is never mistaken for a project. This means you can run Mojo from anywhere inside a project, including from a script that `cd`s into its own folder first (the scripts written by `mujoco-mojo init` do), and still pick up the project's settings.
+Mojo finds it by checking the current directory, then each parent directory in turn, and uses the **nearest** one. Files further up are not merged in, and the global `~/.mujoco-mojo` directory is never mistaken for a project. This means you can run Mojo from anywhere inside a project, including from a script that `cd`s into its own folder first (the scripts written by [`mujoco-mojo init`](../../../reference/cli.md#mujoco-mojo-init) do), and still pick up the project's settings.
 
 | Command                                     | Which project file it uses                                                                                                                                                     |
 | :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mujoco-mojo settings set --project ...`    | The one found by the search. If there is none, a new `./.mujoco-mojo/settings.toml` is created in the current directory.                                                       |
-| `mujoco-mojo settings init --project`       | Always creates one in the current directory, even if a parent has one. The nested file takes precedence from that directory down, and the command tells you when this happens. |
-| `mujoco-mojo settings show --scope project` | The one found by the search (or says that none was found and where it looked).                                                                                                 |
-| `mujoco-mojo settings reset --project`      | Deletes the one found by the search, after asking.                                                                                                                             |
+| [`mujoco-mojo settings set --project ...`](../../../reference/cli.md#mujoco-mojo-settings-set)    | The one found by the search. If there is none, a new `./.mujoco-mojo/settings.toml` is created in the current directory.                                                       |
+| [`mujoco-mojo settings init --project`](../../../reference/cli.md#mujoco-mojo-settings-init)       | Always creates one in the current directory, even if a parent has one. The nested file takes precedence from that directory down, and the command tells you when this happens. |
+| [`mujoco-mojo settings show --scope project`](../../../reference/cli.md#mujoco-mojo-settings-show) | The one found by the search (or says that none was found and where it looked).                                                                                                 |
+| [`mujoco-mojo settings reset --project`](../../../reference/cli.md#mujoco-mojo-settings-reset)      | Deletes the one found by the search, after asking.                                                                                                                             |
 
 #### Checking What Gets Added
 
@@ -296,7 +296,7 @@ Each line is labeled with the file it came from. Environment variable values are
 
 ???+ tip "Tip: Project Settings Not Showing Up?"
 
-    If the project file is listed as `not found`, neither the current directory nor any of its parents has a `.mujoco-mojo/settings.toml`; the line says where the search started. Run `mujoco-mojo settings show --scope project` from the same place to see which file, if any, is in effect. Keys containing a dot must be quoted in TOML (`"sbatch.account" = "proj123"`); `mujoco-mojo settings set --project slurm.sbatch.account proj123` writes them correctly for you.
+    If the project file is listed as `not found`, neither the current directory nor any of its parents has a `.mujoco-mojo/settings.toml`; the line says where the search started. Run [`mujoco-mojo settings show --scope project`](../../../reference/cli.md#mujoco-mojo-settings-show) from the same place to see which file, if any, is in effect. Keys containing a dot must be quoted in TOML (`"sbatch.account" = "proj123"`); [`mujoco-mojo settings set --project slurm.sbatch.account proj123`](../../../reference/cli.md#mujoco-mojo-settings-set) writes them correctly for you.
 
 ---
 

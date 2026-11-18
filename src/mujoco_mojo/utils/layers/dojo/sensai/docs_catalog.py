@@ -21,6 +21,7 @@ from mujoco_mojo.utils.docs_text import plain_text
 
 __all__ = [
     "SITE_URL",
+    "STOP_WORDS",
     "DocsPage",
     "Hit",
     "Section",
@@ -38,11 +39,12 @@ _HEADING = re.compile(r"^(?P<hashes>#{1,6})\s+(?P<title>.+?)\s*#*\s*$")
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _ESCAPED = re.compile(r"\\([\\`*_{}\[\]()#+\-.!|<>~])")
 _WORD = re.compile(r"[a-z0-9]+")
-_STOP_WORDS = frozenset(
+STOP_WORDS = frozenset(
     "a about an and are as at be by can do does for from how i if in into is it its me my of "
     "on or so that the their then there this to us we what when where which who why will with "
     "would you your".split()
 )
+"""Words too common to say what a question is about, which a search leaves out."""
 
 # how much more a word of a heading counts than one of the text under it
 _HEADING_WEIGHT = 3
@@ -199,7 +201,7 @@ def _stem(word: str) -> str:
 
 def _terms(text: str) -> list[str]:
     words = _WORD.findall(text.lower())
-    return [_stem(w) for w in words if w not in _STOP_WORDS and len(w) > 1]
+    return [_stem(w) for w in words if w not in STOP_WORDS and len(w) > 1]
 
 
 class _Index:

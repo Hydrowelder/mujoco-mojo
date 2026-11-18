@@ -17,7 +17,7 @@
 
 ## The Generate Function Contract
 
-The generate script is built around the "MojoGenerate" protocol. This function provides a bare bones `mojo.MojoModel` which **must** be its first argument and optional `*args` and `**kwargs`.
+The generate script is built around the "MojoGenerate" protocol. This function provides a bare bones [`mojo.MojoModel`][mujoco_mojo.mojo_model.MojoModel] which **must** be its first argument and optional `*args` and `**kwargs`.
 
 It also **must** return a `mojo.MojoModel`.
 
@@ -135,7 +135,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
 Assets like textures and materials are defined in the `mojo_model.mjcf.assets` list. This is where you handle external files (like skyboxes) or built-in procedural textures like checkerboards.
 
-Notice in the following code how enumerations such as `mojo.TextureType.D2` and `mojo.TextureBuiltInType.CHECKER` are used instead of strings.
+Notice in the following code how enumerations such as [`mojo.TextureType.D2`][mujoco_mojo.typing.TextureType.D2] and [`mojo.TextureBuiltInType.CHECKER`][mujoco_mojo.typing.TextureBuiltInType.CHECKER] are used instead of strings.
 
 ???+ tip "Tip: Walrus Operator (`:=`)"
 
@@ -145,7 +145,7 @@ Notice in the following code how enumerations such as `mojo.TextureType.D2` and 
 
 ???+ tip "Tip: Color Utilities"
 
-    Mojo provides some helpful utilities like `mojo.utils.Color`. This class provides a ton of helpful shortcuts for [Tailwind CSS](https://tailwindcss.com/docs/colors) colors. This makes it really easy to customize the appearance of your model.
+    Mojo provides some helpful utilities like [`mojo.utils.Color`][mujoco_mojo.utils.color.Color]. This class provides a ton of helpful shortcuts for [Tailwind CSS](https://tailwindcss.com/docs/colors) colors. This makes it really easy to customize the appearance of your model.
 
 ???+ example "Example: Assets Definition"
 
@@ -194,7 +194,7 @@ Notice in the following code how enumerations such as `mojo.TextureType.D2` and 
         )
     ```
 
-Mojo uses `DepPath` to handle asset paths, ensuring that your models remain portable across different machines. They have identical properties to `pathlib.Path`. In the `MojoModel.mjcf`, wherever you would use a `Path` object, instead use a `DepPath`.
+Mojo uses `DepPath` to handle asset paths, ensuring that your models remain portable across different machines. They have identical properties to `pathlib.Path`. In the [`MojoModel.mjcf`][mujoco_mojo.mojo_model.MojoModel.mjcf], wherever you would use a `Path` object, instead use a `DepPath`.
 
 Using `DepPath` is the key to portability; it tells Mojo to track the file as a dependency that is integral to your model. This allows Mojo to share a file on disk between different runs, preventing extra bloat!
 
@@ -243,7 +243,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ tip "Tip: Unit Systems"
 
-    The `MojoModel` provides a helpful way to define a model unit system which allows you to define values in whatever unit you want while maintaining consistent behavior while solving the dynamics.
+    The [`MojoModel`][mujoco_mojo.mojo_model.MojoModel] provides a helpful way to define a model unit system which allows you to define values in whatever unit you want while maintaining consistent behavior while solving the dynamics.
 
     > For details on usage visit the [`stochas` documentation](https://hydrowelder.github.io/stochas/user-guides/unit-system/)
 

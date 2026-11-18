@@ -32,7 +32,7 @@ The `reloaded` command is highly flexible, allowing you to specify different vie
 | `--overrides`      | `-o`     | Path to a NamedValue overrides JSON file. Fixes specific distribution draws.                                                                                                                                                                           |
 | `--arg`            | `-a`     | Positional argument forwarded to the generator and the runtime. Repeatable.                                                                                                                                                                            |
 | `--kwarg`          | `-k`     | Keyword argument (`key=value`) forwarded to the generator and the runtime, each receiving only the keywords it accepts. Repeatable.                                                                                                                    |
-| `--port`           | `-p`     | Port for the web viewer. Reads from your settings (`mujoco-mojo settings show`) if you've set one, `8000` out of the box; if that port's already in use (e.g. `mujoco-mojo dojo` is already running), the next free one is selected automatically.     |
+| `--port`           | `-p`     | Port for the web viewer. Reads from your settings ([`mujoco-mojo settings show`](../../reference/cli.md#mujoco-mojo-settings-show)) if you've set one, `8000` out of the box; if that port's already in use (e.g. [`mujoco-mojo dojo`](../../reference/cli.md#mujoco-mojo-dojo) is already running), the next free one is selected automatically.     |
 
 ---
 
@@ -42,11 +42,11 @@ Once Reloaded is running, your terminal becomes a command center with a status b
 
 ### Commands
 
-Type a command and press `ENTER`. Press `TAB` to complete the one you are typing (`explain hel` becomes `explain help`), and use the up and down arrows to step through earlier commands.
+Type a command and press ++enter++. Press ++tab++ to complete the one you are typing (`explain hel` becomes `explain help`), and use ++up++ and ++down++ to step through earlier commands.
 
 | Command                             | Action                                                                                                                                                             |
 | :---------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ENTER`                             | Repeat the last command (perfect for rapid iteration). On a paused run it steps once instead.                                                                      |
+| ++enter++                           | Repeat the last command (perfect for rapid iteration). On a paused run it steps once instead.                                                                      |
 | `gen`, `g`, `generate`              | Trigger **Generate Only** mode. Useful for MJCF debugging.                                                                                                         |
 | `run`, `r`, `runtime`               | Generate and run the `runtime` (only if a `runtime` was provided). Give a speed, as in `run 0.5`, to set it first. On a paused run it carries on.                  |
 | `run until time 2.5`                | Run, then pause by itself once the simulation time reaches that reading. It starts a run if none is going, and carries a paused one on.                            |
@@ -66,47 +66,88 @@ Type a command and press `ENTER`. Press `TAB` to complete the one you are typing
 
 A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
 
-Anything your code logs with Python's `logging` ends with the file and line that logged it, such as `src/my_sim/robot.py:42`, flush with the right edge of the log. A long message wraps, and the location goes on its last row, or on a row of its own if there is no room beside the end of the message. The path is relative to the folder you launched from when the file is inside it. Click the location to copy it with the full path, so it works from any folder, then paste it into your editor's quick open to jump straight there (`Ctrl+P` in VS Code). Messages from Reloaded itself and anything printed with `print` have no location.
+### Locations in the Log
+
+Anything your code logs with Python's `logging` ends with the file and line that logged it, such as `src/my_sim/robot.py:42`, flush with the right edge of the log.
+
+- A long message wraps, and the location goes on its last row, or on a row of its own if there is no room beside the end of the message.
+- The path is relative to the folder you launched from when the file is inside it.
+- Click the location to copy it with the full path, so it works from any folder. Paste it into your editor's quick open to jump straight there (++ctrl+p++ in VS Code).
+
+Messages from Reloaded itself and anything printed with `print` have no location.
 
 ### Controlling a Run
 
 While a run is going you can `pause` it, `step` it, carry it on with `run`, and change its speed with `speed 0.5`. A paused run is carried on by `run 2` at that speed. `stop` still aborts it, paused or not.
 
-Speed `0` is manual stepping: the run waits at every step and each press of `ENTER` (or `step`) lets one through, which is handy for watching a few steps closely. `run` alone does not let it go, because the speed is still 0. Give it a speed, as in `run 1`, or `speed inf` to run as fast as the machine can. Whenever a run is paused, `stop` ends it.
+Speed `0` is manual stepping: the run waits at every step, and each press of ++enter++ (or `step`) lets one through. It is handy for watching a few steps closely.
 
-To have a run pause by itself, give `run` a target: `run until time 2.5` pauses when the simulation time reaches 2.5, and `run until step 500` pauses when the run has taken 500 steps. Both are readings since the run began, not distances from now, and they use whatever time unit your model does. You can put a speed first (`run 0.5 until step 500`), set a target on a run that is already going or paused, and a target that has already been passed is refused. The log says where the run stopped, such as `reached step 500 (time 1, step 500)`, and `run` carries on from there. A target applies to one run only. The status bar shows `PAUSED` while a run is held.
+`run` alone does not let it go, because the speed is still 0. Give it a speed, as in `run 1`, or `speed inf` to run as fast as the machine can.
 
-Pausing holds the run inside `rm.step(...)`, the call your runtime already makes each step, so it works for any runtime that steps through the `RuntimeManager`. That is also how forces, recording, and the force arrows reach the viewer. A runtime that calls `mujoco.mj_step` on its own can be stopped but not paused.
+To have a run pause by itself, give `run` a target:
+
+- `run until time 2.5` pauses when the simulation time reaches 2.5.
+- `run until step 500` pauses when the run has taken 500 steps.
+- `run 0.5 until step 500` puts a speed first.
+
+A target is a reading since the run began, not a distance from now, and time uses whatever unit your model does. You can set one on a run that is already going or paused, but one that has already been passed is refused.
+
+When the run reaches its target, the log says where it stopped, such as `reached step 500 (time 1, step 500)`, and the status bar shows `PAUSED`. `run` carries on from there. A target applies to one run only.
+
+Pausing holds the run inside `rm.step(...)`, the call your runtime already makes each step, so it works for any runtime that steps through the [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager]. That is also how forces, recording, and the force arrows reach the viewer.
+
+A runtime that calls `mujoco.mj_step` on its own can be stopped but not paused.
 
 ### Keys and Clicks
 
-| Key   | Action                                       |
-| :---- | :------------------------------------------- |
-| `F2`  | Generate only.                               |
-| `F3`  | Generate and run, or carry a paused run on.  |
-| `F12` | Pause the run, or resume it if it is paused. |
-| `F4`  | Turn watching on or off.                     |
-| `F7`  | Turn recording on or off.                    |
-| `F8`  | Show or hide the hint.                       |
-| `F9`  | Show help.                                   |
-| `Esc` | Stop the run in progress.                    |
-| `F10` | Quit.                                        |
+| Key     | Action                                       |
+| :------ | :------------------------------------------- |
+| ++f2++  | Generate only.                               |
+| ++f3++  | Generate and run, or carry a paused run on.  |
+| ++f12++ | Pause the run, or resume it if it is paused. |
+| ++f4++  | Turn watching on or off.                     |
+| ++f7++  | Turn recording on or off.                    |
+| ++f8++  | Show or hide the hint.                       |
+| ++f9++  | Show help.                                   |
+| ++esc++ | Stop the run in progress.                    |
+| ++f10++ | Quit.                                        |
 
-The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same as the keys. Each has an icon and shows its key beside the label. A button that does not apply right now is dimmed, so Stop only lights up during a run and Run lights up again when a run is paused. You can also click a value in the status bar. Clicking the seed, trial, or speed lets you type a new one (`ENTER` applies it and `Esc` cancels), and clicking watch or record switches it on or off.
+The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same as the keys. Each has an icon and shows its key beside the label. A button that does not apply right now is dimmed, so Stop only lights up during a run and Run lights up again when a run is paused.
+
+You can also click a value in the status bar:
+
+- Click the seed, trial, or speed to type a new one. ++enter++ applies it and ++esc++ cancels.
+- Click watch or record to switch it on or off.
 
 Closing the viewer window also closes Reloaded.
 
 ### Copying from the Log
 
-Drag across the log with the mouse to select text. Every line the drag touches is highlighted in full, and letting go copies those lines to the clipboard and says how many were copied. `Ctrl+C` copies again. This is how to pass a log on, for example when reporting a problem. The gap that pushes a line's location to the right edge is not copied: you get the message, two spaces, and the location. Clicking a location without dragging copies just its full path and line.
+Drag across the log with the mouse to select text. Every line the drag touches is highlighted in full. Letting go copies those lines to the clipboard and says how many were copied, and ++ctrl+c++ copies again. This is how to pass a log on, for example when reporting a problem.
+
+The gap that pushes a line's location to the right edge is not copied: you get the message, two spaces, and the location.
+
+Clicking a location without dragging copies just its full path and line.
 
 ### Watching for Changes
 
-With `watch` on, saving a `*.py` file reloads with the last command. Reloaded watches the folder it was started in and the folders of the project modules your generator and runtime import, which are the files a reload picks up, so a module that is first imported later is watched from then on. Folders that nothing imports, such as virtual environments and build trees, are left alone. That keeps the number of watches small, because your operating system has a limit that your editor shares. If watching does stop, Reloaded says why in the log and turns `watch` off.
+With `watch` on, saving a `*.py` file reloads with the last command. Reloaded watches:
+
+- the folder it was started in
+- the folders of the project modules your generator and runtime import, which are the files a reload picks up. A module that is first imported later is watched from then on.
+
+Folders that nothing imports, such as virtual environments and build trees, are left alone. That keeps the number of watches small, because your operating system has a limit that your editor shares.
+
+If watching does stop, Reloaded says why in the log and turns `watch` off.
 
 ### If Reloaded Crashes
 
-The Studio viewers run compiled code, and if that code crashes it takes Reloaded down with it. Reloaded then puts your terminal back as it was, so you do not have to close the shell, and says where it saved the Python stack of every thread, `crash.log` in your workdir. Send that file along when reporting a crash. It is removed again after a normal exit. To do this, `mujoco-mojo reloaded` runs your session in a child process and waits for it, so two `mujoco-mojo` processes show up, and it starts about a second slower.
+The Studio viewers run compiled code, and if that code crashes it takes Reloaded down with it. Reloaded then:
+
+- puts your terminal back as it was, so you do not have to close the shell
+- says where it saved the Python stack of every thread, `crash.log` in your workdir
+
+[`mujoco-mojo reloaded`](../../reference/cli.md#mujoco-mojo-reloaded) does this by running your session in a child process and waiting for it. Two `mujoco-mojo` processes show up as a result, and it starts about a second slower.
 
 ### The Studio Viewers
 
@@ -117,7 +158,7 @@ With `-ui studio` or `-ui web` the model is shown in MuJoCo Studio, and Studio's
 | Pause and play   | `pause` and `run`. The terminal's status bar changes too, and so does Studio's button when you pause in the terminal.                                                             |
 | Step             | `step`.                                                                                                                                                                           |
 | Speed slider     | `speed`. The slider runs from 0.1% to 100% of real time, so a speed above real time, `inf`, and manual stepping all show as 100%. Moving the slider sets a speed up to real time. |
-| Reset and Reload | `ENTER`: runs the last command again once nothing is running. During a run they only remind you to `stop` it first.                                                               |
+| Reset and Reload | ++enter++: runs the last command again once nothing is running. During a run they only remind you to `stop` it first.                                                             |
 
 Your generator builds the model, so a model file dropped onto Studio is ignored, and Studio's control noise setting has no effect.
 
@@ -141,11 +182,16 @@ You can also set one from the command line:
 mujoco-mojo settings set reloaded.keys.generate "f5, ctrl+g"
 ```
 
-The actions are `generate`, `run`, `pause`, `step`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. `pause` is `F12` and `step` has no key by default, because no function key is left that an editor terminal passes on, so give it one if you want it. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`. A key can only do one thing, and a list can be empty to leave an action without a key. Typing `quit` always closes Reloaded.
+The actions are `generate`, `run`, `pause`, `step`, `watch`, `record`, `explain`, `help`, `stop`, and `quit`. Use lowercase [Textual key names](https://textual.textualize.io/guide/input/#keys) such as `f2`, `ctrl+g`, or `escape`.
+
+- A key can only do one thing.
+- A list can be empty to leave an action without a key.
+- `pause` is ++f12++ and `step` has no key by default, because no function key is left that an editor terminal passes on. Give it one if you want it.
+- Typing `quit` always closes Reloaded.
 
 !!! tip
 
-    A terminal inside an editor hands some keys to the editor before Reloaded sees them. The terminal in VS Code keeps `F1`, `F5`, `F6`, `F10`, `F11`, `Ctrl+P`, and `Ctrl+Q` for itself, which is why the defaults lean on other function keys.
+    A terminal inside an editor hands some keys to the editor before Reloaded sees them. The terminal in VS Code keeps ++f1++, ++f5++, ++f6++, ++f10++, ++f11++, ++ctrl+p++, and ++ctrl+q++ for itself, which is why the defaults lean on other function keys.
 
 ---
 
@@ -180,7 +226,7 @@ Combined with `--overrides`, you can also lock specific named values to fixed qu
 
 When you are first building your model, you likely don't care about the physics behavior yet, you just want to see if your bodies are aligned and your textures are loading.
 
-1. Launch with only a generator: `mujoco-mojo reloaded --generator my_mod.generate`.
+1. Launch with only a generator: [`mujoco-mojo reloaded --generator my_mod.generate`](../../reference/cli.md#mujoco-mojo-reloaded).
 2. Modify your `generate` function (e.g., change a body's `pos`).
 3. Enter `gen` in the terminal.
 4. The model regenerates, the module hot-reloads, and the viewer snaps to the new state instantly.
@@ -189,10 +235,10 @@ When you are first building your model, you likely don't care about the physics 
 
 Once the world looks right, it's time to test your forces. By providing a `--runtime`, you can move from static snapshots to dynamic testing.
 
-1. Launch with both: `mujoco-mojo reloaded --generator my_mod.gen --runtime my_mod.run`.
+1. Launch with both: [`mujoco-mojo reloaded --generator my_mod.gen --runtime my_mod.run`](../../reference/cli.md#mujoco-mojo-reloaded).
 2. Modify your physics logic (e.g., increase a spring's stiffness).
 3. Enter `run 1.0` (Real-time) or `run 0.5` (Slow-motion).
-4. Watch the physics play out. If it's not right, tweak the code and hit `ENTER` to watch it again with the updated logic.
+4. Watch the physics play out. If it's not right, tweak the code and hit ++enter++ to watch it again with the updated logic.
 
 ---
 

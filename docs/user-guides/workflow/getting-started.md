@@ -24,7 +24,14 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 !!! tip "Optional Extras"
 
-    Some features require extra packages: `mujoco-mojo[optimize]` for Optuna-based optimization, `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition, `mujoco-mojo[sensai]` for the Dojo's SensAI assistant, and `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline)). Install `mujoco-mojo[all]` to get all of them.
+    Some features require extra packages:
+
+    - `mujoco-mojo[optimize]` for Optuna-based optimization
+    - `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition
+    - `mujoco-mojo[sensai]` for the Dojo's SensAI assistant
+    - `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline))
+
+    Install `mujoco-mojo[all]` to get all of them.
 
 ---
 
@@ -36,9 +43,16 @@ This documentation ships with the package, so you can read the version that matc
 mujoco-mojo docs serve
 ```
 
-Open the address it prints. The first time, there is nothing to serve yet, so it builds the site for your version into `~/.mujoco-mojo/docs/v<version>` before it starts, which takes a moment and needs the `docs` extra (`pip install mujoco-mojo[docs]`). After that it only serves that saved copy, which starts at once and needs no extra packages. To build without serving, run `mujoco-mojo docs build`, and add `--rebuild` to build it again. A site that an older install built is still there: `mujoco-mojo docs list` shows which are built and where, and `mujoco-mojo docs serve --version 2.7.1` serves one.
+Open the address it prints. The first time, it builds the site for your version into `~/.mujoco-mojo/docs/v<version>`, which takes a moment and needs the `docs` extra (`pip install mujoco-mojo[docs]`). After that it serves the saved copy at once, with no extra packages.
 
-The package carries the pages, the search and the API reference, but not the screenshots and other large images. The built site links those to GitHub, at the tag of your version, so they show up when you are online. The links to other projects' documentation, such as Python's and pydantic's, are only made if you were online when the site was built.
+- [`mujoco-mojo docs build`](../../reference/cli.md#mujoco-mojo-docs-build) builds without serving. Add `--rebuild` to build again.
+- [`mujoco-mojo docs list`](../../reference/cli.md#mujoco-mojo-docs-list) shows which versions are built and where, including sites that older installs built.
+- [`mujoco-mojo docs serve --version 2.7.1`](../../reference/cli.md#mujoco-mojo-docs-serve) serves one of them.
+
+The package carries the pages, the search, and the API reference. Two things need a connection:
+
+- Screenshots and other large images link to GitHub at the tag of your version, so they only show when you are online.
+- Links to other projects' documentation, such as Python's and pydantic's, are only made if you were online when the site was built.
 
 ---
 
@@ -72,7 +86,7 @@ Before writing code, it is helpful to understand the three pillars of a Mojo pro
             runtime_manager.step(state)
     ```
 
-- **Request-Based Telemetry:** You don't (_have to_) manually log data. Instead, you "Request" that specific geoms, sites, or custom forces be tracked by the `SignalManager`.
+- **Request-Based Telemetry:** You don't (_have to_) manually log data. Instead, you "Request" that specific geoms, sites, or custom forces be tracked by the [`SignalManager`][mujoco_mojo.runtime.signal_manager.SignalManager].
 
 ---
 
@@ -88,7 +102,7 @@ The `mojo.mjcf` object is designed to be isomorphic to the MuJoCo XML schema.
 
 - `<worldbody>` becomes `mojo.WorldBody()`.
 - `<body name="box">` becomes `mojo.Body(name=mojo.BodyName("box"))`.
-  - `mojo.BodyName` (and the other related names) are really strings, but are typed this way to allow for improved static analysis (e.g., if you try to use a `BodyName` where a `SiteName` is needed Pylance will warn you about the invalid type).
+  - Names such as [`mojo.BodyName`][mujoco_mojo.typing.BodyName] are really strings, typed this way so your type checker catches mix-ups, such as a `BodyName` where a `SiteName` is needed.
 - Attributes like `pos` and `rgba` are strictly typed using NumPy arrays and Pydantic validation.
 
 This design ensures that there is "no magic". You are simply building a MuJoCo model using a strongly-typed Python API instead of a fragile string-based XML file.
@@ -99,13 +113,13 @@ This design ensures that there is "no magic". You are simply building a MuJoCo m
 
     The `to_xml` method found in all `XMLModel` (which is most objects in `mujoco_mojo.mjcf`) has an argument (`exclude_default`) which will omit serializing fields set as default.
 
-    If you have a specific use case which is dependent on a value you leave as default, it is highly recommended that you pin that value as opposed to use the default. MuJoCo may change their defaults, and this package may fall behind. In that case, you would be using a "default" which is no longer the default.
+    If your use case depends on a default value, pin it instead. MuJoCo may change its defaults and this package may fall behind, which would leave you using a "default" that is no longer the default.
 
 ---
 
 ## Random Values and Distributions
 
-Mojo treats stochasticity as a first-class citizen. Instead of using `np.random` directly, you define a **Distribution** and sample it through the `MojoModel`.
+Mojo treats stochasticity as a first-class citizen. Instead of using `np.random` directly, you define a **Distribution** and sample it through the [`MojoModel`][mujoco_mojo.mojo_model.MojoModel].
 
 ???+ note "Note: Extra Reading"
 
@@ -168,7 +182,7 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
 
 !!! tip "Tip: Scaffold a New Project"
 
-    Before diving into the generate script, run `mujoco-mojo init` in a new directory to get a working project skeleton (`simulation.py`, `run.sh`, and `reloaded.sh`) pre-wired and ready to edit.
+    Before diving into the generate script, run [`mujoco-mojo init`](../../reference/cli.md#mujoco-mojo-init) in a new directory to get a working project skeleton (`simulation.py`, `run.sh`, and `reloaded.sh`) pre-wired and ready to edit.
 
     ```bash linenums="0"
     mujoco-mojo init

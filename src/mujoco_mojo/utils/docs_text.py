@@ -31,6 +31,8 @@ _CAPTION = re.compile(r"<figcaption>(?P<text>.*?)</figcaption>", re.DOTALL)
 _IMAGE_LINE = re.compile(r"^\s*!\[[^\]]*\]\([^)]*\)(?:\{[^}]*\})?\s*$")
 _IMAGE_INLINE = re.compile(r"!\[(?P<alt>[^\]]*)\]\([^)]*\)(?:\{[^}]*\})?")
 _LINK_ATTRS = re.compile(r"(\]\([^)]*\))\{[^}]*\}")
+_AUTOREF = re.compile(r"\[(?P<text>[^\]]+)\]\[[\w.]+\]")
+"""A cross-reference to the API reference, `[text][package.module.Name]`, which only the site can follow: the text is what a reader sees."""
 _ICON = re.compile(r"\s*:(?:material|fontawesome|octicons|simple)-[a-z0-9-]+:")
 
 
@@ -44,7 +46,7 @@ def _caption_text(html: str) -> str:
 
 
 def _clean_prose(lines: list[str]) -> list[str]:
-    """The lines outside code blocks with the site markup taken out: comments, style and script blocks, badge rows, figures, images, link attributes and icons."""
+    """The lines outside code blocks with the site markup taken out: comments, style and script blocks, badge rows, figures, images, link attributes, cross-references to the API reference (kept as their text) and icons."""
     text = "\n".join(lines)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     text = _STYLE_OR_SCRIPT.sub("", text)
@@ -71,6 +73,7 @@ def _clean_prose(lines: list[str]) -> list[str]:
             continue
         line = _IMAGE_INLINE.sub(lambda m: m["alt"], line)
         line = _LINK_ATTRS.sub(r"\1", line)
+        line = _AUTOREF.sub(lambda m: m["text"], line)
         out.append(_ICON.sub("", line))
     return out
 

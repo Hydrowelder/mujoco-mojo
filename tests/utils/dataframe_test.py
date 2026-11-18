@@ -36,15 +36,19 @@ def sample_data() -> pl.DataFrame:
 # --- IO & Initialization Tests ---
 
 
-def test_from_metadata(tmp_path: Path, sample_data: MojoDataFrame) -> None:
-    """Verifies that from_metadata reads 0 rows but preserves schema."""
+def test_read_parquet_with_no_rows_reads_the_schema(
+    tmp_path: Path, sample_data: MojoDataFrame
+) -> None:
+    """`n_rows=0` gives a frame with no rows that still has every column and its type, for finding out what a file holds without reading it."""
     path = tmp_path / "test.parquet"
     sample_data.write_parquet(path)
 
-    meta_df = MojoDataFrame.from_metadata(path)
-    assert isinstance(meta_df, pl.DataFrame)
-    assert meta_df.height == 0
-    assert len(meta_df.columns) == len(sample_data.columns)
+    schema_df = MojoDataFrame.read_parquet(path, n_rows=0)
+    assert isinstance(schema_df, pl.DataFrame)
+    assert schema_df.height == 0
+    assert schema_df.schema == sample_data.schema
+    # the namespace works on it, which is what the Dojo builds its signal lists from
+    assert schema_df.mojo.columns == sample_data.mojo.columns
 
 
 def test_from_columns(tmp_path: Path, sample_data: MojoDataFrame) -> None:
@@ -150,6 +154,24 @@ def test_select_body_includes_scalar_channels() -> None:
         "Bodies/box/xpos:x",
         "Bodies/box:ke_trans",
     ]
+
+
+def test_select_requirement_returns_that_requirements_result() -> None:
+    """A requirement checked as the run goes posts `Requirements/<name>:result`, and only that requirement's column is selected."""
+    df = MojoDataFrame.from_dict(
+        {
+            "time": [0.0, 1.0],
+            "Requirements/boxes_stay_apart:result": [1.0, 0.0],
+            "Requirements/boxes_stay_apart_2:result": [1.0, 1.0],
+            "Requirements/peak_force:result": [1.0, 1.0],
+            "Bodies/boxes_stay_apart:ke_total": [2.0, 3.0],
+        }
+    )
+
+    assert df.mojo.select_requirement("boxes_stay_apart").columns == [
+        "Requirements/boxes_stay_apart:result"
+    ]
+    assert df.mojo.select_requirement("no_such_requirement").columns == []
 
 
 def test_typed_selectors_match_names_literally() -> None:
