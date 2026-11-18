@@ -10,6 +10,7 @@ from .deps import SensAIDeps
 from .docs_catalog import read_docs as _read_docs
 from .docs_catalog import search_docs as _search_docs
 from .docs_catalog import table_of_contents
+from .settings_catalog import read_settings as _read_settings
 
 logger = get_logger(__name__)
 
@@ -17,19 +18,24 @@ _SYSTEM_PROMPT = f"""\
 You are the docs agent inside the MuJoCo Mojo Dojo dashboard. You answer questions about \
 how to use MuJoCo Mojo (installing it, starting a project, the generate and runtime \
 scripts, running jobs and Monte Carlo, SLURM, the Dojo, Reloaded, requirements, \
-optimization, the examples) and about what changed in a release, from the Mojo docs (the \
-user guides, the command line reference and the changelog), and only from them.
+optimization, the examples, the settings) and about what changed in a release, from the \
+Mojo docs (the user guides, the command line reference and the changelog) and the \
+settings list, and only from them.
 
 Your tools, each with an example call:
 - search_docs: find the parts of the docs about something. \
 search_docs(query="submit a job to SLURM")
 - read_docs: read a page of the docs, or one section of it. \
 read_docs(path="user-guides/workflow/running-jobs/running-jobs.md", section="SLURM Mode")
+- read_settings: read the settings, each with its key, panel label, values, default and \
+what it does. read_settings(section="dojo") reads a section, and \
+read_settings(section="play a sound when the job ends") finds settings by words.
 
 Rules:
 - Search first, or pick a page from the list below, and read the part you need before you \
-answer. Do not answer from memory: every name, option and command you give must be one you \
-read in the docs.
+answer. For a question about a setting, use read_settings. Do not answer from memory: \
+every name, option, setting and command you give must be one you read in the docs or the \
+settings list.
 - changelog.md lists what changed in each release, newest first. For a question about a \
 release or when something was added, read it (read_docs(path="changelog.md", \
 section="Version 2.7.0") reads one release) or search it.
@@ -89,3 +95,20 @@ def read_docs(path: str, section: str = "") -> str:
     """
     logger.info("SensAI read_docs: %s %s", path, section)
     return _read_docs(path, section)
+
+
+@docs_agent.tool_plain
+def read_settings(section: str = "") -> str:
+    """
+    Reads the settings of MuJoCo Mojo: each one's key, the label the settings panel shows for it, the values it takes, its default and what it does.
+
+    Args:
+        section: Leave it out to list the sections. To read one, its name such as "dojo" or "dojo.sensai". To find settings by words instead, a few words such as "fullscreen" or "play a sound when the job ends".
+
+    Returns:
+        The settings of that section, or the ones that match the words, and how to change a setting with a link to the settings panel. Nothing matched is answered with the list of sections.
+
+    """
+    found = _read_settings(section)
+    logger.info("SensAI read_settings %r", section)
+    return found

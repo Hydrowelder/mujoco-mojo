@@ -35,7 +35,7 @@ them exactly.
 
 Questions about how to use MuJoCo Mojo itself (installing it, writing the generate or \
 runtime scripts, running jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the \
-examples) and what changed in a release go to ask_docs_agent. Its answer comes from the Mojo \
+examples, which setting does what) and what changed in a release go to ask_docs_agent. Its answer comes from the Mojo \
 docs and is already short, so pass it on as it is: keep its steps, its code blocks and its \
 "See" link, and do not add anything the docs did not say.
 """
@@ -136,7 +136,7 @@ async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
     Forward a question about how to use MuJoCo Mojo, or what changed in a release, to the docs agent and return its answer.
 
-    Use this for "how do I..." and "what is..." questions about Mojo itself: installing it, starting a project, the generate and runtime scripts, running Monte Carlo jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the examples, and what changed in a release. It answers from the Mojo docs (the user guides, the command line reference and the changelog) and links the page.
+    Use this for "how do I..." and "what is..." questions about Mojo itself: installing it, starting a project, the generate and runtime scripts, running Monte Carlo jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the examples, which setting does what, and what changed in a release. It answers from the Mojo docs (the user guides, the command line reference and the changelog) and the list of settings, and links the page.
 
     Args:
         ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `docs_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.

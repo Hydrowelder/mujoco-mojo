@@ -9,6 +9,7 @@
 - Updated the Dojo guides for the Monitor's errors and timeline, and added guides for Trial Details, the Signal Lab, SensAI, and Morph
 - Added a MojoDataFrame guide, which links to the API reference, where `MojoDataFrame` and its loaders are now documented
 - Added `select_requirement` to the `.mojo` namespace of a `MojoDataFrame`
+- SensAI can now answer questions about the settings
 - The guides now link the classes, methods and commands they name to the API and command line references
 - The Dojo screenshots in the docs are now taken by `scripts/gen_dojo_screenshots.py` with Playwright, and a pre-push hook refreshes them when the Dojo changes
 - Fixed the boxes and springs docs example failing with "clean_workdir and resume are mutually exclusive"
