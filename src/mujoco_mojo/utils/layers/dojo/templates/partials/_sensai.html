@@ -324,6 +324,30 @@
                 d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
         </svg>
         <span class="font-black uppercase tracking-widest text-base text-ink-strong">SensAI</span>
+        <!-- the disclaimer, in a tooltip so it takes no room in the window. a named
+             group, so only hovering or focusing this icon shows it -->
+        <div class="relative group/info flex items-center">
+          <span tabindex="0"
+                role="note"
+                aria-label="SensAI is an AI assistant and can make mistakes. Please verify its answers and any changes it makes before relying on them."
+                class="flex items-center cursor-help text-ink-muted hover:text-ink-body focus:text-ink-body transition-colors outline-none">
+            <svg class="w-4 h-4"
+                 fill="none"
+                 stroke="currentColor"
+                 stroke-width="1.75"
+                 viewBox="0 0 24 24">
+              <circle cx="12"
+                      cy="12"
+                      r="10" />
+              <path stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 16v-4m0-4h.01" />
+            </svg>
+          </span>
+          <div class="panel p-3! absolute left-0 top-full mt-2 w-64 z-300 pointer-events-none invisible opacity-0 transition-opacity group-hover/info:visible group-hover/info:opacity-100 group-focus-within/info:visible group-focus-within/info:opacity-100 text-xs font-normal normal-case tracking-normal leading-relaxed text-ink-body">
+            SensAI is an AI assistant and can make mistakes. Please verify its answers and any changes it makes before relying on them.
+          </div>
+        </div>
       </div>
       <div class="flex items-center gap-3">
         <!-- pin: keeps the window open when you click elsewhere on the page -->
@@ -351,7 +375,7 @@
 
     <!-- chats: one tab each, with its own messages -->
     <div class="shrink-0 flex items-stretch border-b border-subtle">
-      <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5">
+      <div x-hscroll class="flex items-stretch overflow-x-auto overflow-y-hidden overscroll-contain custom-scrollbar flex-1 min-w-0 px-1 gap-0.5">
         <template x-for="tab in tabs"
                   :key="tab.id">
           <div @click="switchTab(tab.id)"
@@ -430,7 +454,7 @@
     <div class="relative flex-1 min-h-0">
       <div x-ref="messages"
            @scroll="onScroll($el)"
-           class="h-full overflow-y-auto px-3 pb-3">
+           class="h-full overflow-y-auto overscroll-contain px-3 pb-3">
 
         <!-- empty state -->
         <div x-show="messages.length === 0 && !isBusy(activeId)"
@@ -651,7 +675,7 @@
                   :disabled="isBusy(activeId)"
                   rows="1"
                   :placeholder="placeholder"
-                  class="input-field flex-1 resize-none px-3 py-2 leading-snug text-base"></textarea>
+                  class="input-field flex-1 resize-none overscroll-contain px-3 py-2 leading-snug text-base"></textarea>
         <button @click="send()"
                 :disabled="isBusy(activeId) || !input.trim()"
                 class="btn-icon shrink-0 transition-all"

@@ -11,6 +11,7 @@ import {
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
 import { wrapText } from "./lib/signal-description";
+import { installSideScroll } from "./lib/wheel-scroll";
 import {
   isPlotlyPrefix,
   markAllRead,
@@ -91,6 +92,14 @@ window.mojoCollapseColorAlias = collapseColorAlias;
 // the Signal Lab's inline script (_signal_lab.html) is not bundled either, and
 // the Signal In node wraps a signal's description with this
 window.mojoWrapText = wrapText;
+
+// `x-hscroll` on a strip that scrolls sideways lets the mouse wheel scroll it, for a mouse with
+// no sideways wheel (lib/wheel-scroll.ts)
+document.addEventListener("alpine:init", () => {
+  Alpine.directive("hscroll", (el, { modifiers }, { cleanup }) =>
+    installSideScroll(el, cleanup, modifiers),
+  );
+});
 
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {

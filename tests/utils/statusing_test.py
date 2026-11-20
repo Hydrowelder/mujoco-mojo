@@ -1,5 +1,6 @@
 """Tests for when a trial ran (`TrialStatus.ended`, `run_started`), the job timeline built from them, and the throughput and time remaining that depend on how many trials run at once."""
 
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -273,6 +274,58 @@ class TestTheElapsedTimeOfAFinishedJob:
             self.write(job, trial_num, began, took)
 
         job.refresh_from_disk(persist=False)
+
+        assert job.is_done
+        assert job.elapsed == timedelta(seconds=35)
+
+    def test_two_refreshes_of_one_job_do_not_overlap(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Dojo refreshes one shared job from two threads: its monitor loop, and its status endpoint, which forces a re-read. A refresh that cleared the cache in the middle of the other's bookkeeping made the finished job look unfinished, which set its elapsed time to the time since it started, and a finished job's elapsed time is never shortened."""
+        job = bare_job(tmp_path, 3)
+        for trial_num, began, took in ((0, 0, 10.0), (1, 5, 30.0), (2, 8, 4.0)):
+            self.write(job, trial_num, began, took)
+        job.refresh_from_disk(persist=False)
+        finished = job.elapsed
+
+        # the first refresh stops at its first read of a trial's status, with the cache cleared
+        scanning, release = threading.Event(), threading.Event()
+        real_read = TrialStatus.model_validate_json
+        reads = 0
+
+        def read(text: str) -> TrialStatus:
+            nonlocal reads
+            reads += 1
+            if reads == 1:
+                scanning.set()
+                release.wait(5)
+            return real_read(text)
+
+        monkeypatch.setattr(TrialStatus, "model_validate_json", staticmethod(read))
+        first = threading.Thread(
+            target=lambda: job.refresh_from_disk(force_refetch=True, persist=False)
+        )
+        second = threading.Thread(target=lambda: job.refresh_from_disk(persist=False))
+        first.start()
+        assert scanning.wait(5)
+        second.start()
+        second.join(0.3)
+        waited = second.is_alive()
+        release.set()
+        first.join(5)
+        second.join(5)
+
+        assert waited, "the second refresh ran while the first was part way through"
+        assert job.is_done
+        assert job.elapsed == finished
+
+    def test_a_refresh_that_follows_another_still_works(self, tmp_path: Path) -> None:
+        job = bare_job(tmp_path, 2)
+        for trial_num, began, took in ((0, 0, 10.0), (1, 5, 30.0)):
+            self.write(job, trial_num, began, took)
+
+        job.refresh_from_disk(persist=False)
+        job.refresh_from_disk(force_refetch=True, persist=False)
 
         assert job.is_done
         assert job.elapsed == timedelta(seconds=35)

@@ -261,7 +261,7 @@
                                                 None
                                             </button>
                                         </div>
-                                        <div class="max-h-56 overflow-y-auto custom-scrollbar">
+                                        <div class="max-h-56 overflow-y-auto overscroll-contain custom-scrollbar">
                                             <template x-for="cat in distCategories"
                                                       :key="cat">
                                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-1.5 text-sm font-mono text-ink-strong hover:bg-chip">
@@ -324,7 +324,7 @@
                                                 None
                                             </button>
                                         </div>
-                                        <div class="max-h-56 overflow-y-auto custom-scrollbar">
+                                        <div class="max-h-56 overflow-y-auto overscroll-contain custom-scrollbar">
                                             <template x-for="type in distTypes"
                                                       :key="type">
                                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-1.5 text-sm font-mono text-ink-strong hover:bg-chip">
@@ -387,7 +387,7 @@
                                                 None
                                             </button>
                                         </div>
-                                        <div class="max-h-56 overflow-y-auto custom-scrollbar">
+                                        <div class="max-h-56 overflow-y-auto overscroll-contain custom-scrollbar">
                                             <template x-for="unit in distUnits"
                                                       :key="unit">
                                                 <label class="flex items-center gap-2 cursor-pointer px-3 py-1.5 text-sm font-mono text-ink-strong hover:bg-chip">
@@ -419,7 +419,7 @@
                     </div>
 
                     <!-- rows -->
-                    <div class="divide-y divide-subtle dark:divide-subtle/60 max-h-96 overflow-y-auto custom-scrollbar min-w-max">
+                    <div class="divide-y divide-subtle dark:divide-subtle/60 max-h-96 overflow-y-auto overscroll-contain custom-scrollbar min-w-max">
                         <template x-for="entry in filteredDists"
                                   :key="entry.name">
                             <div class="flex items-center hover:bg-chip dark:hover:bg-chip/40 transition-colors cursor-default min-w-max"
