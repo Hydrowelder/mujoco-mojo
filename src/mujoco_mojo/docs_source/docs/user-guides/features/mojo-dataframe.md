@@ -190,8 +190,9 @@ Every column can carry a [`ColumnMetadata`][mujoco_mojo.utils.signal_metadata.Co
 | `quantity`        | The physical quantity, when it is more specific than the dimension.                                             |
 | `transform_type`  | How the column behaves in a reference frame: `point`, `vector`, `quaternion` or `scalar`.                       |
 | `enumeration_map` | Labels for integer codes, such as `{"FAIL": 0, "PASS": 1}`.                                                     |
+| `description`     | What the column holds, in plain words, to tell apart columns with similar names.                                |
 
-Built-in signals are tagged for you. Declare a unit system on the model (`mojo_model.u = UnitSystem.si()`) and the dimensions become concrete units. For your own signals, pass `metadata=` when you request them. The Dojo reads all of this too: it shows the unit next to a signal, offers the matching unit conversion, and plots a labeled signal on its own axis.
+Built-in signals are tagged and described for you. Declare a unit system on the model (`mojo_model.u = UnitSystem.si()`) and the dimensions become concrete units. For your own signals, pass `metadata=` when you request them. The Dojo reads all of this too: it shows the unit next to a signal, offers the matching unit conversion, and plots a labeled signal on its own axis.
 
 ???+ note "A file written by another version still opens"
 

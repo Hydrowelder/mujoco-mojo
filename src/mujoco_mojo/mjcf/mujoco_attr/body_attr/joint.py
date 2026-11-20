@@ -59,6 +59,53 @@ _ANGULAR_VECTOR_META = {
     "frc": torque_metadata() | TransformType.VECTOR.metadata,
 }
 
+_FORCE_SOURCES = {
+    "qfrc_actuator": "actuators",
+    "qfrc_constraint": "constraints",
+    "qfrc_passive": "passive elements",
+}
+"""What applies the force or torque of each `qfrc_*` channel."""
+
+
+def _channel_descriptions(name: str, jnt_type: int) -> dict[str, str]:
+    """
+    The built-in `description` of each channel of the joint called `name`, which is of type `jnt_type`.
+
+    A free joint splits into the `pos_`, `quat_`, `lin_` and `ang_` channels. MuJoCo expresses a free joint's linear parts in the world frame and every angular part of a free or ball joint in the local frame of the joint's body, so the descriptions say so. A hinge or slide joint's values are coordinates along its own axis, which have no frame to name.
+    """
+    if jnt_type == mujoco.mjtJoint.mjJNT_FREE:
+        descriptions = {
+            "pos_qpos": f"Position of free joint {name} in the world frame",
+            "quat_qpos": f"Orientation of free joint {name} relative to the world frame, as a quaternion",
+            "lin_qvel": f"Linear velocity of free joint {name} in the world frame",
+            "ang_qvel": f"Angular velocity of free joint {name} in the local frame of its body",
+        }
+        for channel, source in _FORCE_SOURCES.items():
+            descriptions[f"lin_{channel}"] = (
+                f"Force applied to free joint {name} by {source}, in the world frame"
+            )
+            descriptions[f"ang_{channel}"] = (
+                f"Torque applied to free joint {name} by {source}, in the local frame of its body"
+            )
+        return descriptions
+    if jnt_type == mujoco.mjtJoint.mjJNT_BALL:
+        descriptions = {
+            "qpos": f"Rotation of ball joint {name} from its reference orientation, as a quaternion",
+            "qvel": f"Angular velocity of ball joint {name} in the local frame of its body",
+        }
+        for channel, source in _FORCE_SOURCES.items():
+            descriptions[channel] = (
+                f"Torque applied to ball joint {name} by {source}, in the local frame of its body"
+            )
+        return descriptions
+    descriptions = {
+        "qpos": f"Position of joint {name}",
+        "qvel": f"Velocity of joint {name}",
+    }
+    for channel, source in _FORCE_SOURCES.items():
+        descriptions[channel] = f"Force or torque applied to joint {name} by {source}"
+    return descriptions
+
 
 class Joint(XMLModel):
     """This element creates a joint. As explained in Kinematic tree, a joint creates motion degrees of freedom between the body where it is defined and the body's parent. If multiple joints are defined in the same body, the corresponding spatial transformations (of the body frame relative to the parent frame) are applied in order. If no joints are defined, the body is welded to its parent. Joints cannot be defined in the world body. At runtime the positions and orientations of all joints defined in the model are stored in the vector mjData.qpos, in the order in which the appear in the kinematic tree. The linear and angular velocities are stored in the vector mjData.qvel. These two vectors have different dimensionality when free or ball joints are used, because such joints represent rotations as unit quaternions."""
@@ -344,6 +391,8 @@ class Joint(XMLModel):
             _meta = {}
 
         name = f"{self.name}"
+        # filled on the first sample, since the joint's type is not known until then
+        descriptions: dict[str, str] = {}
         vector_columns: dict[str, tuple[Column, ...]] = {}
         scalar_columns: dict[str, Column] = {}
 
@@ -357,7 +406,13 @@ class Joint(XMLModel):
             # system and joint type), then reused: this runs every timestep
             cols = vector_columns.get(channel)
             if cols is None:
-                meta = merge_signal_metadata(builtin, channel, _meta, unit_system=us)
+                meta = merge_signal_metadata(
+                    builtin,
+                    channel,
+                    _meta,
+                    unit_system=us,
+                    description=descriptions.get(channel, ""),
+                )
                 cols = vector_columns[channel] = fan_out(
                     SignalCategory.JOINTS, (name, channel), attrs, meta
                 )
@@ -393,6 +448,8 @@ class Joint(XMLModel):
         def sample(state: MjState) -> None:
             jnt_type = self._jnt_type(state)
             u = state.us
+            if not descriptions:
+                descriptions.update(_channel_descriptions(name, jnt_type))
 
             for channel in channels:
                 match channel:
@@ -428,6 +485,7 @@ class Joint(XMLModel):
                                 channel,
                                 _meta,
                                 unit_system=u,
+                                description=descriptions.get(channel, ""),
                             ),
                         )
                     signal_manager.post(float(val[0]), col)

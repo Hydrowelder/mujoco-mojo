@@ -537,19 +537,27 @@ class Proximity(MojoBaseModel):
             self._requested = True
 
         volume_names = (str(self.volume_1.name), str(self.volume_2.name))
+        first, second = volume_names
+        descriptions = {
+            "dist": f"Minimum distance between volumes {first} and {second}",
+            "prox_type": f"Proximity algorithm used to compute the distance between volumes {first} and {second}, as an integer code",
+        }
         columns: dict[str, tuple[Column, ...]] = {}
+
+        def merged(channel: str, state: MjState, description: str) -> ColumnMetadata:
+            return merge_signal_metadata(
+                _REQUEST_CHANNEL_METADATA.get(channel),
+                channel,
+                _meta,
+                unit_system=state.us,
+                description=description,
+            )
 
         def channel_columns(channel: str, state: MjState) -> tuple[Column, ...]:
             # built on a channel's first sample (its metadata depends on the unit
             # system), then reused: this runs every timestep
             cols = columns.get(channel)
             if cols is None:
-                meta = merge_signal_metadata(
-                    _REQUEST_CHANNEL_METADATA.get(channel),
-                    channel,
-                    _meta,
-                    unit_system=state.us,
-                )
                 if channel == "fromto":
                     # one x/y/z point per volume in the pair
                     cols = tuple(
@@ -559,7 +567,11 @@ class Proximity(MojoBaseModel):
                             SignalCategory.PROXIMITIES,
                             (pair_name, channel, volume),
                             "xyz",
-                            meta,
+                            merged(
+                                channel,
+                                state,
+                                f"Position of the nearest point on volume {volume} of pair {pair_name}, in the world frame",
+                            ),
                         )
                     )
                 else:
@@ -568,7 +580,9 @@ class Proximity(MojoBaseModel):
                             category=SignalCategory.PROXIMITIES,
                             subgroups=(pair_name,),
                             attr=channel,
-                            metadata=meta,
+                            metadata=merged(
+                                channel, state, descriptions.get(channel, "")
+                            ),
                         ),
                     )
                 columns[channel] = cols

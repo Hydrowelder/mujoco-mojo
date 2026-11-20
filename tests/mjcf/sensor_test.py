@@ -8,10 +8,13 @@ from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.accelerometer import (
     SensorAccelerometer,
 )
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.actuatorfrc import SensorActuatorfrc
+from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.ballangvel import SensorBallangvel
+from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.framepos import SensorFramepos
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.framequat import SensorFramequat
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.insidesite import SensorInsidesite
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.jointpos import SensorJointpos
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.magnetometer import SensorMagnetometer
+from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.subtreecom import SensorSubtreecom
 from mujoco_mojo.mjcf.mujoco_attr.sensor_attr.touch import SensorTouch
 from mujoco_mojo.runtime.signal_manager import SignalManager
 from mujoco_mojo.typing import (
@@ -96,6 +99,7 @@ def test_touch_request_tags_force_metadata(state: MjState, tmp_path: Path) -> No
     sm.record(state)
 
     assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
+        "description": "Output of touch sensor tch on site site1",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "scalar",
     }
@@ -112,6 +116,7 @@ def test_accelerometer_request_tags_acceleration_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/acc/accelerometer:x"].model_dump() == {
+        "description": "Output of accelerometer sensor acc on site site1, expressed in the frame of its site",
         "dimension": "[length] / [time] ** 2",
         "transform_type": "vector",
     }
@@ -134,6 +139,7 @@ def test_framequat_request_tags_dimensionless_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/fq/framequat:w"].model_dump() == {
+        "description": "Output of framequat sensor fq on body b1, expressed in the world frame",
         "dimension": "[]",
         "transform_type": "quaternion",
     }
@@ -153,6 +159,7 @@ def test_insidesite_flag_is_labeled(insidesite_state: MjState, tmp_path: Path) -
     sm.record(insidesite_state)
 
     assert sm._column_metadata["Sensors/flag:insidesite"].model_dump() == {
+        "description": "Output of insidesite sensor flag on body b2",
         "dimension": "[]",
         "transform_type": "scalar",
         "enumeration_map": {"OUTSIDE": 0, "INSIDE": 1},
@@ -189,7 +196,8 @@ def test_jointpos_request_resolves_hinge_to_angle_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/jp_h:jointpos"].model_dump() == {
-        "unit": "radian"
+        "description": "Output of jointpos sensor jp_h on joint h",
+        "unit": "radian",
     }
 
 
@@ -204,7 +212,8 @@ def test_jointpos_request_resolves_slide_to_length_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/jp_s:jointpos"].model_dump() == {
-        "dimension": "[length]"
+        "description": "Output of jointpos sensor jp_s on joint s",
+        "dimension": "[length]",
     }
 
 
@@ -219,6 +228,7 @@ def test_actuatorfrc_request_resolves_transmission_to_torque_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sensors/af:actuatorfrc"].model_dump() == {
+        "description": "Output of actuatorfrc sensor af on actuator m1",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
     }
@@ -234,7 +244,9 @@ def test_magnetometer_request_has_no_builtin_default(
     sensor.request(sm)
     sm.record(state)
 
-    assert "Sensors/mag/magnetometer:x" not in sm._column_metadata
+    assert sm._column_metadata["Sensors/mag/magnetometer:x"].model_dump() == {
+        "description": "Output of magnetometer sensor mag on site site1, expressed in the frame of its site"
+    }
 
 
 def test_request_metadata_override(state: MjState, tmp_path: Path) -> None:
@@ -246,7 +258,78 @@ def test_request_metadata_override(state: MjState, tmp_path: Path) -> None:
     sm.record(state)
 
     assert sm._column_metadata["Sensors/tch:touch"].model_dump() == {
+        "description": "Output of touch sensor tch on site site1",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "scalar",
         "display_name": "Touch Force",
     }
+
+
+_FRAMES_XML = """
+<mujoco>
+    <worldbody>
+        <body name="b1">
+            <joint name="ball" type="ball"/>
+            <geom type="sphere" size="0.1"/>
+        </body>
+        <body name="b2" pos="1 0 0">
+            <geom type="sphere" size="0.1"/>
+        </body>
+    </worldbody>
+    <sensor>
+        <framepos name="fp_world" objtype="body" objname="b1"/>
+        <framepos name="fp_ref" objtype="body" objname="b1" reftype="body" refname="b2"/>
+        <subtreecom name="com" body="b1"/>
+        <ballangvel name="bav" joint="ball"/>
+    </sensor>
+</mujoco>
+"""
+
+
+def test_sensor_description_names_the_frame_the_output_is_expressed_in(
+    tmp_path: Path,
+) -> None:
+    """A frame sensor names its reference object, or the world frame when it has none; some tags have a fixed frame."""
+    model = mujoco.MjModel.from_xml_string(_FRAMES_XML)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    state = MjState(model, data)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    for sensor in (
+        SensorFramepos(
+            name=SensorName("fp_world"),
+            objtype=SensorObjectType.BODY,
+            objname=BodyName("b1"),
+            reftype=SensorObjectType.BODY,
+        ),
+        SensorFramepos(
+            name=SensorName("fp_ref"),
+            objtype=SensorObjectType.BODY,
+            objname=BodyName("b1"),
+            reftype=SensorObjectType.BODY,
+            refname=BodyName("b2"),
+        ),
+        SensorSubtreecom(name=SensorName("com"), body=BodyName("b1")),
+        SensorBallangvel(name=SensorName("bav"), joint=JointName("ball")),
+    ):
+        sensor.request(sm)
+    sm.record(state)
+
+    described = {name: m.description for name, m in sm._column_metadata.items()}
+    assert (
+        described["Sensors/fp_world/framepos:x"]
+        == "Output of framepos sensor fp_world on body b1, expressed in the world frame"
+    )
+    assert (
+        described["Sensors/fp_ref/framepos:x"]
+        == "Output of framepos sensor fp_ref on body b1, expressed in the frame of body b2"
+    )
+    assert (
+        described["Sensors/com/subtreecom:x"]
+        == "Output of subtreecom sensor com on body b1, expressed in the world frame"
+    )
+    assert (
+        described["Sensors/bav/ballangvel:x"]
+        == "Output of ballangvel sensor bav on joint ball, expressed in the local frame of its body"
+    )

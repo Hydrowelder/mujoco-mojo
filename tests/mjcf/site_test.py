@@ -212,18 +212,22 @@ def test_request_tags_builtin_dimension_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Sites/site1/xpos:x"].model_dump() == {
+        "description": "Position of site site1 in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
     }
     assert sm._column_metadata["Sites/site1/xvelp:x"].model_dump() == {
+        "description": "Linear velocity of site site1 in the world frame",
         "dimension": "[length] / [time]",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Sites/site1/xvelr:x"].model_dump() == {
+        "description": "Angular velocity of site site1 in the world frame",
         "unit": "radian / second",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Sites/site1/quat:w"].model_dump() == {
+        "description": "Orientation of site site1 relative to the world frame, as a quaternion",
         "dimension": "[]",
         "transform_type": "quaternion",
     }
@@ -240,6 +244,7 @@ def test_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Sites/site1/xpos:x"].model_dump() == {
+        "description": "Position of site site1 in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
         "display_name": "Site Position",

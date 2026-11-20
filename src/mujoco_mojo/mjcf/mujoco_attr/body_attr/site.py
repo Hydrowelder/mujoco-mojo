@@ -57,6 +57,20 @@ _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "quat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
 }
 
+
+def _channel_descriptions(name: str) -> dict[str, str]:
+    """The built-in `description` of each channel of the site called `name`."""
+    return {
+        "xpos": f"Position of site {name} in the world frame",
+        "xmat": f"Orientation of site {name} relative to the world frame, as a rotation matrix",
+        "xvelp": f"Linear velocity of site {name} in the world frame",
+        "xvelr": f"Angular velocity of site {name} in the world frame",
+        "xaccp": f"Linear acceleration of site {name} in the world frame",
+        "xaccr": f"Angular acceleration of site {name} in the world frame",
+        "quat": f"Orientation of site {name} relative to the world frame, as a quaternion",
+    }
+
+
 __all__ = [
     "AnySite",
     "SiteBox",
@@ -624,6 +638,7 @@ class SiteBase(XMLModel, ABC):
             _meta = {}
 
         name = f"{self.name}"
+        descriptions = _channel_descriptions(name)
         columns: dict[str, tuple[Column, ...]] = {}
 
         def channel_columns(
@@ -638,6 +653,7 @@ class SiteBase(XMLModel, ABC):
                     channel,
                     _meta,
                     unit_system=state.us,
+                    description=descriptions.get(channel, ""),
                 )
                 cols = columns[channel] = fan_out(
                     SignalCategory.SITES, (name, channel), attrs, meta

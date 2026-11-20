@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased Version
+
+- Added a `description` to `ColumnMetadata`, which the built-in signals fill in, to tell apart columns with similar names
+
 ## Version 2.8.3 (2026-11-17)
 
 - Fixed the Monitor's trials per minute, time remaining, and ETA for SLURM jobs, which assumed one trial ran at a time

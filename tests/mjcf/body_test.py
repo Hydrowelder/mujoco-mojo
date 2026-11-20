@@ -146,26 +146,32 @@ def test_body_request_tags_builtin_dimension_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Bodies/box/xpos:x"].model_dump() == {
+        "description": "Position of body box in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
     }
     assert sm._column_metadata["Bodies/box/xvelp:x"].model_dump() == {
+        "description": "Linear velocity of the center of mass of body box in the world frame",
         "dimension": "[length] / [time]",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Bodies/box/xvelr:x"].model_dump() == {
+        "description": "Angular velocity of body box in the world frame",
         "unit": "radian / second",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Bodies/box/quat:w"].model_dump() == {
+        "description": "Orientation of body box relative to the world frame, as a quaternion",
         "dimension": "[]",
         "transform_type": "quaternion",
     }
     assert sm._column_metadata["Bodies/box/lin_mom:x"].model_dump() == {
+        "description": "Linear momentum of body box in the world frame",
         "dimension": "[mass] * [length] / [time]",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Bodies/box:ke_trans"].model_dump() == {
+        "description": "Translational kinetic energy of body box",
         "dimension": "[mass] * [length] ** 2 / [time] ** 2",
         "transform_type": "scalar",
     }
@@ -182,6 +188,7 @@ def test_body_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Bodies/box/xpos:x"].model_dump() == {
+        "description": "Position of body box in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
         "display_name": "Box Position",
@@ -220,26 +227,32 @@ def test_geom_request_tags_builtin_dimension_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Geoms/ball_geom/xpos:x"].model_dump() == {
+        "description": "Position of the center of geom ball_geom in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
     }
     assert sm._column_metadata["Geoms/ball_geom/xvelp:x"].model_dump() == {
+        "description": "Linear velocity of geom ball_geom in the world frame",
         "dimension": "[length] / [time]",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Geoms/ball_geom/xvelr:x"].model_dump() == {
+        "description": "Angular velocity of geom ball_geom in the world frame",
         "unit": "radian / second",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Geoms/ball_geom/xaccp:x"].model_dump() == {
+        "description": "Linear acceleration of geom ball_geom in the world frame",
         "dimension": "[length] / [time] ** 2",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Geoms/ball_geom/xaccr:x"].model_dump() == {
+        "description": "Angular acceleration of geom ball_geom in the world frame",
         "unit": "radian / second ** 2",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Geoms/ball_geom/quat:w"].model_dump() == {
+        "description": "Orientation of geom ball_geom relative to the world frame, as a quaternion",
         "dimension": "[]",
         "transform_type": "quaternion",
     }
@@ -256,6 +269,7 @@ def test_geom_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Geoms/ball_geom/xpos:x"].model_dump() == {
+        "description": "Position of the center of geom ball_geom in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
         "display_name": "Ball Position",

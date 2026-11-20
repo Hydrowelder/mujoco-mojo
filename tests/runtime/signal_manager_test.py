@@ -410,7 +410,11 @@ def test_metadata_embedded_in_footer_single_part(sm: SignalManager) -> None:
 
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "time": {"dimension": "[time]", "transform_type": "scalar"},
+        "time": {
+            "dimension": "[time]",
+            "transform_type": "scalar",
+            "description": "Simulation time",
+        },
         "Sensors/Foo": {"dimension": "[length]"},
     }
 
@@ -527,7 +531,11 @@ def test_metadata_embedded_in_footer_multi_part(sm: SignalManager) -> None:
 
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "time": {"dimension": "[time]", "transform_type": "scalar"},
+        "time": {
+            "dimension": "[time]",
+            "transform_type": "scalar",
+            "description": "Simulation time",
+        },
         "Sensors/Foo": {"unit": "volt"},
     }
 
@@ -543,7 +551,11 @@ def test_time_metadata_always_in_footer(sm: SignalManager) -> None:
 
     footer = pl.read_parquet_metadata(sm.export_path)
     assert json.loads(footer["column_metadata"]) == {
-        "time": {"dimension": "[time]", "transform_type": "scalar"}
+        "time": {
+            "dimension": "[time]",
+            "transform_type": "scalar",
+            "description": "Simulation time",
+        }
     }
 
 

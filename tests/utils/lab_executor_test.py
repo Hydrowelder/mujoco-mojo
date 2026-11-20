@@ -64,6 +64,7 @@ def test_output_metadata_reads_every_field_the_model_declares() -> None:
         "quantity": "length",
         "transform_type": "vector",
         "enumeration_map": '{"A": 0, "B": 3}',
+        "description": "x position of the box",
     }
     assert set(props) - {"label"} == set(ColumnMetadata.model_fields)
     meta = LabExecutor(_graph(props)).output_metadata["x"]
@@ -73,6 +74,7 @@ def test_output_metadata_reads_every_field_the_model_declares() -> None:
         "quantity": "length",
         "transform_type": "vector",
         "enumeration_map": {"A": 0, "B": 3},
+        "description": "x position of the box",
     }
 
 

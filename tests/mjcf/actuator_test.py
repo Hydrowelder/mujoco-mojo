@@ -172,14 +172,17 @@ def test_actuator_request_tags_hinge_transmission_with_angle_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/elbow_motor:length"].model_dump() == {
+        "description": "Length of the transmission of actuator elbow_motor",
         "unit": "radian",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/elbow_motor:velocity"].model_dump() == {
+        "description": "Velocity of the transmission of actuator elbow_motor",
         "unit": "radian / second",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
+        "description": "Force output of actuator elbow_motor",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "scalar",
@@ -215,14 +218,17 @@ def test_actuator_request_tags_slide_transmission_with_length_dimension(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/rail_motor:length"].model_dump() == {
+        "description": "Length of the transmission of actuator rail_motor",
         "dimension": "[length]",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/rail_motor:velocity"].model_dump() == {
+        "description": "Velocity of the transmission of actuator rail_motor",
         "dimension": "[length] / [time]",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Actuators/rail_motor:force"].model_dump() == {
+        "description": "Force output of actuator rail_motor",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "scalar",
     }
@@ -239,7 +245,8 @@ def test_actuator_request_ctrl_has_no_builtin_default(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/elbow_motor:ctrl"].model_dump() == {
-        "transform_type": "scalar"
+        "description": "Control input to actuator elbow_motor",
+        "transform_type": "scalar",
     }
 
 
@@ -260,12 +267,14 @@ def test_actuator_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Actuators/elbow_motor:force"].model_dump() == {
+        "description": "Force output of actuator elbow_motor",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "scalar",
         "display_name": "Elbow Torque",
     }
     assert sm._column_metadata["Actuators/elbow_motor:ctrl"].model_dump() == {
+        "description": "Control input to actuator elbow_motor",
         "unit": "newton",
         "transform_type": "scalar",
     }

@@ -77,6 +77,30 @@ _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "total_energy": dim(Dimension.ENERGY) | TransformType.SCALAR.metadata,
 }
 
+
+def _channel_descriptions(name: str) -> dict[str, str]:
+    """The built-in `description` of each channel of the body called `name`."""
+    return {
+        "xpos": f"Position of body {name} in the world frame",
+        "quat": f"Orientation of body {name} relative to the world frame, as a quaternion",
+        "xmat": f"Orientation of body {name} relative to the world frame, as a rotation matrix",
+        "xvelp": f"Linear velocity of the center of mass of body {name} in the world frame",
+        "xvelr": f"Angular velocity of body {name} in the world frame",
+        "xaccp": f"Linear acceleration of the center of mass of body {name} in the world frame",
+        "xaccr": f"Angular acceleration of body {name} in the world frame",
+        "xipos": f"Position of the center of mass of body {name} in the world frame",
+        "xiquat": f"Orientation of the inertial frame of body {name} relative to the world frame, as a quaternion",
+        "ximat": f"Orientation of the inertial frame of body {name} relative to the world frame, as a rotation matrix",
+        "lin_mom": f"Linear momentum of body {name} in the world frame",
+        "ang_mom": f"Angular momentum of body {name} in the world frame",
+        "ke_trans": f"Translational kinetic energy of body {name}",
+        "ke_rot": f"Rotational kinetic energy of body {name}",
+        "pe": f"Potential energy of body {name}",
+        "ke_total": f"Total kinetic energy of body {name}",
+        "total_energy": f"Total kinetic and potential energy of body {name}",
+    }
+
+
 _body_attr = (
     "name",
     "childclass",
@@ -533,6 +557,7 @@ class Body(XMLModel):
             _meta = {}
 
         name = f"{self.name}"
+        descriptions = _channel_descriptions(name)
         columns: dict[str, tuple[Column, ...]] = {}
 
         def channel_columns(
@@ -550,6 +575,7 @@ class Body(XMLModel):
                     channel,
                     _meta,
                     unit_system=state.us,
+                    description=descriptions.get(channel, ""),
                 )
                 cols = columns[channel] = fan_out(
                     SignalCategory.BODIES, subgroups, attrs, meta

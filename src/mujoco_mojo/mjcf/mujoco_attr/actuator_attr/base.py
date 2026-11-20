@@ -341,6 +341,14 @@ class ActuatorBase(XMLModel, ABC):
             _meta = {}
 
         name = f"{self.name}"
+        descriptions = {
+            "ctrl": f"Control input to actuator {name}",
+            "length": f"Length of the transmission of actuator {name}",
+            "velocity": f"Velocity of the transmission of actuator {name}",
+            "force": f"Force output of actuator {name}",
+            "act": f"Internal activation state of actuator {name}",
+            "act_dot": f"Time derivative of the internal activation state of actuator {name}",
+        }
         columns: dict[tuple[str, int], tuple[Column, ...]] = {}
 
         def channel_columns(
@@ -361,7 +369,11 @@ class ActuatorBase(XMLModel, ABC):
                         builtin or ColumnMetadata()
                     ) | TransformType.SCALAR.metadata
                 meta = merge_signal_metadata(
-                    builtin, channel, _meta, unit_system=state.us
+                    builtin,
+                    channel,
+                    _meta,
+                    unit_system=state.us,
+                    description=descriptions.get(channel, ""),
                 )
                 if size == 1:
                     cols = (

@@ -809,14 +809,17 @@ def test_proximity_request_tags_builtin_dimension_metadata(tmp_path: Path) -> No
 
     pair = proximity.pair_name
     assert sm._column_metadata[f"Proximities/{pair}:dist"].model_dump() == {
+        "description": "Minimum distance between volumes g1 and g2",
         "dimension": "[length]",
         "transform_type": "scalar",
     }
     assert sm._column_metadata[f"Proximities/{pair}/fromto/g1:x"].model_dump() == {
+        "description": "Position of the nearest point on volume g1 of pair g1_to_g2, in the world frame",
         "dimension": "[length]",
         "transform_type": "point",
     }
     assert sm._column_metadata[f"Proximities/{pair}:prox_type"].model_dump() == {
+        "description": "Proximity algorithm used to compute the distance between volumes g1 and g2, as an integer code",
         "dimension": "[]",
         "transform_type": "scalar",
         "enumeration_map": {
@@ -842,6 +845,7 @@ def test_proximity_request_metadata_override(tmp_path: Path) -> None:
 
     pair = proximity.pair_name
     assert sm._column_metadata[f"Proximities/{pair}:dist"].model_dump() == {
+        "description": "Minimum distance between volumes g1 and g2",
         "dimension": "[length]",
         "transform_type": "scalar",
         "display_name": "Pair Distance",

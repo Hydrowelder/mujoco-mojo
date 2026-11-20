@@ -126,10 +126,12 @@ def test_joint_request_tags_hinge_qpos_qvel_with_angle_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
+        "description": "Position of joint elbow",
         "unit": "radian",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Joints/elbow:qvel"].model_dump() == {
+        "description": "Velocity of joint elbow",
         "unit": "radian / second",
         "transform_type": "scalar",
     }
@@ -161,10 +163,12 @@ def test_joint_request_tags_slide_qpos_qvel_with_length_dimension(
     sm.record(state)
 
     assert sm._column_metadata["Joints/rail:qpos"].model_dump() == {
+        "description": "Position of joint rail",
         "dimension": "[length]",
         "transform_type": "scalar",
     }
     assert sm._column_metadata["Joints/rail:qvel"].model_dump() == {
+        "description": "Velocity of joint rail",
         "dimension": "[length] / [time]",
         "transform_type": "scalar",
     }
@@ -181,6 +185,7 @@ def test_joint_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Joints/elbow:qpos"].model_dump() == {
+        "description": "Position of joint elbow",
         "unit": "radian",
         "transform_type": "scalar",
         "display_name": "Elbow Angle",
@@ -284,3 +289,58 @@ def test_single_dof_joint_scalars_are_tagged_scalar(
 
     assert sm._column_metadata["Joints/elbow:qpos"].transform_type == "scalar"
     assert sm._column_metadata["Joints/elbow:qvel"].transform_type == "scalar"
+
+
+def test_free_and_ball_joint_descriptions_name_their_frames(tmp_path: Path) -> None:
+    """MuJoCo expresses a free joint's linear parts in the world frame and every angular part of a free or ball joint in the body's local frame."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="box">
+                <freejoint name="root"/>
+                <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+            <body name="arm" pos="1 0 0">
+                <joint name="shoulder" type="ball"/>
+                <geom type="sphere" size="0.1"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    state = MjState(model, data)
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+
+    for name in ("root", "shoulder"):
+        joint = Joint(name=JointName(name))
+        joint.get_id(model)
+        joint.request(sm, channels=["qpos", "qvel", "qfrc_passive"])
+    sm.record(state)
+
+    described = {name: m.description for name, m in sm._column_metadata.items()}
+    assert (
+        described["Joints/root/pos_qpos:x"]
+        == "Position of free joint root in the world frame"
+    )
+    assert (
+        described["Joints/root/lin_qvel:x"]
+        == "Linear velocity of free joint root in the world frame"
+    )
+    assert (
+        described["Joints/root/ang_qvel:x"]
+        == "Angular velocity of free joint root in the local frame of its body"
+    )
+    assert (
+        described["Joints/root/lin_qfrc_passive:x"]
+        == "Force applied to free joint root by passive elements, in the world frame"
+    )
+    assert (
+        described["Joints/root/ang_qfrc_passive:x"]
+        == "Torque applied to free joint root by passive elements, in the local frame of its body"
+    )
+    assert (
+        described["Joints/shoulder/qvel:x"]
+        == "Angular velocity of ball joint shoulder in the local frame of its body"
+    )

@@ -136,7 +136,10 @@ class RequirementsManager:
                 category=SignalCategory.REQUIREMENTS,
                 subgroups=(resolved_name,),
                 attr="result",
-                metadata=_RESULT_METADATA,
+                metadata=_RESULT_METADATA
+                | ColumnMetadata(
+                    description=f"Result of requirement {resolved_name}: 1 when it is satisfied and 0 when it is violated"
+                ),
             )
             if post_result
             else None
