@@ -5,6 +5,7 @@
 - Added a `description` to `ColumnMetadata`, which the built-in signals fill in, to tell apart columns with similar names
 - The Dojo's signal selectors show a signal's description when you hover it, and the Signal Lab's Signal In node shows it
 - SensAI's signal search now also matches the descriptions of signals
+- Fixed SensAI showing a reply the model cut off as if it were whole, with no error
 
 ## Version 2.8.3 (2026-11-17)
 

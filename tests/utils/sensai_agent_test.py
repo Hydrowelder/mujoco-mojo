@@ -2420,6 +2420,45 @@ class TestChatRoute:
         assert isinstance(detail, str)
         return detail
 
+    def test_a_reply_the_model_cuts_off_is_an_error_that_keeps_what_arrived(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The model fails after sending a word. That used to end as a finished, one-word reply, with nothing to say it went wrong."""
+
+        def whole(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart("First words")])
+
+        async def cut_off(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            yield "First"
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+
+        detail = self.chat_error(
+            client, monkeypatch, FunctionModel(whole, stream_function=cut_off)
+        )
+
+        assert detail.startswith("The reply was cut off: 503 UNAVAILABLE")
+        assert detail.endswith("What the model had written:\n\nFirst")
+
+    def test_a_model_that_fails_before_writing_anything_is_an_error(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def whole(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart("never sent")])
+
+        async def refuse(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+            yield ""
+
+        detail = self.chat_error(
+            client, monkeypatch, FunctionModel(whole, stream_function=refuse)
+        )
+
+        assert detail == "No response from model: 503 UNAVAILABLE: high demand"
+
     @pytest.mark.parametrize(
         ("ask", "tool", "args", "while_", "advice", "not_said"),
         [
