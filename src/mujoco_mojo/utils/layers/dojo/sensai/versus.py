@@ -82,7 +82,7 @@ def change_versus(
         and not (no_range or pins or unpins or clear_pins)
     ):
         raise VersusError(
-            "Nothing to change: send enabled, trial_range, no_range, pin, unpin, failed_requirement or clear_pins."
+            "Nothing to change: send enabled, trial_range, no_range, pin, unpin, failed_requirement, input_outliers or clear_pins."
         )
     if known is not None and (unknown := sorted(set(pins) - set(known))):
         span = f"{min(known)}-{max(known)}" if known else "none"

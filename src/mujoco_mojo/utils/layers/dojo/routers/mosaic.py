@@ -9,13 +9,12 @@ import socket
 import tempfile
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, SupportsFloat, TypedDict, get_args
+from typing import Any, TypedDict, get_args
 
 import polars as pl
 import stochas
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
-from pint.errors import PintError
 
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
@@ -24,9 +23,6 @@ from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
     MojoDataFrame,
 )
-from mujoco_mojo.utils.defaults import NAMED_VALUES_FNAME as _NAMED_VALUES_FNAME
-from mujoco_mojo.utils.defaults import STOCHAS_DIR_NAME as _STOCHAS_DIR_NAME
-from mujoco_mojo.utils.defaults import STOCHAS_DISTS_FNAME as _STOCHAS_DISTS_FNAME
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.stochas import UnitSystem as _UnitSystem
 from mujoco_mojo.utils.signal_metadata import (
@@ -48,6 +44,15 @@ from mujoco_mojo.utils.log import get_logger
 
 from .. import shared
 from ..plot_config import PlotConfig as _PlotConfig
+from ..trial_dists import (
+    read_distributions,
+    read_named_values,
+    safe_param,
+    extract_sampled_labels,
+    sampled_values_in_dist_unit,
+    split_nominal,
+    z_and_percentile,
+)
 from ..plot_config import PlotProfile as _PlotProfile
 from ..plot_config import PlotProfileTab as _PlotProfileTab
 from ..trial_log import find_log_file, parse_log_file
@@ -1485,123 +1490,6 @@ def _chart_data(dist: stochas.AnyDist) -> dict[str, Any]:
         }
 
 
-def _split_nominal(nominal_raw: object) -> tuple[float | None, str | None]:
-    """
-    Return (nominal, nominal_label) for a distribution's nominal value.
-
-    A nominal may be any type (float, str, list...). Numbers and numeric strings are exposed as a float, other strings and sequences as a label (e.g. for categorical nominals like "class_A").
-    """
-    if isinstance(nominal_raw, str):
-        try:
-            return float(nominal_raw), None
-        except ValueError:
-            return None, nominal_raw
-    if isinstance(nominal_raw, (list, tuple)):
-        return None, ", ".join(str(v) for v in nominal_raw)
-    if isinstance(nominal_raw, SupportsFloat):
-        try:
-            return float(nominal_raw), None
-        except (TypeError, ValueError):
-            pass
-    return None, None
-
-
-def _stat(
-    dist: stochas.AnyDist, sampled: float | None
-) -> tuple[float | None, float | None]:
-    """
-    Return (z_score, percentile) for a sampled value against a distribution.
-
-    z-score is returned for any distribution that exposes `mu` and `sigma` (normal-family). New normal-like distributions gain z-score support automatically via duck-typing.
-    """
-    if sampled is None:
-        return None, None
-    try:
-        pct = round(float(dist.cdf(sampled)) * 100, 1)
-        mu = getattr(dist, "mu", None)
-        sigma = getattr(dist, "sigma", None)
-        if mu is not None and sigma is not None and float(sigma) > 0:
-            return round((sampled - float(mu)) / float(sigma), 3), pct
-        return None, pct
-    except Exception:
-        return None, None
-
-
-def _safe_param(v: object) -> object:
-    """Convert values that can't be serialized to standard JSON to a display string."""
-    import math
-
-    if isinstance(v, float) and math.isinf(v):
-        return "-∞" if v < 0 else "∞"
-    return v
-
-
-def _extract_sampled_values(named_raw: dict[str, Any], name: str) -> list[float] | None:
-    """Pull every drawn scalar out of a NamedValue's stored_value, flattening any nesting."""
-    import numpy as np
-
-    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
-    if entry is None:
-        return None
-    sv = entry.get("stored_value")
-    if sv is None:
-        return None
-    try:
-        flat = np.array(sv, dtype=float).flatten()
-        return [float(v) for v in flat] if len(flat) > 0 else None
-    except Exception:
-        return None
-
-
-def _stored_unit(named_raw: dict[str, Any], name: str) -> str | None:
-    """The unit a NamedValue's `stored_value` is expressed in, or `None` if none was recorded. Sampling converts a drawn value into the model's base unit and records that unit on the NamedValue, while the distribution keeps the unit it was declared in."""
-    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
-    unit = entry.get("unit") if entry else None
-    if isinstance(unit, dict):
-        unit = unit.get("name")
-    return unit if isinstance(unit, str) and unit else None
-
-
-def _in_unit(
-    values: list[float], from_unit: str | None, to_unit: str | None
-) -> list[float]:
-    """Re-expresses `values` from `from_unit` in `to_unit`. They come back as they were when either unit is unknown, when the units are the same, or when pint cannot convert between them, so an unrecognized unit leaves the number visible instead of hiding the row."""
-    if not from_unit or not to_unit or from_unit == to_unit:
-        return values
-    import numpy as np
-
-    try:
-        converted = _ureg.Quantity(np.asarray(values, dtype=float), from_unit).to(
-            to_unit
-        )
-    except (PintError, ValueError, TypeError):
-        return values
-    return [float(v) for v in np.ravel(converted.magnitude)]
-
-
-def _sampled_values_in_dist_unit(
-    named_raw: dict[str, Any], dist: stochas.AnyDist
-) -> list[float] | None:
-    """The drawn scalars for `dist`, in the unit `dist` was declared in. A distribution's parameters, nominal, and chart are all in its declared unit, so the drawn value has to be too, or the z-score and percentile compare a base-unit number against declared-unit parameters."""
-    values = _extract_sampled_values(named_raw, dist.name)
-    if values is None or dist.unit is None:
-        return values
-    return _in_unit(values, _stored_unit(named_raw, dist.name), str(dist.unit))
-
-
-def _extract_sampled_labels(named_raw: dict[str, Any], name: str) -> list[str] | None:
-    """Pull every drawn label out of a NamedValue's stored_value for non-numeric distributions (e.g. categorical)."""
-    entry = named_raw.get(name) or named_raw.get("root", {}).get(name)
-    if entry is None:
-        return None
-    sv = entry.get("stored_value")
-    if isinstance(sv, str):
-        return [sv]
-    if isinstance(sv, list) and sv and all(isinstance(v, str) for v in sv):
-        return [v for v in sv if isinstance(v, str)]
-    return None
-
-
 def _extract_sampled_permutations(
     named_raw: dict[str, Any], name: str
 ) -> list[list[Any]] | None:
@@ -1623,28 +1511,17 @@ async def get_trial_dists(trial_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=503, detail="No job active")
 
-    dists_path = job.workdir / _STOCHAS_DIR_NAME / _STOCHAS_DISTS_FNAME
-    if not dists_path.exists():
-        return {"entries": []}
-
     try:
-        text = dists_path.read_text(encoding="utf-8")
-        dist_dict = stochas.DistributionDict.model_validate_json(text)
-    except Exception as exc:
-        logger.error(f"Failed to parse {dists_path}: {exc}")
+        dist_dict = read_distributions(job.workdir)
+    except ValueError as exc:
+        logger.error(f"Failed to read the distributions: {exc}")
         raise HTTPException(
             status_code=500, detail=f"Failed to parse distribution metadata: {exc}"
         ) from exc
+    if dist_dict is None:
+        return {"entries": []}
 
-    named_path = trial_dir / _NAMED_VALUES_FNAME
-    named_raw: dict[str, Any] = {}
-    if named_path.exists():
-        try:
-            named_raw = json.loads(named_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            # non-standard JSON (e.g. Infinity from numpydantic) - continue
-            # without sampled values rather than returning 500
-            logger.warning(f"Failed to parse {named_path}: {exc}")
+    named_raw = read_named_values(trial_dir)
 
     loop = asyncio.get_running_loop()
 
@@ -1656,27 +1533,23 @@ async def get_trial_dists(trial_id: str) -> dict[str, Any]:
             # permutations store each draw as a list of items (a 2D array overall), so
             # the flat-scalar/flat-label extractors below don't apply to them
             sampled_values = (
-                None
-                if is_permutation
-                else _sampled_values_in_dist_unit(named_raw, dist)
+                None if is_permutation else sampled_values_in_dist_unit(named_raw, dist)
             )
             sampled = sampled_values[0] if sampled_values else None
             sampled_labels = (
-                None
-                if is_permutation
-                else _extract_sampled_labels(named_raw, dist.name)
+                None if is_permutation else extract_sampled_labels(named_raw, dist.name)
             )
             sampled_permutations = (
                 _extract_sampled_permutations(named_raw, dist.name)
                 if is_permutation
                 else None
             )
-            z_score, percentile = _stat(dist, sampled)
+            z_score, percentile = z_and_percentile(dist, sampled)
             # nominal may be any type T (float, str, list...); expose as a
             # scalar float when possible, or as a string label (e.g. for
             # categorical nominals like "class_A"), mirroring sampled_value /
             # sampled_labels
-            nominal, nominal_label = _split_nominal(
+            nominal, nominal_label = split_nominal(
                 dist.nominal if dist.has_nominal else None
             )
             entries.append(
@@ -1701,7 +1574,7 @@ async def get_trial_dists(trial_id: str) -> dict[str, Any]:
                     "cdf_y": chart["cdf_y"],
                     "cat_labels": chart["cat_labels"],
                     "cat_probs": chart["cat_probs"],
-                    "params": {k: _safe_param(v) for k, v in dist.table_params.items()},
+                    "params": {k: safe_param(v) for k, v in dist.table_params.items()},
                 }
             )
         return entries

@@ -6,6 +6,7 @@
 - The Dojo's signal selectors show a signal's description when you hover it, and the Signal Lab's Signal In node shows it
 - SensAI's signal search now also matches the descriptions of signals
 - Fixed SensAI showing a reply the model cut off as if it were whole, with no error
+- SensAI can now look up a job's input distributions and what each trial drew, and compare the trials that drew an input far from its mean
 
 ## Version 2.8.3 (2026-11-17)
 

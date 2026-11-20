@@ -5,16 +5,18 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+import stochas
 
 from mujoco_mojo import MojoModel
 from mujoco_mojo.stochas import DistName, NormalDistribution, UnitSystem
 from mujoco_mojo.utils.layers.dojo import shared
-from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
-    _in_unit,
-    _sampled_values_in_dist_unit,
-    _stat,
-    _stored_unit,
-    get_trial_dists,
+from mujoco_mojo.utils.layers.dojo.routers.mosaic import get_trial_dists
+from mujoco_mojo.utils.layers.dojo.trial_dists import (
+    WITH_MU_AND_SIGMA,
+    in_unit,
+    sampled_values_in_dist_unit,
+    stored_unit,
+    z_and_percentile,
 )
 
 INCH_IN_METERS = 0.0254
@@ -57,12 +59,12 @@ def test_the_draw_is_reported_in_the_unit_of_the_distribution() -> None:
     model, in_inches = sampled_inch_model()
     named_raw = json.loads(model.named.model_dump_json())
 
-    values = _sampled_values_in_dist_unit(named_raw, model.dists["leg_len"])
+    values = sampled_values_in_dist_unit(named_raw, model.dists["leg_len"])
 
     assert values == pytest.approx([in_inches])
     # an inch draw from 10 +/- 0.5 inches lies near the mean, not 19 sigma below it
     assert values is not None
-    z_score, percentile = _stat(model.dists["leg_len"], values[0])
+    z_score, percentile = z_and_percentile(model.dists["leg_len"], values[0])
     assert z_score == pytest.approx((in_inches - MU) / SIGMA, abs=1e-3)
     assert z_score is not None
     assert abs(z_score) < 5
@@ -105,7 +107,7 @@ def test_the_endpoint_reports_the_draw_and_its_z_score_in_the_declared_unit(
 def test_values_are_converted_between_compatible_units(
     values: list[float], from_unit: str, to_unit: str, expected: list[float]
 ) -> None:
-    assert _in_unit(values, from_unit, to_unit) == pytest.approx(expected)
+    assert in_unit(values, from_unit, to_unit) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize(
@@ -123,7 +125,7 @@ def test_values_are_converted_between_compatible_units(
 def test_values_are_left_alone_when_there_is_nothing_sensible_to_convert(
     from_unit: str | None, to_unit: str | None
 ) -> None:
-    assert _in_unit([1.5, 2.5], from_unit, to_unit) == [1.5, 2.5]
+    assert in_unit([1.5, 2.5], from_unit, to_unit) == [1.5, 2.5]
 
 
 @pytest.mark.parametrize(
@@ -140,7 +142,7 @@ def test_values_are_left_alone_when_there_is_nothing_sensible_to_convert(
 def test_the_stored_unit_is_read_however_it_was_written(
     named_raw: dict[str, Any], expected: str | None
 ) -> None:
-    assert _stored_unit(named_raw, "x") == expected
+    assert stored_unit(named_raw, "x") == expected
 
 
 def test_nothing_is_converted_without_a_declared_unit_or_a_recorded_one() -> None:
@@ -150,7 +152,30 @@ def test_nothing_is_converted_without_a_declared_unit_or_a_recorded_one() -> Non
     stored = {"x": {"stored_value": [0.0254], "unit": {"name": "m"}}}
     unrecorded = {"x": {"stored_value": [0.0254]}}
 
-    assert _sampled_values_in_dist_unit(stored, plain) == [0.0254]
-    assert _sampled_values_in_dist_unit(unrecorded, declared) == [0.0254]
-    assert _sampled_values_in_dist_unit(stored, declared) == pytest.approx([1.0])
-    assert _sampled_values_in_dist_unit({}, declared) is None
+    assert sampled_values_in_dist_unit(stored, plain) == [0.0254]
+    assert sampled_values_in_dist_unit(unrecorded, declared) == [0.0254]
+    assert sampled_values_in_dist_unit(stored, declared) == pytest.approx([1.0])
+    assert sampled_values_in_dist_unit({}, declared) is None
+
+
+def _subclasses(
+    cls: type[stochas.Distribution[Any]],
+) -> list[type[stochas.Distribution[Any]]]:
+    found: list[type[stochas.Distribution[Any]]] = []
+    for sub in cls.__subclasses__():
+        found.append(sub)
+        found.extend(_subclasses(sub))
+    return found
+
+
+def test_the_z_score_is_given_for_exactly_the_distributions_with_a_mu_and_a_sigma() -> (
+    None
+):
+    """`WITH_MU_AND_SIGMA` is a list of classes, so a distribution that gains both fields has to be added to it, and this is what says so."""
+    with_both = {
+        cls
+        for cls in _subclasses(stochas.Distribution)
+        if {"mu", "sigma"} <= set(cls.model_fields)
+    }
+
+    assert set(WITH_MU_AND_SIGMA) == with_both

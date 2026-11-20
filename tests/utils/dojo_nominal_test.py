@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from mujoco_mojo.utils.layers.dojo.routers.mosaic import _split_nominal
+from mujoco_mojo.utils.layers.dojo.trial_dists import split_nominal
 
 
 @pytest.mark.parametrize(
@@ -18,7 +18,7 @@ from mujoco_mojo.utils.layers.dojo.routers.mosaic import _split_nominal
 def test_numbers_and_numeric_strings_are_exposed_as_a_float(
     raw: object, expected: float
 ) -> None:
-    assert _split_nominal(raw) == (expected, None)
+    assert split_nominal(raw) == (expected, None)
 
 
 @pytest.mark.parametrize(
@@ -30,9 +30,9 @@ def test_numbers_and_numeric_strings_are_exposed_as_a_float(
     ],
 )
 def test_strings_and_sequences_are_exposed_as_a_label(raw: object, label: str) -> None:
-    assert _split_nominal(raw) == (None, label)
+    assert split_nominal(raw) == (None, label)
 
 
 @pytest.mark.parametrize("raw", [None, np.array([1.0, 2.0]), object()])
 def test_anything_else_has_neither_a_number_nor_a_label(raw: object) -> None:
-    assert _split_nominal(raw) == (None, None)
+    assert split_nominal(raw) == (None, None)
