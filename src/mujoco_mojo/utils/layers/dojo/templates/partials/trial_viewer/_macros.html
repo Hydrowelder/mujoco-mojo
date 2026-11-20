@@ -505,8 +505,12 @@ tracking-widest styling every caller's <label> already has - CSS
         {% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
         {# py-1.5 moved off the button and onto this inner span - same reasoning
         as tree_folder_row's own comment above. #}
+        {# the row's full name and its description show in the tooltip at the end
+        of _series_panel.html (showSignalTip), which replaces a `title` so the
+        name can be bold and the description italic #}
         <button @click="{{ select_expr }}"
-                :title="{{ row_expr }}.item"
+                @mouseenter="showSignalTip($event, {{ row_expr }}.item)"
+                @mouseleave="hideSignalTip()"
                 class="w-full text-left pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
             {{ tree_indent_guides(row_expr) }}
             <span class="flex items-center gap-2 min-w-0 flex-1 py-1.5">

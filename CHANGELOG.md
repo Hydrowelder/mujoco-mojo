@@ -3,6 +3,7 @@
 ## Unreleased Version
 
 - Added a `description` to `ColumnMetadata`, which the built-in signals fill in, to tell apart columns with similar names
+- The Dojo's signal selectors show a signal's description when you hover it, and the Signal Lab's Signal In node shows it
 
 ## Version 2.8.3 (2026-11-17)
 

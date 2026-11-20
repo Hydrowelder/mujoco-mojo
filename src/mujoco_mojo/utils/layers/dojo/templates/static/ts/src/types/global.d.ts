@@ -75,6 +75,10 @@ declare global {
       value: string | null | undefined,
       choices: Record<string, string>,
     ): string | null | undefined;
+    // `text` wrapped at spaces into at most `maxLines` lines of at most
+    // `maxChars` characters (lib/signal-description.ts), for the Signal In
+    // node's description readout
+    mojoWrapText(text: string, maxChars: number, maxLines: number): string[];
     // Signal Lab - defined in _signal_lab.html, called from trial-viewer.ts
     mojoLabSelectNodeColumn?(nodeId: number, col: string): void;
     mojoLabSelectNodeQuat?(nodeId: number, base: string): void;

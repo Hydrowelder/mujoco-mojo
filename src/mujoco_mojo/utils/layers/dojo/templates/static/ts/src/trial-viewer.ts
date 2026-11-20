@@ -20,6 +20,12 @@ import {
   toggleSearchSegment,
 } from "./lib/column-search";
 import {
+  SIGNAL_TIP_WIDTH,
+  signalDescriptions,
+  signalTipHtml,
+  signalTipPosition,
+} from "./lib/signal-description";
+import {
   refFrameActive,
   refFrameLabel,
   sameRefFrame,
@@ -365,6 +371,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     columns: [] as string[],
     rotateableVectors: [] as string[],
     columnMetadata: {} as Record<string, ColumnMeta>,
+    // the tooltip over a signal in the pickers, or null when none is showing
+    signalTip: null as {
+      html: string;
+      left: number;
+      top: number;
+      flip: boolean;
+      maxWidth: number;
+    } | null,
     discoveryId: 0,
     // the signal color cycle, from PLOT_COLORS in plot_config.py through the
     // generated constant, so a color added or reordered there reaches the color
@@ -1029,6 +1043,30 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       } catch {
         // stochas tables not written yet - silently skip
       }
+    },
+
+    // shows `col`'s name and description beside the row the pointer is over.
+    // it is a fixed element and not a `title`, so it can be bold and italic
+    // and is not clipped by the pickers' scrolling lists
+    showSignalTip(event: Event, col: string, note = "") {
+      const row = (event.currentTarget as HTMLElement).getBoundingClientRect();
+      this.signalTip = {
+        html: signalTipHtml(col, this.columnMetadata[col]?.description, note),
+        ...signalTipPosition(row, {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        }),
+        maxWidth: SIGNAL_TIP_WIDTH,
+      };
+    },
+
+    hideSignalTip() {
+      this.signalTip = null;
+    },
+
+    // the descriptions the Signal Lab's nodes show, by column
+    get signalDescriptions(): Record<string, string> {
+      return signalDescriptions(this.columnMetadata);
     },
 
     showDistTooltip(event: MouseEvent, entry: DistEntry) {

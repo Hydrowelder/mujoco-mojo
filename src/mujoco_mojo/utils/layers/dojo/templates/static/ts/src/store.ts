@@ -10,6 +10,7 @@ import {
   settingsDropdown,
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
+import { wrapText } from "./lib/signal-description";
 import {
   isPlotlyPrefix,
   markAllRead,
@@ -86,6 +87,10 @@ window.mojoNearestColorName = nearestColorName;
 window.mojoResolveColorHex = resolveColorHex;
 window.mojoIsHexColor = isHexColor;
 window.mojoCollapseColorAlias = collapseColorAlias;
+
+// the Signal Lab's inline script (_signal_lab.html) is not bundled either, and
+// the Signal In node wraps a signal's description with this
+window.mojoWrapText = wrapText;
 
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {

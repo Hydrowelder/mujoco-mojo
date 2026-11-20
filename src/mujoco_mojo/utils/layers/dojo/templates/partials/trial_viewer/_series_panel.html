@@ -958,7 +958,8 @@
                                            click on it reaches this handler too, and keeps its own handler for the
                                            keyboard (Space on the focused checkbox). #}
                                         <label class="flex items-center gap-2 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
-                                               :title="row.item"
+                                               @mouseenter="showSignalTip($event, row.item)"
+                                               @mouseleave="hideSignalTip()"
                                                @mousedown.prevent
                                                @click.prevent="toggleYRange(row, $event.shiftKey)">
                                             {{ tree_indent_guides('row') }}
@@ -1844,3 +1845,19 @@
         </div>
     </div>
 </div>
+
+<!-- the tooltip over a signal in the x/y (and reference-frame) pickers, filled
+     by showSignalTip: the signal's name in bold, then its description in
+     italics. it is teleported so the pickers' scrolling lists cannot clip it,
+     and a press, a key or a scroll dismisses it, since a row that closes or
+     scrolls away under the pointer sends no mouseleave -->
+<template x-teleport="body">
+    <div x-show="signalTip"
+         @mousedown.window="hideSignalTip()"
+         @keydown.window="hideSignalTip()"
+         @scroll.window.capture="hideSignalTip()"
+         :style="signalTip ? `left:${signalTip.left}px;top:${signalTip.top}px;max-width:${signalTip.maxWidth}px;${signalTip.flip ? 'transform:translateX(-100%);' : ''}` : ''"
+         class="panel p-2! fixed z-800 w-max pointer-events-none text-xs text-ink-body leading-relaxed break-words [&_b]:text-ink-strong"
+         style="display:none;"
+         x-html="signalTip?.html ?? ''"></div>
+</template>
