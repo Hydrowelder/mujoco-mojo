@@ -298,6 +298,7 @@ describe("chatRequestBody", () => {
       all_columns: [],
       rotatable_vectors: [],
       available_quats: [],
+      column_metadata: {},
       current_plot_config_json: '{"title":"T"}',
       versus: null,
     });
@@ -321,11 +322,29 @@ describe("chatRequestBody", () => {
     });
   });
 
+  it("sends what the signals are, so the agent can find one by its description", () => {
+    const manifest = {
+      all: ["Bodies/B/xvelp:x"],
+      rotatable_vectors: [],
+      available_quats: [],
+      column_metadata: {
+        "Bodies/B/xvelp:x": { description: "Linear velocity of body B" },
+      },
+    };
+
+    expect(chatRequestBody("q", [msg()], null, manifest)).toMatchObject({
+      column_metadata: {
+        "Bodies/B/xvelp:x": { description: "Linear velocity of body B" },
+      },
+    });
+  });
+
   it("sends empty lists away from a trial, where there are no signals", () => {
     expect(chatRequestBody("q", [msg()], null, null)).toMatchObject({
       all_columns: [],
       rotatable_vectors: [],
       available_quats: [],
+      column_metadata: {},
     });
   });
 });

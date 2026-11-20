@@ -52,7 +52,8 @@ add_signals(names=["Bodies/box2/xvelr:y"])
 edit_signal(name="Bodies/box1/xvelr:y", changes={{"color": "{_EXAMPLE_COLOR}", "width": 4}})
 - edit_plot_config: change plot-wide fields, never signals. \
 edit_plot_config(changes={{"title": "Wheel speed", "grid": "none", "rangeX": [0, 5]}})
-- find_signals: look up exact signal names from words. find_signals(query="box2 xvelr")
+- find_signals: look up exact signal names from words of a name or a description. \
+find_signals(query="box2 xvelr") or find_signals(query="box2 angular velocity")
 - describe_filters: how to write a filter. Call it before adding or changing a filter.
 - set_versus: versus mode, which draws other trials behind this one. Pinning trials, setting a \
 range or naming a requirement turns it on. \
@@ -140,24 +141,39 @@ async def current_plot(ctx: RunContext[SensAIDeps]) -> str:
 
 
 @plot_config_agent.tool
-async def find_signals(ctx: RunContext[SensAIDeps], query: str) -> list[str] | str:
+async def find_signals(
+    ctx: RunContext[SensAIDeps], query: str
+) -> list[str] | list[dict[str, str]] | str:
     """
-    Searches the names of this trial's signals, so a signal can be named exactly.
+    Searches this trial's signals by name, and by description where they have one, so a signal can be named exactly.
 
     Args:
         ctx: The run context holding the dashboard state; it is not something you send.
-        query: Words from the name, such as 'box1 xpos'. Case and separators (spaces, `/`, `:`, `_`) do not matter.
+        query: Words from the name or from what the signal measures, such as 'box1 xpos' or 'box1 angular velocity'. Case and separators (spaces, `/`, `:`, `_`) do not matter, and every word has to match.
 
     Returns:
-        Up to 25 exact signal names containing every word, shortest first; the closest spellings if none contain them all.
+        Up to 25 exact signal names containing every word, shortest first; the closest spellings if none contain them all. When the trial's signals have descriptions, each is an object with its `name` and, where it has one, its `description`.
 
     """
     columns = ctx.deps.column_manifest["all"]
     if not columns:
         return "No signal list is available, so signal names cannot be checked."
-    found = _find_signals(columns, query)
+    metadata = ctx.deps.column_manifest["column_metadata"]
+    found = _find_signals(columns, query, metadata=metadata)
     logger.info("SensAI find_signals %r: %d match(es)", query, len(found))
-    return found
+    descriptions = {
+        c: meta.description
+        for c in found
+        if (meta := metadata.get(c)) and meta.description
+    }
+    if not descriptions:
+        return found
+    return [
+        {"name": c, "description": descriptions[c]}
+        if c in descriptions
+        else {"name": c}
+        for c in found
+    ]
 
 
 @plot_config_agent.tool(retries=3)

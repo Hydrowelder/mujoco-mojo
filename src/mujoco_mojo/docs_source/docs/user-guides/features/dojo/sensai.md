@@ -116,7 +116,7 @@ Press the sparkle button to open the chat. Type and press ++enter++ (++shift+ent
 
 !!! tip "Getting a good answer"
 
-    Ask for one thing at a time, and name signals and trials the way the Dojo shows them. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise `dojo.sensai.max_requests` or split the ask.
+    Ask for one thing at a time, and name signals and trials the way the Dojo shows them, or say what a signal measures: SensAI also searches the [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels) of the signals, so "the box's angular velocity" can find `Bodies/box1/xvelr:y`. The built-in signals describe themselves, and you can describe your own. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise `dojo.sensai.max_requests` or split the ask.
 
 ---
 

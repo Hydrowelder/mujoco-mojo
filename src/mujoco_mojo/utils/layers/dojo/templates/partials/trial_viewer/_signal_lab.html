@@ -2585,7 +2585,8 @@
                                 <div class="flex items-center">
                                     {{ tree_indent_guides('row') }}
                                     <button @click="selectNodeQuat(row.item)"
-                                            :title="row.item"
+                                            @mouseenter="showSignalTip($event, row.item, '', row.item + ':w')"
+                                            @mouseleave="hideSignalTip()"
                                             class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200"
                                             x-text="row.name">
                                     </button>
@@ -2668,7 +2669,8 @@
                                 <div class="flex items-center">
                                     {{ tree_indent_guides('row') }}
                                     <button @click="selectNodeOrigin(row.item)"
-                                            :title="row.item"
+                                            @mouseenter="showSignalTip($event, row.item, '', row.item + ':x')"
+                                            @mouseleave="hideSignalTip()"
                                             class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200"
                                             x-text="row.name">
                                     </button>

@@ -9,8 +9,9 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from enum import Enum
+from functools import lru_cache
 from typing import Any, get_args
 
 from pydantic import BaseModel
@@ -21,6 +22,7 @@ from mujoco_mojo.utils.layers.dojo.plot_config import (
     XAxisConfig,
     YAxisConfig,
 )
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 
 __all__ = ["filter_catalog", "find_signals", "plot_config_catalog"]
 
@@ -33,23 +35,49 @@ _MAX_CHOICES_SHOWN = 8
 _STRUCTURED_FIELDS = frozenset({"x_axis", "y_axes"})
 
 
+_TEXT_WORDS = re.compile(r"[a-z0-9]+")
+
+
+@lru_cache(maxsize=65536)
+def _words(text: str) -> tuple[str, ...]:
+    """The lowercase words of `text`, the start of which a search of a signal's metadata matches. Cached, since the same text is searched on every query."""
+    words: list[str] = _TEXT_WORDS.findall(text.lower())
+    return tuple(words)
+
+
+def _metadata_text(meta: ColumnMetadata) -> str:
+    """What a signal's metadata says about it, which `find_signals` searches: its description, quantity and unit."""
+    return " ".join(p for p in (meta.description, meta.quantity, meta.unit) if p)
+
+
 def find_signals(
-    columns: Collection[str], query: str, limit: int = _MAX_SIGNAL_MATCHES
+    columns: Collection[str],
+    query: str,
+    limit: int = _MAX_SIGNAL_MATCHES,
+    metadata: Mapping[str, ColumnMetadata] | None = None,
 ) -> list[str]:
     """
     The columns that match `query`, so a signal can be named exactly without listing every column.
 
-    A column matches when it contains every word of the query (case is ignored, and spaces, `/`, `:`, `_`, `.` and `-` separate words), shortest first. When nothing matches, the closest spellings are returned instead.
+    A column matches when every word of the query (case is ignored, and spaces, `/`, `:`, `_`, `.` and `-` separate words) is in its name or, where `metadata` has some for it, is the start of a word of its description, quantity or unit. That way `box1 angular velocity` finds `Bodies/box1/xvelr:y`, and `veloc` finds a `velocity`, while `y` does not find every description with a `y` somewhere in it. The columns with the most of the words in their name come first, then the shortest. When nothing matches, the closest spellings of the name are returned instead.
     """
     words = [w for w in re.split(r"[\s/:_.\-]+", query.lower()) if w]
     if not words:
         return []
-    hits = sorted(
-        (c for c in columns if all(w in c.lower() for w in words)),
-        key=lambda c: (len(c), c),
-    )
-    if hits:
-        return hits[:limit]
+    described = metadata or {}
+    ranked: list[tuple[int, int, str]] = []
+    for column in columns:
+        name = column.lower()
+        in_name = sum(w in name for w in words)
+        if in_name < len(words):
+            meta = described.get(column)
+            known = _words(_metadata_text(meta)) if meta else ()
+            if not all(w in name or any(t.startswith(w) for t in known) for w in words):
+                continue
+        ranked.append((-in_name, len(column), column))
+    if ranked:
+        ranked.sort()
+        return [column for _, _, column in ranked[:limit]]
     return difflib.get_close_matches(query, list(columns), n=min(limit, 10), cutoff=0.4)
 
 

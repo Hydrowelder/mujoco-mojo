@@ -77,6 +77,36 @@ export function signalDescriptions(
   return result;
 }
 
+// what SensAI is told about a signal besides its name: the three fields its
+// signal search reads and shows
+export interface SignalSummary {
+  description?: string;
+  quantity?: string;
+  unit?: string;
+}
+
+// the summaries of the columns that have anything to say, keyed by column
+// name, which is all of a column's metadata the chat request needs (the rest
+// would make every message heavier for nothing)
+export function signalSummaries(
+  metadata: Record<
+    string,
+    | { description?: string; quantity?: string | null; unit?: string | null }
+    | undefined
+  >,
+): Record<string, SignalSummary> {
+  const result: Record<string, SignalSummary> = {};
+  for (const [column, meta] of Object.entries(metadata)) {
+    const summary: SignalSummary = {};
+    const description = (meta?.description ?? "").trim();
+    if (description) summary.description = description;
+    if (meta?.quantity) summary.quantity = meta.quantity;
+    if (meta?.unit) summary.unit = meta.unit;
+    if (Object.keys(summary).length > 0) result[column] = summary;
+  }
+  return result;
+}
+
 // `text` broken at spaces into lines of at most `maxChars` characters, and at
 // most `maxLines` of them: when more would be needed the last line ends in an
 // ellipsis. a word longer than a line is split. in a monospace font a line's

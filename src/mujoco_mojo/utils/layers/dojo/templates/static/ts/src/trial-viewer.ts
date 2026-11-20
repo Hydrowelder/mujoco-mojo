@@ -22,6 +22,7 @@ import {
 import {
   SIGNAL_TIP_WIDTH,
   signalDescriptions,
+  signalSummaries,
   signalTipHtml,
   signalTipPosition,
 } from "./lib/signal-description";
@@ -1048,10 +1049,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // shows `col`'s name and description beside the row the pointer is over.
     // it is a fixed element and not a `title`, so it can be bold and italic
     // and is not clipped by the pickers' scrolling lists
-    showSignalTip(event: Event, col: string, note = "") {
+    //
+    // `metaCol` is the column whose description is shown when it is not `col`
+    // itself: the reference-frame and rotation pickers list a family's base
+    // (`Bodies/b/quat`), whose components all share one description
+    showSignalTip(event: Event, col: string, note = "", metaCol = col) {
       const row = (event.currentTarget as HTMLElement).getBoundingClientRect();
       this.signalTip = {
-        html: signalTipHtml(col, this.columnMetadata[col]?.description, note),
+        html: signalTipHtml(col, this.columnMetadata[metaCol]?.description, note),
         ...signalTipPosition(row, {
           width: window.innerWidth,
           height: window.innerHeight,
@@ -1994,6 +1999,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         all: [...this.columns],
         rotatable_vectors: [...this.rotateableVectors],
         available_quats: this.availableQuats,
+        column_metadata: signalSummaries(this.columnMetadata),
       };
     },
 
@@ -2106,8 +2112,8 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         const response = await this.fetchTrialData(this.trialId, initialCols);
         this.columns = response.columns.all.sort();
         this.rotateableVectors = response.columns.rotatable_vectors ?? [];
-        this._publishColumnManifest();
         this.columnMetadata = response.columns.column_metadata ?? {};
+        this._publishColumnManifest();
         this.data = response.data;
         void this.loadLabSchemas();
 
@@ -2760,6 +2766,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
           try {
             const resp = await this.fetchTrialData(this.trialId, activeCols);
             this.columnMetadata = resp.columns.column_metadata ?? {};
+            this._publishColumnManifest();
             // replace entirely so background-hydrated columns with stale unit values
             // are not used; startBackgroundDiscovery re-hydrates the rest
             this.data = resp.data;
@@ -4568,6 +4575,7 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
             ...this.columnMetadata,
             ...(refetch.columns.column_metadata ?? {}),
           };
+          this._publishColumnManifest();
           if (activeCols.length > 0) {
             this.data = { ...(this.data ?? {}), ...refetch.data };
             this.saveAndRender();

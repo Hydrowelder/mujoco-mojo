@@ -744,7 +744,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame[0] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame[0] === row.item", ":w") }}
                                     </template>
                                 </div>
                             </div>
@@ -824,7 +824,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrameOrigin', row.path)", "isColumnFolderCollapsed('refFrameOrigin', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame[1] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame[1] === row.item", ":x") }}
                                     </template>
                                 </div>
                             </div>

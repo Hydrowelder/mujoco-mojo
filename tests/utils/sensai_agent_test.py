@@ -43,6 +43,7 @@ from mujoco_mojo.settings import (
     SensAISettings,
 )
 from mujoco_mojo.utils.dataframe import ColumnManifest
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 from mujoco_mojo.utils.layers.dojo.plot_config import (
     PLOT_COLORS,
     PlotConfig,
@@ -174,12 +175,13 @@ def make_deps(
     job: JobStatus | None = None,
     versus: VersusState | None = None,
     max_versus_trials: int = DEFAULT_MAX_VERSUS_TRIALS,
+    metadata: dict[str, ColumnMetadata] | None = None,
 ) -> SensAIDeps:
     manifest: ColumnManifest = {
         "all": COLUMNS if columns is None else columns,
         "rotatable_vectors": [],
         "available_quats": [],
-        "column_metadata": {},
+        "column_metadata": metadata or {},
     }
     return SensAIDeps(
         job_status=job,
@@ -1600,6 +1602,47 @@ class TestReadingThePlot:
 
         assert seen == [[SIGNAL]]
 
+    def test_signals_are_found_by_their_descriptions(self) -> None:
+        seen: list[Any] = []
+
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(tool_results(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        text = "Angular velocity of body box1 in the world frame"
+        run_plot_agent(
+            scripted(call("find_signals", query="box1 angular velocity"), finish),
+            make_deps(
+                make_config(), metadata={SIGNAL: ColumnMetadata(description=text)}
+            ),
+        )
+
+        assert seen == [[{"name": SIGNAL, "description": text}]]
+
+    def test_a_match_with_no_description_is_still_named(self) -> None:
+        seen: list[Any] = []
+
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(tool_results(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        run_plot_agent(
+            scripted(call("find_signals", query="xpos"), finish),
+            make_deps(
+                make_config(),
+                metadata={
+                    "Bodies/box1/xpos:x": ColumnMetadata(description="Position of box1")
+                },
+            ),
+        )
+
+        assert seen == [
+            [
+                {"name": "Bodies/box1/xpos:x", "description": "Position of box1"},
+                {"name": "Bodies/box2/xpos:x"},
+            ]
+        ]
+
     def test_the_signal_search_says_so_when_the_trial_is_unknown(self) -> None:
         seen: list[Any] = []
 
@@ -2030,6 +2073,7 @@ class TestChatRoute:
         model: Model,
         message: str = "do it",
         columns: list[str] | None = None,
+        column_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         monkeypatch.setattr(sensai_router, "build_fallback_model", lambda: model)
         response = client.post(
@@ -2037,6 +2081,7 @@ class TestChatRoute:
             json={
                 "message": message,
                 "all_columns": COLUMNS if columns is None else columns,
+                "column_metadata": column_metadata or {},
                 "current_plot_config_json": make_config().model_dump_json(),
             },
         )
@@ -2063,6 +2108,29 @@ class TestChatRoute:
             )
             == expected
         )
+
+    def test_the_descriptions_in_the_request_reach_the_signal_search(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="find it"), say("ok")],
+            [call("find_signals", query="box1 angular velocity"), say("found")],
+        )
+
+        data = self.chat(
+            client,
+            monkeypatch,
+            model,
+            column_metadata={
+                SIGNAL: {
+                    "description": "Angular velocity of body box1 in the world frame"
+                }
+            },
+        )
+
+        search = next(c for c in data["tool_calls"] if c["name"] == "find_signals")
+        assert SIGNAL in search["result"]
+        assert "Angular velocity of body box1" in search["result"]
 
     def test_the_update_changes_only_what_was_asked(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch

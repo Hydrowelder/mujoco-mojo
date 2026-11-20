@@ -307,6 +307,8 @@ export function chatRequestBody(
     all_columns: manifest?.all ?? [],
     rotatable_vectors: manifest?.rotatable_vectors ?? [],
     available_quats: manifest?.available_quats ?? [],
+    // what the signals are (description, quantity, unit), so the agent can find one by it
+    column_metadata: manifest?.column_metadata ?? {},
     current_plot_config_json: currentPlotConfigJson,
     // versus mode as the trial viewer has it, so the agent can change it (null
     // away from a trial, where there is nothing to change)

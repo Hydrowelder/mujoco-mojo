@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   SIGNAL_TIP_WIDTH,
   signalDescriptions,
+  signalSummaries,
   signalTipHtml,
   signalTipPosition,
   wrapText,
@@ -106,6 +107,43 @@ describe("signalDescriptions", () => {
 
   it("is empty for no metadata", () => {
     expect(signalDescriptions({})).toEqual({});
+  });
+});
+
+describe("signalSummaries", () => {
+  it("keeps the description, quantity and unit of the columns that have any", () => {
+    expect(
+      signalSummaries({
+        a: { description: "first", quantity: "torque", unit: "newton" },
+        b: { description: "second" },
+        c: { unit: "meter" },
+      }),
+    ).toEqual({
+      a: { description: "first", quantity: "torque", unit: "newton" },
+      b: { description: "second" },
+      c: { unit: "meter" },
+    });
+  });
+
+  it("leaves out a column with nothing to say, and anything but those three fields", () => {
+    // the metadata a trial really has carries more than the summary keeps
+    const full = {
+      description: " padded ",
+      dimension: "[length]",
+      transform_type: "point",
+    };
+    expect(
+      signalSummaries({
+        a: {},
+        b: undefined,
+        c: { description: "  ", quantity: null, unit: null },
+        d: full,
+      }),
+    ).toEqual({ d: { description: "padded" } });
+  });
+
+  it("is empty for no metadata", () => {
+    expect(signalSummaries({})).toEqual({});
   });
 });
 
