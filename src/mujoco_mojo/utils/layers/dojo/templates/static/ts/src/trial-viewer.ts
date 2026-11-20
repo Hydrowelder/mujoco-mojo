@@ -10,6 +10,7 @@ import {
 import { evalMathExpr } from "./lib/math-expr";
 import {
   filterColumns,
+  indexSearchText,
   isSearchSegmentActive,
   quatBases,
   rotatableColumns,
@@ -18,7 +19,14 @@ import {
   searchSegmentsAtDepth,
   smartSort,
   toggleSearchSegment,
+  type SearchOptions,
+  type SearchText,
 } from "./lib/column-search";
+import {
+  loadSignalSearch,
+  nextSearchMode,
+  saveSignalSearch,
+} from "./lib/signal-search";
 import {
   SIGNAL_TIP_WIDTH,
   signalDescriptions,
@@ -88,6 +96,7 @@ import {
   buildTreeRowsFromNames,
   visibleTreeRows,
   allTreeFolderPaths,
+  singleChildChain,
   sortTreeItems,
   type TreeRow,
   type TreeSortMode,
@@ -317,6 +326,37 @@ const _mini: { rafId: number | null } = { rafId: null };
 // Lab tab state
 // ---------------------------------------------------------------------------
 
+// the pickers of a family's base (`Bodies/b/quat`) have no metadata of their
+// own: the description is the family's, which every component shares, so it is
+// read from the first component. the other pickers list whole columns
+const BASE_PICKER_COMPONENT: Record<string, string> = {
+  nodeQuat: ":w",
+  refFrame: ":w",
+  nodeOrigin: ":x",
+  refFrameOrigin: ":x",
+};
+
+// the searchable text of the open trial's metadata, built when a search first
+// needs it and again only when the metadata is replaced. it is kept outside the
+// component on purpose: a reactive copy would be wrapped, and tracked, entry by
+// entry, for a trial that can have tens of thousands of signals
+let searchTextCache: {
+  metadata: object;
+  index: Record<string, SearchText>;
+} | null = null;
+
+function searchTextFor(
+  metadata: Record<string, ColumnMeta>,
+): Record<string, SearchText> {
+  if (searchTextCache?.metadata !== metadata) {
+    searchTextCache = {
+      metadata,
+      index: indexSearchText(Alpine.raw(metadata)),
+    };
+  }
+  return searchTextCache.index;
+}
+
 // ---------------------------------------------------------------------------
 // Component factory
 // ---------------------------------------------------------------------------
@@ -356,6 +396,9 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     theme: "dark",
     xMenuOpen: false,
     xSearch: "",
+    // how every signal picker's search box reads what is typed, and whether it
+    // also searches descriptions (lib/signal-search.ts)
+    signalSearch: loadSignalSearch(),
     yMenuOpen: false,
     ySearch: "",
     refFrameMenuOpen: false,
@@ -489,8 +532,14 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
         );
       } catch {}
     },
+    // opening a folder opens down through the folders that hold only one thing
     toggleProfileFolder(path: string) {
-      this.profileTreeCollapsed = { ...this.profileTreeCollapsed, [path]: !this.profileTreeCollapsed[path] };
+      const opening = !!this.profileTreeCollapsed[path];
+      const paths = opening ? singleChildChain(this.profileTreeRows, path) : [path];
+      this.profileTreeCollapsed = {
+        ...this.profileTreeCollapsed,
+        ...Object.fromEntries(paths.map((p) => [p, !opening])),
+      };
     },
     expandAllProfileFolders() {
       this.profileTreeCollapsed = {};
@@ -718,7 +767,12 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       } catch {}
     },
     toggleLabFolder(path: string) {
-      this.labTreeCollapsed = { ...this.labTreeCollapsed, [path]: !this.labTreeCollapsed[path] };
+      const opening = !!this.labTreeCollapsed[path];
+      const paths = opening ? singleChildChain(this.labTreeRows, path) : [path];
+      this.labTreeCollapsed = {
+        ...this.labTreeCollapsed,
+        ...Object.fromEntries(paths.map((p) => [p, !opening])),
+      };
     },
     expandAllLabFolders() {
       this.labTreeCollapsed = {};
@@ -3106,7 +3160,36 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
               : this.selectableYColumns;
       const search =
         (this as unknown as Record<string, string>)[field + "Search"] ?? "";
-      return filterColumns(base, search);
+      return filterColumns(base, search, this._searchOptions(field));
+    },
+
+    // cycles the search box between regular expression and plain text
+    toggleSearchMode() {
+      this.signalSearch = {
+        ...this.signalSearch,
+        mode: nextSearchMode(this.signalSearch.mode),
+      };
+      saveSignalSearch(this.signalSearch);
+    },
+
+    // turns the search of descriptions on or off
+    toggleSearchMetadata() {
+      this.signalSearch = {
+        ...this.signalSearch,
+        metadata: !this.signalSearch.metadata,
+      };
+      saveSignalSearch(this.signalSearch);
+    },
+
+    // how the box of picker `field` searches: in the saved mode, and with the
+    // metadata only when that is switched on (so the text is not even built
+    // otherwise)
+    _searchOptions(field: string): SearchOptions {
+      const { mode, metadata } = this.signalSearch;
+      if (!metadata) return { mode };
+      const index = searchTextFor(this.columnMetadata);
+      const component = BASE_PICKER_COMPONENT[field] ?? "";
+      return { mode, describe: (col) => index[col + component] };
     },
 
     // Folder-tree view (lib/tree.ts) over getFilteredCols(field) - a second,
@@ -3140,7 +3223,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
     // either getter just to check the cache.
     _columnTreeRowsCache: {} as Record<
       string,
-      { colsRef: string[]; refFrame: string; search: string; rows: TreeRow<string>[] }
+      {
+        colsRef: string[];
+        refFrame: string;
+        search: string;
+        // the search mode and whether descriptions are searched, and the
+        // metadata they were searched in, which the rows depend on as well
+        options: string;
+        metaRef: object | null;
+        rows: TreeRow<string>[];
+      }
     >,
     // extraFilter: an additional per-column predicate beyond
     // getFilteredCols(field) itself - the Y-axis dropdown also excludes
@@ -3156,19 +3248,39 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       const cacheKey = extraFilter ? `${field}:filtered` : field;
       const search = (this as unknown as Record<string, string>)[field + "Search"] ?? "";
       const refFrame = this.config.refFrame.join("|");
+      const { mode, metadata } = this.signalSearch;
+      const options = `${mode}:${metadata}`;
+      const metaRef = metadata ? this.columnMetadata : null;
       const cached = this._columnTreeRowsCache[cacheKey];
       if (
         cached &&
         cached.colsRef === this.columns &&
         cached.refFrame === refFrame &&
-        cached.search === search
+        cached.search === search &&
+        cached.options === options &&
+        cached.metaRef === metaRef
       ) {
         return cached.rows;
       }
       const cols = this.getFilteredCols(field);
       const rows = buildTreeRowsFromNames(extraFilter ? cols.filter(extraFilter) : cols);
-      this._columnTreeRowsCache[cacheKey] = { colsRef: this.columns, refFrame, search, rows };
+      this._columnTreeRowsCache[cacheKey] = {
+        colsRef: this.columns,
+        refFrame,
+        search,
+        options,
+        metaRef,
+        rows,
+      };
       return rows;
+    },
+    // how many signals pass the picker's filter now: the file rows of the
+    // rows it shows (so the same `extraFilter` has to be given), which come
+    // from the cache and are not worked out again
+    getColumnCount(field: string, extraFilter?: (col: string) => boolean): number {
+      let count = 0;
+      for (const row of this.getColumnTreeRows(field, extraFilter)) if (row.type === "file") count++;
+      return count;
     },
     // Single source of truth for "is this column-tree folder currently
     // collapsed" (default true, absent an explicit entry) - used by the
@@ -3208,9 +3320,16 @@ function trialViewer(trialId: string, externalUrl: string, showQuickFilters: boo
       this._columnVisibleRowsCache[cacheKey] = result;
       return result;
     },
-    toggleColumnFolder(field: string, path: string) {
-      const key = field + ":" + path;
-      this.columnTreeCollapsed = { ...this.columnTreeCollapsed, [key]: !this.isColumnFolderCollapsed(field, path) };
+    // opening a folder opens down through the folders that hold only one thing,
+    // as the rows the picker shows have them: `extraFilter` is the one the
+    // picker's rows are built with, if it has one
+    toggleColumnFolder(field: string, path: string, extraFilter?: (col: string) => boolean) {
+      const opening = this.isColumnFolderCollapsed(field, path);
+      const paths = opening ? singleChildChain(this.getColumnTreeRows(field, extraFilter), path) : [path];
+      this.columnTreeCollapsed = {
+        ...this.columnTreeCollapsed,
+        ...Object.fromEntries(paths.map((p) => [field + ":" + p, !opening])),
+      };
     },
     expandAllColumnFolders(field: string) {
       const prefix = field + ":";

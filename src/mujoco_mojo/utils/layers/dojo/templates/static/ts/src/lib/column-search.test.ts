@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   filterColumns,
+  indexSearchText,
   isSearchSegmentActive,
   quatBases,
   rotatableColumns,
@@ -295,5 +296,136 @@ describe("rotatableColumns", () => {
 
   it("does not drop a rotatable column the caller rejects", () => {
     expect(rotatableColumns(cols, ["Bodies/C/xpos"], () => false)).toEqual(["Bodies/C/xpos:x"]);
+  });
+});
+
+
+// the descriptions of a few of COLUMNS, as the trial's metadata gives them
+const METADATA = {
+  "Bodies/B/xpos:x": { description: "Position of body B in the world frame" },
+  "Bodies/B/quat:w": {
+    description: "Orientation of body B relative to the world frame, as a quaternion",
+    quantity: "orientation",
+  },
+  "Bodies/A/xpos:x": { description: "Position of body A in the world frame", unit: "meter" },
+  "Sensors/s1": { description: "Output of touch sensor s1 on site tip" },
+};
+const describe_ = (() => {
+  const index = indexSearchText(METADATA);
+  return (col: string) => index[col];
+})();
+
+describe("indexSearchText", () => {
+  it("makes the description, quantity and unit one lowercase text, and keeps its words", () => {
+    const index = indexSearchText({
+      a: { description: "Linear Velocity of A", quantity: "speed", unit: "m / s" },
+    });
+
+    expect(index["a"]).toEqual({
+      text: "linear velocity of a speed m / s",
+      words: ["linear", "velocity", "of", "a", "speed", "m", "s"],
+    });
+  });
+
+  it("leaves out a column with nothing to say", () => {
+    expect(
+      indexSearchText({
+        a: {},
+        b: undefined,
+        c: { description: "", quantity: null, unit: null },
+        d: { unit: "kg" },
+      }),
+    ).toEqual({ d: { text: "kg", words: ["kg"] } });
+  });
+});
+
+describe("filterColumns in regex mode", () => {
+  it("is what it always was when no options are given", () => {
+    expect(filterColumns(COLUMNS, "xpos:x")).toEqual(filterColumns(COLUMNS, "xpos:x", { mode: "regex" }));
+    expect(filterColumns(COLUMNS, "B/xpos")).toEqual(["Bodies/B/xpos:x", "Bodies/B/xpos:y", "Bodies/B/xpos:z"]);
+  });
+
+  it("does not search descriptions unless asked to", () => {
+    expect(filterColumns(COLUMNS, "world frame")).toEqual([]);
+  });
+
+  it("searches the descriptions with the same expression when it is given them", () => {
+    expect(filterColumns(COLUMNS, "world frame", { describe: describe_ })).toEqual([
+      "Bodies/A/xpos:x",
+      "Bodies/B/quat:w",
+      "Bodies/B/xpos:x",
+    ]);
+  });
+
+  it("still matches by name, and adds the description matches to them", () => {
+    expect(filterColumns(COLUMNS, "sensors", { describe: describe_ })).toEqual(["Sensors/s1", "Sensors/s2"]);
+    expect(filterColumns(COLUMNS, "touch|s2", { describe: describe_ })).toEqual(["Sensors/s1", "Sensors/s2"]);
+  });
+
+  it("uses the same fallback for an expression that is not valid, on the text as well", () => {
+    expect(filterColumns(COLUMNS, "body [", { describe: describe_ })).toEqual([]);
+    const withBracket = { describe: () => ({ text: "an array [0] of values", words: ["an", "array", "0", "of", "values"] }) };
+    expect(filterColumns(["a"], "array [0", withBracket)).toEqual(["a"]);
+  });
+});
+
+describe("filterColumns in text mode", () => {
+  const text = (search: string, describe?: typeof describe_) => filterColumns(COLUMNS, search, { mode: "text", describe });
+
+  it("matches a part of the name, whatever its case", () => {
+    expect(text("XPOS")).toEqual(["Bodies/A/xpos:x", "Bodies/B/xpos:x", "Bodies/B/xpos:y", "Bodies/B/xpos:z"]);
+    expect(text("s1")).toEqual(["Sensors/s1"]);
+  });
+
+  it("reads the search as it is typed, with no regular expression or wildcard in it", () => {
+    expect(text("xpos.")).toEqual([]);
+    expect(text("*")).toEqual([]);
+    expect(text("(")).toEqual([]);
+    expect(text("B/xpos:y")).toEqual(["Bodies/B/xpos:y"]);
+  });
+
+  it("needs every space-separated word, in any order", () => {
+    expect(text("quat bodies")).toEqual(["Bodies/B/quat:w"]);
+    expect(text("bodies quat")).toEqual(["Bodies/B/quat:w"]);
+    expect(text("b/xpos :y")).toEqual(["Bodies/B/xpos:y"]);
+    expect(text("xpos sensors")).toEqual([]);
+  });
+
+  it("gives every column for an empty search, or one of only spaces", () => {
+    expect(text("")).toEqual(smartSort([...COLUMNS]));
+    expect(text("   ")).toEqual(smartSort([...COLUMNS]));
+  });
+
+  it("does not give 'time' the exact-match rule the regex mode does", () => {
+    const columns = ["time", "Sensors/clock_time"];
+    expect(filterColumns(columns, "time", { mode: "text" })).toEqual(["time", "Sensors/clock_time"]);
+    expect(filterColumns(columns, "time")).toEqual(["time"]);
+  });
+
+  it("finds a column by the start of a word of its description when given them", () => {
+    expect(text("veloc", describe_)).toEqual([]);
+    expect(text("quatern", describe_)).toEqual(["Bodies/B/quat:w"]);
+    expect(text("touch", describe_)).toEqual(["Sensors/s1"]);
+  });
+
+  it("does not find a part from the middle of a word of the description", () => {
+    expect(text("ternion", describe_)).toEqual([]);
+    // the bare letter x is in the name of every xpos column, not in any description word
+    expect(text("orld", describe_)).toEqual([]);
+  });
+
+  it("needs each word in the name or the description, not all in one", () => {
+    expect(text("quat world", describe_)).toEqual(["Bodies/B/quat:w"]);
+    expect(text("xpos meter", describe_)).toEqual(["Bodies/A/xpos:x"]);
+    expect(text("xpos touch", describe_)).toEqual([]);
+  });
+
+  it("searches the quantity and the unit as well", () => {
+    expect(text("orientation", describe_)).toEqual(["Bodies/B/quat:w"]);
+    expect(text("meter", describe_)).toEqual(["Bodies/A/xpos:x"]);
+  });
+
+  it("still matches a column that has no description by its name", () => {
+    expect(text("s2", describe_)).toEqual(["Sensors/s2"]);
   });
 });

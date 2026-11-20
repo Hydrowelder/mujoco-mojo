@@ -2450,7 +2450,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeColSearch', 'Filter signals…') }}
+                    {{ tree_search_input('nodeColSearch', 'Filter signals…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeCol')", "collapseAllColumnFolders('nodeCol')", "getColumnTreeRows('nodeCol').some(r => r.type === 'folder')") }}
             </div>
@@ -2548,7 +2548,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeQuatSearch', 'Filter quaternions…') }}
+                    {{ tree_search_input('nodeQuatSearch', 'Filter quaternions…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeQuat')", "collapseAllColumnFolders('nodeQuat')", "getColumnTreeRows('nodeQuat').some(r => r.type === 'folder')") }}
             </div>
@@ -2632,7 +2632,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeOriginSearch', 'Filter vectors…') }}
+                    {{ tree_search_input('nodeOriginSearch', 'Filter vectors…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeOrigin')", "collapseAllColumnFolders('nodeOrigin')", "getColumnTreeRows('nodeOrigin').some(r => r.type === 'folder')") }}
             </div>
