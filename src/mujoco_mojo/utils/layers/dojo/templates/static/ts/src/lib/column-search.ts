@@ -31,10 +31,75 @@ export function smartSort(list: string[]): string[] {
   });
 }
 
-// the columns of `base` matching `search`, sorted. `*` is a wildcard, a `:`
-// (and the `/` before it) may be preceded by anything, and a search that is
-// not a valid regex falls back to a plain case-insensitive substring match
-export function filterColumns(base: string[], search: string): string[] {
+// how the picker's search box reads what is typed. "regex" (the default, and
+// what the quick-filter chips below write into) is a loosely translated regular
+// expression over the names. "text" is plain: each space-separated word has to
+// be a part of the name, so a single word is a partial string search
+export type SearchMode = "regex" | "text";
+
+// what a column's metadata says about it, for a search that covers it: the
+// lowercase text of its description, quantity and unit, and the words of that
+// text. in plain text a word of the query has to be the start of one of those
+// words, not any part of one, so a short query does not match every
+// description with those letters somewhere in it
+export interface SearchText {
+  text: string;
+  words: string[];
+}
+
+export interface SearchOptions {
+  mode?: SearchMode;
+  // gives a column's metadata text. when it is set the search covers that as
+  // well as the name, and a column it gives nothing for is searched by name only
+  describe?: (column: string) => SearchText | undefined;
+}
+
+// the searchable text of each column that has any, from its metadata
+export function indexSearchText(
+  metadata: Record<
+    string,
+    | { description?: string; quantity?: string | null; unit?: string | null }
+    | undefined
+  >,
+): Record<string, SearchText> {
+  const index: Record<string, SearchText> = {};
+  for (const [column, meta] of Object.entries(metadata)) {
+    const text = [meta?.description, meta?.quantity, meta?.unit]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (text) index[column] = { text, words: text.match(/[a-z0-9]+/g) ?? [] };
+  }
+  return index;
+}
+
+// the columns of `base` matching `search`, sorted. in regex mode `*` is a
+// wildcard, a `:` (and the `/` before it) may be preceded by anything, and a
+// search that is not a valid regex falls back to a plain case-insensitive
+// substring match. in text mode every space-separated word of the search has
+// to be part of the name. either way, a column the options can describe is
+// also matched by its metadata text
+export function filterColumns(
+  base: string[],
+  search: string,
+  options: SearchOptions = {},
+): string[] {
+  const { mode = "regex", describe } = options;
+  if (mode === "text") {
+    const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+    if (terms.length === 0) return smartSort([...base]);
+    return smartSort(
+      base.filter((c) => {
+        const name = c.toLowerCase();
+        const meta = describe?.(c);
+        return terms.every(
+          (t) =>
+            name.includes(t) ||
+            (meta !== undefined && meta.words.some((w) => w.startsWith(t))),
+        );
+      }),
+    );
+  }
   if (!search) return smartSort([...base]);
   try {
     let pattern = search.replace(/\*/g, ".*").replace(/\/?:/g, ".*:");
@@ -42,10 +107,21 @@ export function filterColumns(base: string[], search: string): string[] {
     if (pattern.startsWith(":")) pattern = ".*" + pattern;
     if (pattern.toLowerCase() === "time") pattern = "^time$";
     const query = new RegExp(pattern, "i");
-    return smartSort(base.filter((c) => query.test(c)));
-  } catch {
     return smartSort(
-      base.filter((c) => c.toLowerCase().includes(search.toLowerCase())),
+      base.filter((c) => {
+        if (query.test(c)) return true;
+        const meta = describe?.(c);
+        return meta !== undefined && query.test(meta.text);
+      }),
+    );
+  } catch {
+    const needle = search.toLowerCase();
+    return smartSort(
+      base.filter(
+        (c) =>
+          c.toLowerCase().includes(needle) ||
+          (describe?.(c)?.text.includes(needle) ?? false),
+      ),
     );
   }
 }

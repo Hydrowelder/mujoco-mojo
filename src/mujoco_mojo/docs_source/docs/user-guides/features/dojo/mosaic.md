@@ -79,14 +79,24 @@ Your tabs are remembered by your browser, so a reload brings them back. [Profile
 - **Reference Frame:** Re-expresses vector signals (those ending in `:(x|y|z)`) relative to a frame instead of `world`. A frame is an orientation (a signal ending in `quat:(w|x|y|z)`), an origin (a position signal ending in `:(x|y|z)`), or both. An orientation alone only rotates, and an origin alone only translates.
     - Positions are translated and rotated. Other vectors, such as velocities and forces, are only rotated, and so is any signal not tagged as a position, such as custom signals and Signal Lab outputs.
     - Saved profiles and shared links that use the older single-signal frame reset to `world`.
-- **Y-Axes (Multi-Select):** You can overlay as many signals as you want. The button shows how many are selected, and opens a folder-style tree of the signals with a search box. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
+- **Y-Axes (Multi-Select):** You can overlay as many signals as you want. The button shows how many are selected, and opens a folder-style tree of the signals with a search box. Opening a folder that holds only one folder or signal opens straight down to it. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
 - **Labeled Signals (Enums):** A signal that carries labels for its integer codes (an `enumeration_map`) is drawn as a step line on its own axis on the right, with the labels as the tick marks. Signals that share the same labels share one axis, and hovering shows the label next to the code. Filters and reference frames do not apply to these signals.
+- **Descriptions:** Hover a signal in the X-Axis, Y-Axes or Reference Frame list to see its full name and, if it has one, its description. The built-in signals describe themselves, and you can [describe your own](../mojo-dataframe.md#metadata-units-tags-and-labels) to tell apart signals with similar names. Turn on the tag button in a signal list's search box to search by description.
 - **Metadata:** The info button on a signal shows what Mojo recorded about it (its unit, dimension and tags). Where a unit is known, the Dojo offers the matching unit conversion as a quick filter.
 - **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them (hold ++shift++ to send one straight to the start or the end). The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button, or clear them all with **Deselect All**.
 
 !!! tip "Pro Tip: Regex Filtering"
 
     The dropdowns aren't just lists; they are Regex-aware. You can use the segment buttons (like quat, ctrl, or sens) to quickly filter down hundreds of signals to just the ones you need. If you would rather not see the buttons, turn off `dojo.show_quick_filters`.
+
+???+ info "The search box has two buttons"
+
+    Every signal list's search box has two buttons at its right:
+
+    - **`.*`** switches between a regular expression (the default, and what the segment buttons write) and plain text. In plain text no character is special, and each space-separated word only has to be part of the signal's name, so `box1 vel` finds `Bodies/box1/xvelp:x`. The segment buttons are hidden while it is on, since they write regular expressions.
+    - **The tag** also searches the signals' [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels), along with their quantity and unit. In plain text each word of your search has to be in the name, or be the start of a word of the description, so `box1 angular` finds the angular velocity of `box1` even though its name never says so. In a regular expression the description is searched with the same expression as the name.
+
+    Both are remembered by your browser and are the same in every signal list.
 
 <figure markdown="span">
     ![Selector bar](../../../assets/user-guides/light-selector-bar.jpg#only-light){ width="85%" height="auto" }

@@ -243,6 +243,10 @@ class SiteLoad(Load):
         }
 
         name = f"{self.name}"
+        descriptions = {
+            "force": f"Force applied by load {name} in the world frame",
+            "torque": f"Torque applied by load {name} in the world frame",
+        }
         columns: dict[str, tuple[Column, ...]] = {}
 
         def channel_columns(channel: str, state: MjState) -> tuple[Column, ...]:
@@ -251,7 +255,11 @@ class SiteLoad(Load):
             cols = columns.get(channel)
             if cols is None:
                 meta = merge_signal_metadata(
-                    channel_metadata.get(channel), channel, _meta, unit_system=state.us
+                    channel_metadata.get(channel),
+                    channel,
+                    _meta,
+                    unit_system=state.us,
+                    description=descriptions.get(channel, ""),
                 )
                 # x, y, z, and magnitude, nested under the load's name
                 cols = columns[channel] = fan_out(
@@ -851,6 +859,7 @@ class JointFriction(JointLoad):
                     "friction",
                     metadata,
                     unit_system=state.us,
+                    description=f"Friction applied to joint {self.joint.name} by load {self.name}, in the world frame",
                 )
                 columns.append(
                     fan_out(SignalCategory.LOADS, (self.name, "friction"), "xyzm", meta)
@@ -1084,7 +1093,10 @@ class ActuatorControl(Load):
             subgroups=(self.name,),
             attr="ctrl",
             metadata=merge_signal_metadata(
-                TransformType.SCALAR.metadata, "ctrl", metadata
+                TransformType.SCALAR.metadata,
+                "ctrl",
+                metadata,
+                description=f"Control value applied to actuator {self.actuator.name} by load {self.name}",
             ),
         )
 

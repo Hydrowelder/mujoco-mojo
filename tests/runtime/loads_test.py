@@ -673,10 +673,12 @@ def test_load_request_tags_builtin_dimension_metadata(
     sm.record(state)
 
     assert sm._column_metadata["Loads/thruster/force:x"].model_dump() == {
+        "description": "Force applied by load thruster in the world frame",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
     }
     assert sm._column_metadata["Loads/thruster/torque:x"].model_dump() == {
+        "description": "Torque applied by load thruster in the world frame",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -701,6 +703,7 @@ def test_load_request_metadata_override(
     sm.record(state)
 
     assert sm._column_metadata["Loads/thruster/force:x"].model_dump() == {
+        "description": "Force applied by load thruster in the world frame",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
         "display_name": "Thrust",
@@ -1231,6 +1234,7 @@ def test_joint_friction_request_tags_hinge_with_torque_metadata(tmp_path) -> Non
     sm.record(state)
 
     assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
+        "description": "Friction applied to joint hinge by load brake, in the world frame",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -1248,6 +1252,7 @@ def test_joint_friction_request_tags_slide_with_force_metadata(tmp_path) -> None
     sm.record(state)
 
     assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
+        "description": "Friction applied to joint slide by load brake, in the world frame",
         "dimension": "[mass] * [length] / [time] ** 2",
         "transform_type": "vector",
     }
@@ -1266,6 +1271,7 @@ def test_joint_friction_request_metadata_override(tmp_path) -> None:
     sm.record(state)
 
     assert sm._column_metadata["Loads/brake/friction:x"].model_dump() == {
+        "description": "Friction applied to joint hinge by load brake, in the world frame",
         "dimension": "[length] ** 2 * [mass] / [time] ** 2",
         "quantity": "torque",
         "transform_type": "vector",
@@ -1535,7 +1541,8 @@ def test_actuator_load_request_ctrl_has_no_builtin_default(tmp_path) -> None:
     sm.record(state)
 
     assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {
-        "transform_type": "scalar"
+        "description": "Control value applied to actuator motor1 by load drive",
+        "transform_type": "scalar",
     }
 
 
@@ -1551,6 +1558,7 @@ def test_actuator_load_request_metadata_override(tmp_path) -> None:
     sm.record(state)
 
     assert sm._column_metadata["Loads/drive:ctrl"].model_dump() == {
+        "description": "Control value applied to actuator motor1 by load drive",
         "unit": "newton",
         "transform_type": "scalar",
     }

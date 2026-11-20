@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping
 from typing import Any
@@ -20,6 +21,7 @@ from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
 from mujoco_mojo.utils.log import get_logger
 
 from .deps import SensAIDeps
+from .dist_report import trials_beyond
 from .job_report import trials_that_missed
 from .plot_config_catalog import filter_catalog, plot_config_catalog
 from .plot_config_catalog import find_signals as _find_signals
@@ -52,12 +54,15 @@ add_signals(names=["Bodies/box2/xvelr:y"])
 edit_signal(name="Bodies/box1/xvelr:y", changes={{"color": "{_EXAMPLE_COLOR}", "width": 4}})
 - edit_plot_config: change plot-wide fields, never signals. \
 edit_plot_config(changes={{"title": "Wheel speed", "grid": "none", "rangeX": [0, 5]}})
-- find_signals: look up exact signal names from words. find_signals(query="box2 xvelr")
+- find_signals: look up exact signal names from words of a name or a description. \
+find_signals(query="box2 xvelr") or find_signals(query="box2 angular velocity")
 - describe_filters: how to write a filter. Call it before adding or changing a filter.
 - set_versus: versus mode, which draws other trials behind this one. Pinning trials, setting a \
-range or naming a requirement turns it on. \
+range, naming a requirement or naming a sampled input turns it on. \
 set_versus(failed_requirement="touchdown_speed") shows the trials that missed that requirement \
 ("any" for trials that missed any requirement, "error" for trials that crashed). \
+set_versus(input_outliers="wind_speed", min_sigma=2) shows the trials that drew that input 2 \
+or more standard deviations from its mean. \
 set_versus(trial_range=[3, 9]). set_versus(pin=[12, 15]). set_versus(enabled=false) turns it off.
 
 Rules:
@@ -76,7 +81,7 @@ automatic again.
 - Versus mode draws its range and its pinned trials together. To compare only some trials, such \
 as only the ones that failed a requirement, also send no_range=true. To show other trials \
 instead of the ones shown now, also send clear_pins=true. Never write out trial numbers you \
-looked up: failed_requirement finds them. When set_versus says trials were left out, tell the \
+looked up: failed_requirement and input_outliers find them. When set_versus says trials were left out, tell the \
 user how many and that asking again adds the next batch.
 - If the request is a question, answer it and call no tool that changes the plot.
 - Execute immediately; never ask for confirmation. If a call is refused, read the reason, \
@@ -140,24 +145,39 @@ async def current_plot(ctx: RunContext[SensAIDeps]) -> str:
 
 
 @plot_config_agent.tool
-async def find_signals(ctx: RunContext[SensAIDeps], query: str) -> list[str] | str:
+async def find_signals(
+    ctx: RunContext[SensAIDeps], query: str
+) -> list[str] | list[dict[str, str]] | str:
     """
-    Searches the names of this trial's signals, so a signal can be named exactly.
+    Searches this trial's signals by name, and by description where they have one, so a signal can be named exactly.
 
     Args:
         ctx: The run context holding the dashboard state; it is not something you send.
-        query: Words from the name, such as 'box1 xpos'. Case and separators (spaces, `/`, `:`, `_`) do not matter.
+        query: Words from the name or from what the signal measures, such as 'box1 xpos' or 'box1 angular velocity'. Case and separators (spaces, `/`, `:`, `_`) do not matter, and every word has to match.
 
     Returns:
-        Up to 25 exact signal names containing every word, shortest first; the closest spellings if none contain them all.
+        Up to 25 exact signal names containing every word, shortest first; the closest spellings if none contain them all. When the trial's signals have descriptions, each is an object with its `name` and, where it has one, its `description`.
 
     """
     columns = ctx.deps.column_manifest["all"]
     if not columns:
         return "No signal list is available, so signal names cannot be checked."
-    found = _find_signals(columns, query)
+    metadata = ctx.deps.column_manifest["column_metadata"]
+    found = _find_signals(columns, query, metadata=metadata)
     logger.info("SensAI find_signals %r: %d match(es)", query, len(found))
-    return found
+    descriptions = {
+        c: meta.description
+        for c in found
+        if (meta := metadata.get(c)) and meta.description
+    }
+    if not descriptions:
+        return found
+    return [
+        {"name": c, "description": descriptions[c]}
+        if c in descriptions
+        else {"name": c}
+        for c in found
+    ]
 
 
 @plot_config_agent.tool(retries=3)
@@ -276,6 +296,8 @@ async def set_versus(
     pin: list[int] | None = None,
     unpin: list[int] | None = None,
     failed_requirement: str | None = None,
+    input_outliers: str | None = None,
+    min_sigma: float = 2.0,
     clear_pins: bool = False,
 ) -> str:
     """
@@ -286,9 +308,11 @@ async def set_versus(
         enabled: True to show the comparison traces and false to turn versus mode off, such as true. Leave it out to keep it as it is: pinning trials or setting a range turns it on by itself.
         trial_range: The first and last trial number to compare, such as [3, 9]. It replaces the range from before. Leave it out to keep the range.
         no_range: True to compare only the pinned trials, with no range, such as true. Use it with pin or failed_requirement when the user wants only those trials.
-        pin: Trial numbers the user named, to add to the pinned ones, such as [12, 15]. For the trials that failed a requirement use failed_requirement and never write those numbers yourself.
+        pin: Trial numbers the user named, to add to the pinned ones, such as [12, 15]. For the trials that failed a requirement use failed_requirement, and for the ones that drew an input far from its mean use input_outliers; never write those numbers yourself.
         unpin: Trial numbers to stop comparing, such as [12].
         failed_requirement: Pins the trials that missed a requirement, found by the server. A requirement's name or part of it, such as "touchdown_speed", or "any" for the trials that missed any requirement, or "error" for the trials that crashed.
+        input_outliers: Pins the trials that drew a sampled input far from its mean, found by the server. The input's name or part of it, such as "wind_speed". How far is min_sigma.
+        min_sigma: How many standard deviations from its mean an input must have been drawn for input_outliers to pin the trial, such as 2 (the default) or 3. It is only used with input_outliers.
         clear_pins: True to drop every pinned trial first, such as true, when the user wants other trials instead of the ones shown now.
 
     Returns:
@@ -308,6 +332,8 @@ async def set_versus(
                 "pin": pin,
                 "unpin": unpin,
                 "failed_requirement": failed_requirement,
+                "input_outliers": input_outliers,
+                "min_sigma": min_sigma,
                 "clear_pins": clear_pins,
             },
             default=str,
@@ -316,24 +342,39 @@ async def set_versus(
     job = ctx.deps.job_status
     known = list(job.trial_nums) if job is not None else None
     pins = list(pin or [])
+    changes_something = bool(
+        enabled is not None
+        or trial_range is not None
+        or no_range
+        or pin
+        or unpin
+        or clear_pins
+    )
+    found_none: list[str] = []
     if failed_requirement:
         if job is None:
             return "No job is loaded, so there are no failed trials to look up. Pin the trial numbers the user names instead."
         found = trials_that_missed(job, failed_requirement)
         if isinstance(found, str):
             return found
-        if not found and not (
-            enabled is not None
-            or trial_range is not None
-            or no_range
-            or pin
-            or unpin
-            or clear_pins
-        ):
-            return (
-                f"No trial missed '{failed_requirement}', so there is nothing to show."
+        if not found:
+            found_none.append(f"no trial missed '{failed_requirement}'")
+        pins += found
+    if input_outliers:
+        if job is None:
+            return "No job is loaded, so there are no sampled inputs to look up. Pin the trial numbers the user names instead."
+        # reads every trial's saved draws, so it is kept off the event loop
+        found = await asyncio.to_thread(trials_beyond, job, input_outliers, min_sigma)
+        if isinstance(found, str):
+            return found
+        if not found:
+            found_none.append(
+                f"no trial drew '{input_outliers}' {min_sigma:g} or more standard deviations from its mean"
             )
         pins += found
+    if found_none and not (pins or changes_something):
+        nothing = ", and ".join(found_none) + ", so there is nothing to show."
+        return nothing[0].upper() + nothing[1:]
     room = max(0, ctx.deps.max_versus_trials - ctx.deps.versus_trials_added)
     try:
         change = change_versus(

@@ -29,8 +29,10 @@ import {
   loadOpen,
   loadPinned,
   loadSensAITabs,
+  mergeSavedTabs,
   messageLayout,
   promptScrollTop,
+  readSavedTabs,
   rememberedScroll,
   resultContent,
   revealStep,
@@ -44,6 +46,7 @@ import {
   toolDotClass,
   BUBBLE_SETTLE_MS,
   SCROLL_HOLD_MS,
+  TABS_KEY,
   type Exchange,
   type SensAIMessage,
   type SensAITab,
@@ -104,6 +107,8 @@ function sensai() {
     _revealQueue: "",
     _revealTimer: null as number | null,
     _abort: null as AbortController | null,
+    // the listener that takes in the chats another browser tab saves, kept to remove it
+    _onStorage: null as ((event: StorageEvent) => void) | null,
     _draining: null as Promise<void> | null,
     headerTooltip,
     toolCallsTitle,
@@ -150,6 +155,12 @@ function sensai() {
       // writes the chats back, which also retires the history from before tabs
       this._saveTabs();
       this.pinned = loadPinned();
+      // another browser tab saving its chats changes `sensai-tabs` here (a change this
+      // tab makes itself raises no event in it), so this one takes them in
+      this._onStorage = (event) => {
+        if (event.key === TABS_KEY) this._adoptSavedChats();
+      };
+      window.addEventListener("storage", this._onStorage);
       (this as unknown as AlpineMagics).$watch("input", () => {
         const el = (this as unknown as AlpineMagics).$refs["inputArea"];
         if (el) this.resize(el);
@@ -213,6 +224,8 @@ function sensai() {
     destroy() {
       this._stopHold();
       this._stopPlaceholder();
+      if (this._onStorage) window.removeEventListener("storage", this._onStorage);
+      this._onStorage = null;
     },
 
     // ---- the placeholder ----
@@ -257,6 +270,28 @@ function sensai() {
     },
 
     // ---- chats (tabs) ----
+
+    // takes in the chats another browser tab saved, so the two do not each go on with
+    // their own copy. it reads what is saved now and not what the event carried, since
+    // a later save may already have replaced it, and it writes nothing back: a save here
+    // would raise the same event there, and the two would answer each other for ever.
+    // a chat with a request here is left as it is (see mergeSavedTabs). the open chat
+    // stays open, unless the other tab closed it: then the chat beside it is shown
+    _adoptSavedChats() {
+      const saved = readSavedTabs();
+      if (!saved) return;
+      const merged = mergeSavedTabs(this.tabs, saved, (id) => this.isBusy(id));
+      if (!merged.changed) return;
+      const was = this.tabs.findIndex((t) => t.id === this.activeId);
+      this.tabs = merged.tabs;
+      if (this.renamingId && !this.tabs.some((t) => t.id === this.renamingId)) {
+        this.renamingId = null;
+      }
+      if (!this.tabs.some((t) => t.id === this.activeId)) {
+        this.activeId = this.tabs[Math.min(Math.max(was, 0), this.tabs.length - 1)]!.id;
+        this._showActiveTab();
+      }
+    },
 
     newTab() {
       if (this.tabs.length >= MAX_TABS) return;
@@ -403,6 +438,17 @@ function sensai() {
     // reply. the returned promise settles once every request in line, this
     // one included, has finished
     async send() {
+      // what the model is sent as context is this chat's messages, so they are brought up
+      // to date first, in case a save from another browser tab has not been taken in yet.
+      // if that tab closed this chat, another one is open now: the text stays in the box
+      // for it rather than going to a chat the user did not choose
+      const open = this.activeId;
+      const typed = this.input;
+      this._adoptSavedChats();
+      if (this.activeId !== open) {
+        this.input = typed;
+        return;
+      }
       const tab = this.activeTab;
       const message = this.input.trim();
       if (!tab || !message || this.isBusy(tab.id)) return;

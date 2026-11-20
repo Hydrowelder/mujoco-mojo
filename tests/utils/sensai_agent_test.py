@@ -37,12 +37,20 @@ from pydantic_ai.models.function import (
     FunctionModel,
 )
 
+from mujoco_mojo import MojoModel
+from mujoco_mojo.stochas import DistName, NormalDistribution
 from mujoco_mojo.settings import (
     DEFAULT_MAX_REQUESTS,
     DEFAULT_MAX_VERSUS_TRIALS,
     SensAISettings,
 )
 from mujoco_mojo.utils.dataframe import ColumnManifest
+from mujoco_mojo.utils.defaults import (
+    NAMED_VALUES_FNAME,
+    STOCHAS_DIR_NAME,
+    STOCHAS_DISTS_FNAME,
+)
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 from mujoco_mojo.utils.layers.dojo.plot_config import (
     PLOT_COLORS,
     PlotConfig,
@@ -174,12 +182,13 @@ def make_deps(
     job: JobStatus | None = None,
     versus: VersusState | None = None,
     max_versus_trials: int = DEFAULT_MAX_VERSUS_TRIALS,
+    metadata: dict[str, ColumnMetadata] | None = None,
 ) -> SensAIDeps:
     manifest: ColumnManifest = {
         "all": COLUMNS if columns is None else columns,
         "rotatable_vectors": [],
         "available_quats": [],
-        "column_metadata": {},
+        "column_metadata": metadata or {},
     }
     return SensAIDeps(
         job_status=job,
@@ -236,10 +245,37 @@ JOB_TOOLS = (
     "get_trial_details",
     "compare_trials",
     "get_job_configuration",
+    "get_input_distributions",
+    "get_trial_inputs",
+    "get_input_outliers",
 )
 NO_JOB = "No job is currently loaded."
 NOW = datetime(2026, 3, 1, 12, 0, 0, tzinfo=UTC)
 """The clock the job agent's tools read in these tests."""
+
+
+# the draws of `wind`, a normal input with mu 10 and sigma 1: trials 1 and 3 are 2.5 and
+# 2.6 standard deviations out
+WIND_DRAWS = {0: 10.0, 1: 12.5, 2: 10.2, 3: 7.4, 4: 9.9, 5: 10.1}
+
+
+def write_inputs(job: JobStatus, draws: dict[int, float]) -> None:
+    """Saves the normal input `wind` and what each trial in `draws` drew of it, where the Dojo's distributions panel and SensAI read them."""
+    model = MojoModel()
+    model.sample_dist(
+        NormalDistribution(
+            name=DistName("wind"), nominal=10.0, mu=10.0, sigma=1.0, category="env"
+        )
+    )
+    folder = job.workdir / STOCHAS_DIR_NAME
+    folder.mkdir(exist_ok=True)
+    (folder / STOCHAS_DISTS_FNAME).write_text(model.dists.model_dump_json())
+    for trial, value in draws.items():
+        trial_dir = job.trial_num_to_path(trial)
+        trial_dir.mkdir(parents=True, exist_ok=True)
+        (trial_dir / NAMED_VALUES_FNAME).write_text(
+            json.dumps({"wind": {"stored_value": [value]}})
+        )
 
 
 class TestJobAgent:
@@ -316,12 +352,52 @@ class TestJobAgent:
             ("get_trial_details", {"trial_num": 1}),
             ("compare_trials", {"trial_nums": [1, 2]}),
             ("get_job_configuration", {}),
+            ("get_input_distributions", {}),
+            ("get_trial_inputs", {"trial_num": 1}),
+            ("get_input_outliers", {"distribution": "wind"}),
         ],
     )
     def test_every_tool_says_so_when_no_job_is_loaded(
         self, tool: str, args: dict[str, Any]
     ) -> None:
         assert self.ask(make_deps(None), tool, **args) == NO_JOB
+
+    def inputs_deps(self, tmp_path: Path) -> SensAIDeps:
+        job = make_job(tmp_path, {}, n_trial=len(WIND_DRAWS))
+        write_inputs(job, WIND_DRAWS)
+        return make_deps(None, job=job)
+
+    def test_the_inputs_the_trials_were_sampled_from_are_described(
+        self, tmp_path: Path
+    ) -> None:
+        text = self.ask(self.inputs_deps(tmp_path), "get_input_distributions")
+
+        assert "wind (normal)" in text
+        assert "category env" in text
+        assert "mu=10" in text
+        assert "sigma=1" in text
+
+    def test_one_trials_draws_come_with_their_distance_from_the_mean(
+        self, tmp_path: Path
+    ) -> None:
+        text = self.ask(self.inputs_deps(tmp_path), "get_trial_inputs", trial_num=1)
+
+        assert "12.5" in text
+        assert "+2.50 standard deviations from the mean" in text
+
+    def test_the_trials_that_drew_an_input_far_out_come_back_in_one_call(
+        self, tmp_path: Path
+    ) -> None:
+        text = self.ask(
+            self.inputs_deps(tmp_path),
+            "get_input_outliers",
+            distribution="wind",
+            min_sigma=2,
+        )
+
+        assert "2 of 6 trials drew it 2 or more standard deviations" in text
+        assert text.index("trial 3:") < text.index("trial 1:")
+        assert "All of them: 1, 3." in text
 
     def test_the_answer_is_the_text_the_model_wrote(self, tmp_path: Path) -> None:
         output = run_job_agent(
@@ -1600,6 +1676,47 @@ class TestReadingThePlot:
 
         assert seen == [[SIGNAL]]
 
+    def test_signals_are_found_by_their_descriptions(self) -> None:
+        seen: list[Any] = []
+
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(tool_results(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        text = "Angular velocity of body box1 in the world frame"
+        run_plot_agent(
+            scripted(call("find_signals", query="box1 angular velocity"), finish),
+            make_deps(
+                make_config(), metadata={SIGNAL: ColumnMetadata(description=text)}
+            ),
+        )
+
+        assert seen == [[{"name": SIGNAL, "description": text}]]
+
+    def test_a_match_with_no_description_is_still_named(self) -> None:
+        seen: list[Any] = []
+
+        def finish(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(tool_results(messages))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        run_plot_agent(
+            scripted(call("find_signals", query="xpos"), finish),
+            make_deps(
+                make_config(),
+                metadata={
+                    "Bodies/box1/xpos:x": ColumnMetadata(description="Position of box1")
+                },
+            ),
+        )
+
+        assert seen == [
+            [
+                {"name": "Bodies/box1/xpos:x", "description": "Position of box1"},
+                {"name": "Bodies/box2/xpos:x"},
+            ]
+        ]
+
     def test_the_signal_search_says_so_when_the_trial_is_unknown(self) -> None:
         seen: list[Any] = []
 
@@ -1783,6 +1900,116 @@ class TestSettingVersus:
             vs_enabled=True, vs_range=None, vs_pinned=[1, 2]
         )
 
+    def with_inputs(self, tmp_path: Path) -> JobStatus:
+        """The job of `failing` (trials 1 and 2 missed `speed`), with `wind` drawn as in `WIND_DRAWS`."""
+        job = self.failing(tmp_path)
+        write_inputs(job, WIND_DRAWS)
+        return job
+
+    def test_the_trials_that_drew_an_input_far_from_its_mean_are_pinned(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        self.run(
+            deps,
+            (
+                "set_versus",
+                {"input_outliers": "wind", "min_sigma": 2, "no_range": True},
+            ),
+        )
+
+        assert deps.versus == VersusState(
+            vs_enabled=True, vs_range=None, vs_pinned=[1, 3]
+        )
+
+    def test_two_standard_deviations_is_the_default(self, tmp_path: Path) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        self.run(deps, ("set_versus", {"input_outliers": "wind", "no_range": True}))
+
+        assert deps.versus is not None
+        assert deps.versus.vs_pinned == [1, 3]
+
+    def test_a_larger_distance_pins_fewer_trials(self, tmp_path: Path) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        self.run(
+            deps,
+            (
+                "set_versus",
+                {"input_outliers": "wind", "min_sigma": 2.55, "no_range": True},
+            ),
+        )
+
+        assert deps.versus is not None
+        assert deps.versus.vs_pinned == [3]
+
+    def test_both_ways_of_picking_trials_add_to_each_other(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        self.run(
+            deps,
+            (
+                "set_versus",
+                {
+                    "failed_requirement": "speed",
+                    "input_outliers": "wind",
+                    "no_range": True,
+                },
+            ),
+        )
+
+        assert deps.versus is not None
+        assert deps.versus.vs_pinned == [1, 2, 3]
+
+    def test_an_input_that_is_not_there_is_refused_with_the_names_that_are(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        [told] = self.run(deps, ("set_versus", {"input_outliers": "rain"}))[:1]
+
+        assert "No input is named 'rain'. The inputs are: wind." in told
+        assert deps.versus == self.VERSUS
+
+    def test_no_trial_far_enough_says_there_is_nothing_to_show(
+        self, tmp_path: Path
+    ) -> None:
+        deps = make_deps(
+            make_config(), job=self.with_inputs(tmp_path), versus=self.VERSUS
+        )
+
+        [told] = self.run(
+            deps, ("set_versus", {"input_outliers": "wind", "min_sigma": 5})
+        )[:1]
+
+        assert told == (
+            "No trial drew 'wind' 5 or more standard deviations from its mean, "
+            "so there is nothing to show."
+        )
+        assert deps.versus == self.VERSUS
+
+    def test_without_a_job_there_are_no_inputs_to_look_up(self) -> None:
+        deps = make_deps(make_config(), versus=self.VERSUS)
+
+        [told] = self.run(deps, ("set_versus", {"input_outliers": "wind"}))[:1]
+
+        assert "No job is loaded" in told
+        assert deps.versus == self.VERSUS
+
     def test_without_no_range_the_old_range_stays_as_well(self, tmp_path: Path) -> None:
         deps = make_deps(make_config(), job=self.failing(tmp_path), versus=self.VERSUS)
 
@@ -1953,6 +2180,7 @@ class TestSettingVersus:
         _tools, prompt = TestWhatTheModelIsTold.offered_tools_and_prompt()
 
         assert "set_versus(failed_requirement=" in prompt
+        assert "set_versus(input_outliers=" in prompt
         assert "no_range=true" in prompt
         assert "clear_pins=true" in prompt
 
@@ -2030,6 +2258,7 @@ class TestChatRoute:
         model: Model,
         message: str = "do it",
         columns: list[str] | None = None,
+        column_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         monkeypatch.setattr(sensai_router, "build_fallback_model", lambda: model)
         response = client.post(
@@ -2037,6 +2266,7 @@ class TestChatRoute:
             json={
                 "message": message,
                 "all_columns": COLUMNS if columns is None else columns,
+                "column_metadata": column_metadata or {},
                 "current_plot_config_json": make_config().model_dump_json(),
             },
         )
@@ -2063,6 +2293,29 @@ class TestChatRoute:
             )
             == expected
         )
+
+    def test_the_descriptions_in_the_request_reach_the_signal_search(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="find it"), say("ok")],
+            [call("find_signals", query="box1 angular velocity"), say("found")],
+        )
+
+        data = self.chat(
+            client,
+            monkeypatch,
+            model,
+            column_metadata={
+                SIGNAL: {
+                    "description": "Angular velocity of body box1 in the world frame"
+                }
+            },
+        )
+
+        search = next(c for c in data["tool_calls"] if c["name"] == "find_signals")
+        assert SIGNAL in search["result"]
+        assert "Angular velocity of body box1" in search["result"]
 
     def test_the_update_changes_only_what_was_asked(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -2351,6 +2604,45 @@ class TestChatRoute:
         detail = self.error(response.text)["detail"]
         assert isinstance(detail, str)
         return detail
+
+    def test_a_reply_the_model_cuts_off_is_an_error_that_keeps_what_arrived(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The model fails after sending a word. That used to end as a finished, one-word reply, with nothing to say it went wrong."""
+
+        def whole(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart("First words")])
+
+        async def cut_off(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            yield "First"
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+
+        detail = self.chat_error(
+            client, monkeypatch, FunctionModel(whole, stream_function=cut_off)
+        )
+
+        assert detail.startswith("The reply was cut off: 503 UNAVAILABLE")
+        assert detail.endswith("What the model had written:\n\nFirst")
+
+    def test_a_model_that_fails_before_writing_anything_is_an_error(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def whole(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            return ModelResponse(parts=[TextPart("never sent")])
+
+        async def refuse(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            raise RuntimeError("503 UNAVAILABLE: high demand")
+            yield ""
+
+        detail = self.chat_error(
+            client, monkeypatch, FunctionModel(whole, stream_function=refuse)
+        )
+
+        assert detail == "No response from model: 503 UNAVAILABLE: high demand"
 
     @pytest.mark.parametrize(
         ("ask", "tool", "args", "while_", "advice", "not_said"),
@@ -3115,6 +3407,27 @@ class TestLogging:
         assert "SensAI get_completion_timeline" in caplog.text
         assert "SensAI get_trial_log: trial 2 count=7 level=error" in caplog.text
         assert "SensAI compare_trials: [1, 2]" in caplog.text
+
+    def test_what_the_job_agent_looked_up_about_inputs_is_logged(
+        self, caplog: pytest.LogCaptureFixture, tmp_path: Path
+    ) -> None:
+        caplog.set_level(logging.INFO)
+        job = make_job(tmp_path, {}, n_trial=len(WIND_DRAWS))
+        write_inputs(job, WIND_DRAWS)
+
+        run_job_agent(
+            scripted(
+                call("get_input_distributions"),
+                call("get_trial_inputs", trial_num=1),
+                call("get_input_outliers", distribution="wind", min_sigma=3),
+                say("ok"),
+            ),
+            make_deps(None, job=job),
+        )
+
+        assert "SensAI get_input_distributions" in caplog.text
+        assert "SensAI get_trial_inputs: trial 1" in caplog.text
+        assert "SensAI get_input_outliers: 'wind' min_sigma=3.0 count=15" in caplog.text
 
     def test_what_the_signal_agent_looked_up_is_logged(
         self, caplog: pytest.LogCaptureFixture

@@ -180,6 +180,51 @@ def test_column_metadata_lenient_keeps_an_invalid_entry() -> None:
     assert meta.model_dump() == {"unit": "not_a_unit", "label": "x"}
 
 
+# --- description ---
+
+
+def test_empty_description_is_unset() -> None:
+    """The default is an empty string, which is left out of a dump and does not make the metadata truthy."""
+    meta = ColumnMetadata()
+    assert not meta
+    assert meta.model_dump() == {}
+    assert ColumnMetadata(description="x").model_dump() == {"description": "x"}
+
+
+def test_description_changes_the_hash() -> None:
+    """Unlike `enumeration_map`, a string is hashable, so the hash sees it."""
+    a = ColumnMetadata(description="a")
+    b = ColumnMetadata(description="b")
+    assert hash(a) != hash(b)
+    assert a != b
+    assert hash(a) == hash(ColumnMetadata(description="a"))
+
+
+def test_description_merge_right_side_wins_and_unset_does_not_erase() -> None:
+    builtin = dim(Dimension.FORCE) | ColumnMetadata(description="builtin text")
+    assert (builtin | ColumnMetadata(description="user text")).description == (
+        "user text"
+    )
+    assert (builtin | ColumnMetadata(unit="newton")).description == "builtin text"
+
+
+def test_merge_signal_metadata_puts_the_builtin_description_under_the_override() -> (
+    None
+):
+    builtin = dim(Dimension.FORCE)
+    assert merge_signal_metadata(
+        builtin, "f", None, description="builtin text"
+    ) == builtin | ColumnMetadata(description="builtin text")
+    user = {"f": {"description": "user text"}}
+    merged = merge_signal_metadata(builtin, "f", user, description="builtin text")
+    assert merged.description == "user text"
+    # a column with no other built-in metadata still gets the description
+    assert merge_signal_metadata(None, "f", None, description="text").model_dump() == {
+        "description": "text"
+    }
+    assert merge_signal_metadata(builtin, "f", None) == builtin
+
+
 # --- enumeration_map ---
 
 
@@ -287,6 +332,7 @@ def test_column_metadata_json_schema_lists_the_declared_fields() -> None:
         "quantity",
         "transform_type",
         "enumeration_map",
+        "description",
     } <= set(schema["properties"])
     assert all(p.get("description") for p in schema["properties"].values())
 

@@ -33,7 +33,9 @@ import {
   loadOpen,
   loadPinned,
   loadSensAITabs,
+  mergeSavedTabs,
   messageLayout,
+  readSavedTabs,
   resultContent,
   revealStep,
   saveOpen,
@@ -298,6 +300,7 @@ describe("chatRequestBody", () => {
       all_columns: [],
       rotatable_vectors: [],
       available_quats: [],
+      column_metadata: {},
       current_plot_config_json: '{"title":"T"}',
       versus: null,
     });
@@ -321,11 +324,29 @@ describe("chatRequestBody", () => {
     });
   });
 
+  it("sends what the signals are, so the agent can find one by its description", () => {
+    const manifest = {
+      all: ["Bodies/B/xvelp:x"],
+      rotatable_vectors: [],
+      available_quats: [],
+      column_metadata: {
+        "Bodies/B/xvelp:x": { description: "Linear velocity of body B" },
+      },
+    };
+
+    expect(chatRequestBody("q", [msg()], null, manifest)).toMatchObject({
+      column_metadata: {
+        "Bodies/B/xvelp:x": { description: "Linear velocity of body B" },
+      },
+    });
+  });
+
   it("sends empty lists away from a trial, where there are no signals", () => {
     expect(chatRequestBody("q", [msg()], null, null)).toMatchObject({
       all_columns: [],
       rotatable_vectors: [],
       available_quats: [],
+      column_metadata: {},
     });
   });
 });
@@ -1161,5 +1182,138 @@ describe("the event stream's tool events", () => {
 
     expect(events.map((e) => e.type)).toEqual(["tool_start", "tool_end"]);
     expect(events[1]!.payload).toEqual({ id: 1, status: "ok", result: "Added." });
+  });
+});
+
+
+describe("readSavedTabs", () => {
+  it("is null when nothing is saved, rather than an empty chat made up", () => {
+    stubStorage({});
+    expect(readSavedTabs()).toBeNull();
+  });
+
+  it("gives back the saved chats, with a title and a time filled in where they are missing", () => {
+    const data = stubStorage({});
+    data.set(TABS_KEY, JSON.stringify([{ id: "a", messages: [{ role: "user", content: "q" }] }]));
+
+    const [saved] = readSavedTabs()!;
+
+    expect(saved!.id).toBe("a");
+    expect(saved!.title).toBe("Chat");
+    expect(typeof saved!.messages[0]!.ts).toBe("number");
+  });
+
+  it.each(["not json", "[]", "{}", "7", "null", '[{"title":"no id"}]'])("is null for saved text that is %s", (saved) => {
+    stubStorage({}).set(TABS_KEY, saved);
+    expect(readSavedTabs()).toBeNull();
+  });
+
+  it("leaves out a saved entry that has no id", () => {
+    stubStorage({}).set(TABS_KEY, JSON.stringify([{ title: "no id" }, { id: "b", title: "B", messages: [] }]));
+    expect(readSavedTabs()!.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("is null when storage refuses to read", () => {
+    stubStorage({ read: true });
+    expect(readSavedTabs()).toBeNull();
+  });
+});
+
+describe("mergeSavedTabs", () => {
+  const msg = (content: string, role: "user" | "assistant" = "user"): SensAIMessage => ({ role, content, ts: 1 });
+  const idle = () => false;
+
+  it("is unchanged, object for object, when the other tab saved what this one has", () => {
+    const current = [tab({ id: "a", messages: [msg("q")] }), tab({ id: "b", title: "B" })];
+    const saved = JSON.parse(JSON.stringify(current)) as SensAITab[];
+
+    const merged = mergeSavedTabs(current, saved, idle);
+
+    expect(merged.changed).toBe(false);
+    expect(merged.tabs).toEqual(current);
+    expect(merged.tabs.every((t, i) => t === current[i])).toBe(true);
+  });
+
+  it("takes the messages and the title the other tab saved", () => {
+    const current = [tab({ id: "a", title: "Old", messages: [msg("q")] })];
+    const saved = [tab({ id: "a", title: "New", autoTitled: false, messages: [msg("q"), msg("a", "assistant")] })];
+
+    const merged = mergeSavedTabs(current, saved, idle);
+
+    expect(merged.changed).toBe(true);
+    expect(merged.tabs[0]!.title).toBe("New");
+    expect(merged.tabs[0]!.autoTitled).toBe(false);
+    expect(merged.tabs[0]!.messages.map((m) => m.content)).toEqual(["q", "a"]);
+  });
+
+  it("keeps what belongs to this browser tab: the unsent text, the scroll place and the unread mark", () => {
+    const current = [tab({ id: "a", draft: "half a thought", scrollTop: 120, unread: true, messages: [msg("q")] })];
+    const saved = [tab({ id: "a", draft: "their draft", scrollTop: 5, unread: false, messages: [msg("q"), msg("a", "assistant")] })];
+
+    const [merged] = mergeSavedTabs(current, saved, idle).tabs;
+
+    expect(merged!.draft).toBe("half a thought");
+    expect(merged!.scrollTop).toBe(120);
+    expect(merged!.unread).toBe(true);
+    expect(merged!.messages).toHaveLength(2);
+  });
+
+  it("adds a chat the other tab started, as it saved it, where it saved it", () => {
+    const current = [tab({ id: "a" }), tab({ id: "c" })];
+    const saved = [tab({ id: "a" }), tab({ id: "b", draft: "theirs", messages: [msg("hi")] }), tab({ id: "c" })];
+
+    const merged = mergeSavedTabs(current, saved, idle);
+
+    expect(merged.changed).toBe(true);
+    expect(merged.tabs.map((t) => t.id)).toEqual(["a", "b", "c"]);
+    expect(merged.tabs[1]).toBe(saved[1]);
+  });
+
+  it("drops a chat the other tab closed", () => {
+    const merged = mergeSavedTabs([tab({ id: "a" }), tab({ id: "b" })], [tab({ id: "b" })], idle);
+
+    expect(merged.changed).toBe(true);
+    expect(merged.tabs.map((t) => t.id)).toEqual(["b"]);
+  });
+
+  it("follows the order the other tab saved", () => {
+    const a = tab({ id: "a" });
+    const b = tab({ id: "b" });
+
+    const merged = mergeSavedTabs([a, b], [{ ...b }, { ...a }], idle);
+
+    expect(merged.changed).toBe(true);
+    expect(merged.tabs.map((t) => t.id)).toEqual(["b", "a"]);
+    expect(merged.tabs[0]).toBe(b);
+    expect(merged.tabs[1]).toBe(a);
+  });
+
+  it("leaves a chat with a request under way exactly as it is, the same object, whatever was saved", () => {
+    const busy = tab({ id: "a", messages: [msg("pending question")] });
+    const other = tab({ id: "b", messages: [msg("old")] });
+    const saved = [tab({ id: "a", title: "Theirs", messages: [msg("something else entirely")] }), tab({ id: "b", messages: [msg("old"), msg("new", "assistant")] })];
+
+    const merged = mergeSavedTabs([busy, other], saved, (id) => id === "a");
+
+    expect(merged.tabs[0]).toBe(busy);
+    expect(merged.tabs[0]!.messages.map((m) => m.content)).toEqual(["pending question"]);
+    // the chat with nothing under way still takes what was saved
+    expect(merged.tabs[1]!.messages).toHaveLength(2);
+  });
+
+  it("keeps a chat with a request under way even when the other tab closed it, after the rest", () => {
+    const busy = tab({ id: "a", messages: [msg("pending")] });
+    const kept = tab({ id: "b" });
+
+    const merged = mergeSavedTabs([busy, kept], [tab({ id: "b" })], (id) => id === "a");
+
+    expect(merged.tabs.map((t) => t.id)).toEqual(["b", "a"]);
+    expect(merged.tabs[1]).toBe(busy);
+  });
+
+  it("is a changed list when only a chat was added or removed, however the rest compares", () => {
+    const a = tab({ id: "a" });
+    expect(mergeSavedTabs([a], [a, tab({ id: "z" })], idle).changed).toBe(true);
+    expect(mergeSavedTabs([a, tab({ id: "z" })], [a], idle).changed).toBe(true);
   });
 });

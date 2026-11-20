@@ -227,7 +227,21 @@ tracking-widest styling every caller's <label> already has - CSS
         class this macro already supplies - Jinja has no attribute-spread syntax,
         so a raw string is the simplest way to still let each caller add exactly
         what it needs without this macro growing a parameter per possible handler. #}
-        {% macro tree_search_input(model_expr, placeholder, extra_input_attrs='') %}
+        {# the x of a search box's clear button, in the one place both of its forms (the
+        plain one and the one that sits among the signal pickers' toggles) take it from #}
+        {% macro _search_clear_icon() %}
+        <svg class="w-3.5 h-3.5"
+             fill="none"
+             stroke="currentColor"
+             stroke-width="2.5"
+             viewBox="0 0 24 24">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M6 18L18 6M6 6l12 12" />
+        </svg>
+        {% endmacro %}
+
+        {% macro tree_search_input(model_expr, placeholder, extra_input_attrs='', signal_search=False) %}
         <div class="relative">
             <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-muted pointer-events-none"
                  fill="none"
@@ -244,22 +258,60 @@ tracking-widest styling every caller's <label> already has - CSS
                    {{
                    extra_input_attrs|safe
                    }}
-                   class="input-search" />
+                   class="input-search{{ ' pr-22' if signal_search else '' }}" />
+            {% if signal_search %}
+            {# the signal pickers' search settings, the same in every one of them
+            (signalSearch, lib/signal-search.ts): `.*` switches between a regular
+            expression and plain partial text, and the tag searches descriptions as
+            well as names. the clear button is the first of the same right-aligned
+            row, the size of the others and spaced as they are, so it joins them
+            when there is text and the toggles do not move. clearing acts on the
+            press, as the quick-filter chips do, and not on the release a click
+            waits for, which felt like a delay; mousedown.prevent also leaves the
+            focus in the box so typing can go on, and @click is still there for
+            the keyboard (clearing twice is harmless) #}
+            <div class="absolute right-0 top-0 h-full flex items-center gap-0.5 pr-1 z-10">
+                <button x-show="{{ model_expr }}"
+                        type="button"
+                        @mousedown.prevent="{{ model_expr }} = ''"
+                        @click="{{ model_expr }} = ''"
+                        class="w-6 h-6 rounded flex items-center justify-center text-ink-muted hover:text-danger-500 transition-colors"
+                        title="Clear search">
+                    {{ _search_clear_icon() }}
+                </button>
+                <button type="button"
+                        @click="toggleSearchMode()"
+                        :class="signalSearch.mode === 'regex' ? 'bg-accent-500/20 text-accent-500' : 'text-ink-muted hover:text-ink-secondary'"
+                        :title="signalSearch.mode === 'regex' ? 'Regular expression. Click to match partial text instead.' : 'Partial text. Click to use a regular expression.'"
+                        class="w-6 h-6 rounded flex items-center justify-center text-xs font-mono font-bold transition-colors">
+                    .*
+                </button>
+                <button type="button"
+                        @click="toggleSearchMetadata()"
+                        :class="signalSearch.metadata ? 'bg-accent-500/20 text-accent-500' : 'text-ink-muted hover:text-ink-secondary'"
+                        :title="signalSearch.metadata ? 'Searching descriptions as well as names. Click to search names only.' : 'Click to search descriptions as well as names.'"
+                        class="w-6 h-6 rounded flex items-center justify-center transition-colors">
+                    <svg class="w-3.5 h-3.5"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         viewBox="0 0 24 24">
+                        <path stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                </button>
+            </div>
+            {% else %}
             <button x-show="{{ model_expr }}"
                     type="button"
+                    @mousedown.prevent="{{ model_expr }} = ''"
                     @click="{{ model_expr }} = ''"
                     class="input-clear-btn"
                     title="Clear search">
-                <svg class="w-3.5 h-3.5"
-                     fill="none"
-                     stroke="currentColor"
-                     stroke-width="2.5"
-                     viewBox="0 0 24 24">
-                    <path stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                {{ _search_clear_icon() }}
             </button>
+            {% endif %}
         </div>
         {% endmacro %}
 
@@ -502,11 +554,17 @@ tracking-widest styling every caller's <label> already has - CSS
         segment) rather than the full path breakableLabel() used to wrap in the
         old flat list: indentation and the folder rows above already convey the
         hierarchy, so the full path would now be redundant. #}
-        {% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr) %}
+        {% macro tree_signal_leaf_row(row_expr, select_expr, is_selected_expr, description_suffix='') %}
         {# py-1.5 moved off the button and onto this inner span - same reasoning
         as tree_folder_row's own comment above. #}
+        {# the row's full name and its description show in the tooltip at the end
+        of _series_panel.html (showSignalTip), which replaces a `title` so the
+        name can be bold and the description italic. description_suffix is for a
+        picker of bases (`Bodies/b/quat`): the component (`:w`) whose description
+        the family shares #}
         <button @click="{{ select_expr }}"
-                :title="{{ row_expr }}.item"
+                @mouseenter="showSignalTip($event, {{ row_expr }}.item, '', {{ row_expr }}.item + '{{ description_suffix }}')"
+                @mouseleave="hideSignalTip()"
                 class="w-full text-left pr-2 rounded hover:bg-control flex items-center gap-2 group border-b last:border-none border-subtle">
             {{ tree_indent_guides(row_expr) }}
             <span class="flex items-center gap-2 min-w-0 flex-1 py-1.5">
@@ -577,7 +635,7 @@ tracking-widest styling every caller's <label> already has - CSS
         {% macro tab_strip(tabs_expr, active_id_expr, name_expr, dirty_expr, switch_fn, close_fn, reorder_fn, close_event, new_fn, new_title='New tab', renamable=false, duplicate_fn='', select_fn='', selected_expr='') %}
         <div class="shrink-0 flex items-stretch border-b border-subtle min-h-9">
             <!-- scrollable tab strip -->
-            <div class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
+            <div x-hscroll x-reveal-active="{{ active_id_expr }}" class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
                  x-data="{ _dragId: null, _overIdx: null, _renamingTabId: null }"
                  x-init="
              $el.addEventListener('mousedown', e => {

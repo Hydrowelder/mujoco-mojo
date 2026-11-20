@@ -1610,7 +1610,7 @@
                         <!-- Profile list: a flat, depth-annotated row list
                              (lib/tree.ts), not nested per-folder templates -
                              see tree_folder_row's comment in _macros.html for why. -->
-                        <div class="max-h-80 overflow-y-auto custom-scrollbar">
+                        <div class="max-h-80 overflow-y-auto overscroll-contain custom-scrollbar">
                             <template x-for="row in profileVisibleRows"
                                       :key="row.key">
                                 <div class="expander-body-wrap duration-100 ease-out"

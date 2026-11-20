@@ -84,11 +84,11 @@ def _watch(
 @chat_agent.tool
 async def ask_job_status_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
-    Forward a job-status request to the job-status agent and return its answer.
+    Forward a job-status request to the job-status agent and return its answer. It knows the job's progress, trials, timing, errors and logs, and the input distributions the trials were sampled from and what each trial drew.
 
     Args:
         ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `job_status_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.
-        request: The request to hand off, in natural language (e.g. "how far along is the job?", "which trials are running?" or "which trial took the longest?").
+        request: The request to hand off, in natural language (e.g. "how far along is the job?", "which trials are running?", "which trial took the longest?" or "what range is the wind speed sampled from?" or "which trials drew a high wind speed?").
 
     Returns:
         The answer, in words, with the numbers and trial numbers from the job's status. Say it as it is: do not round or change them.

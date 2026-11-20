@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 from mujoco_mojo.utils.layers.dojo.plot_config import (
     PLOT_COLORS,
     GridMode,
@@ -657,6 +658,63 @@ class TestFindSignals:
         assert find_signals(COLUMNS, "") == []
         assert find_signals(COLUMNS, " / ") == []
         assert find_signals([], "time") == []
+
+    def test_the_description_is_searched_too(self) -> None:
+        metadata = {
+            "Bodies/box1/xvelr:y": ColumnMetadata(
+                description="Angular velocity of body box1 in the world frame"
+            )
+        }
+
+        assert find_signals(COLUMNS, "box1 angular velocity", metadata=metadata) == [
+            "Bodies/box1/xvelr:y"
+        ]
+
+    def test_the_quantity_and_the_unit_are_searched_too(self) -> None:
+        metadata = {
+            "Sensors/contact": ColumnMetadata(quantity="torque", unit="radian / second")
+        }
+
+        assert find_signals(COLUMNS, "torque", metadata=metadata) == ["Sensors/contact"]
+        assert find_signals(COLUMNS, "radian second", metadata=metadata) == [
+            "Sensors/contact"
+        ]
+
+    def test_every_word_has_to_be_in_the_name_or_the_description(self) -> None:
+        metadata = {
+            "Bodies/box2/xvelr:y": ColumnMetadata(
+                description="Angular velocity of body box2"
+            )
+        }
+
+        # box2's description has "velocity", but nothing of box2 says "box1"
+        assert "Bodies/box2/xvelr:y" not in find_signals(
+            COLUMNS, "box1 velocity", metadata=metadata
+        )
+
+    def test_a_word_of_the_description_is_matched_from_its_start(self) -> None:
+        metadata = {"a:x": ColumnMetadata(description="Linear velocity")}
+
+        assert find_signals(["a:x", "b:x"], "veloc", metadata=metadata) == ["a:x"]
+        # the middle of a word is not enough, so a short query does not find
+        # every description with those letters somewhere in it
+        assert "a:x" not in find_signals(["a:x", "b:x"], "ocity", metadata=metadata)
+
+    def test_the_words_in_the_name_come_before_the_words_in_the_description(
+        self,
+    ) -> None:
+        metadata = {"Bodies/box1/xpos:x": ColumnMetadata(description="Velocity")}
+
+        assert find_signals(
+            ["Bodies/box1/xpos:x", "Sensors/vel"], "vel", metadata=metadata
+        ) == ["Sensors/vel", "Bodies/box1/xpos:x"]
+
+    def test_a_signal_with_no_metadata_is_still_found_by_its_name(self) -> None:
+        metadata = {"Bodies/box1/xpos:x": ColumnMetadata(description="Position")}
+
+        assert find_signals(COLUMNS, "box2 xpos", metadata=metadata) == [
+            "Bodies/box2/xpos:x"
+        ]
 
 
 class TestPlotConfigCatalog:

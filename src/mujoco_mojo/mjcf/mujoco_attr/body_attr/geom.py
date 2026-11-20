@@ -75,6 +75,20 @@ _REQUEST_CHANNEL_METADATA: dict[str, ColumnMetadata] = {
     "quat": dimensionless_metadata() | TransformType.QUATERNION.metadata,
 }
 
+
+def _channel_descriptions(name: str) -> dict[str, str]:
+    """The built-in `description` of each channel of the geom called `name`."""
+    return {
+        "xpos": f"Position of the center of geom {name} in the world frame",
+        "xmat": f"Orientation of geom {name} relative to the world frame, as a rotation matrix",
+        "xvelp": f"Linear velocity of geom {name} in the world frame",
+        "xvelr": f"Angular velocity of geom {name} in the world frame",
+        "xaccp": f"Linear acceleration of geom {name} in the world frame",
+        "xaccr": f"Angular acceleration of geom {name} in the world frame",
+        "quat": f"Orientation of geom {name} relative to the world frame, as a quaternion",
+    }
+
+
 _geom_attr = (
     "name",
     "class_",
@@ -361,6 +375,7 @@ class GeomBase(XMLModel, ABC):
             _meta = {}
 
         name = f"{self.name}"
+        descriptions = _channel_descriptions(name)
         columns: dict[str, tuple[Column, ...]] = {}
 
         def channel_columns(
@@ -375,6 +390,7 @@ class GeomBase(XMLModel, ABC):
                     channel,
                     _meta,
                     unit_system=state.us,
+                    description=descriptions.get(channel, ""),
                 )
                 cols = columns[channel] = fan_out(
                     SignalCategory.GEOMS, (name, channel), attrs, meta

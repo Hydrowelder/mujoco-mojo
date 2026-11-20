@@ -5,6 +5,7 @@ import {
   anyTreeRowVisible,
   buildTreeRows,
   buildTreeRowsFromNames,
+  singleChildChain,
   sortTreeItems,
   visibleTreeRows,
   type TreeRow,
@@ -244,5 +245,92 @@ describe("helpers", () => {
   it("buildTreeRowsFromNames puts the plain string on file rows", () => {
     const built = buildTreeRowsFromNames(["a/b", "c"]);
     expect(built.map((r) => r.item)).toEqual([null, "a/b", "c"]);
+  });
+});
+
+
+describe("singleChildChain", () => {
+  const chain = (path: string, ...names: string[]) => singleChildChain(buildTreeRows(items(...names)), path);
+
+  it("goes down through every folder that holds only one folder", () => {
+    expect(chain("a", "a/b/c/leaf")).toEqual(["a", "a/b", "a/b/c"]);
+    expect(chain("a/b", "a/b/c/leaf")).toEqual(["a/b", "a/b/c"]);
+  });
+
+  it("stops at a folder with only a file in it, which is opened too", () => {
+    expect(chain("a", "a/leaf")).toEqual(["a"]);
+    expect(chain("a", "a/b/leaf")).toEqual(["a", "a/b"]);
+  });
+
+  it("stops at a folder with several things in it, which is opened too", () => {
+    expect(chain("a", "a/b/x", "a/b/y")).toEqual(["a", "a/b"]);
+    expect(chain("a", "a/b/c/x", "a/b/c/y")).toEqual(["a", "a/b", "a/b/c"]);
+  });
+
+  it("is just the folder when it holds a folder and a file, or two folders", () => {
+    expect(chain("a", "a/b/x", "a/file")).toEqual(["a"]);
+    expect(chain("a", "a/b/x", "a/c/y")).toEqual(["a"]);
+  });
+
+  it("is not led on by a folder next door", () => {
+    expect(chain("a", "a/b/x", "c/d/y")).toEqual(["a", "a/b"]);
+    expect(chain("c", "a/b/x", "c/d/y")).toEqual(["c", "c/d"]);
+  });
+
+  it("reads a signal's attribute as one more folder, as the tree does", () => {
+    expect(chain("Bodies", "Bodies/box1/xpos:x")).toEqual(["Bodies", "Bodies/box1", "Bodies/box1/xpos"]);
+    expect(chain("Bodies", "Bodies/box1/xpos:x", "Bodies/box1/xpos:y")).toEqual(["Bodies", "Bodies/box1", "Bodies/box1/xpos"]);
+    expect(chain("Bodies", "Bodies/box1/xpos:x", "Bodies/box1/quat:w")).toEqual(["Bodies", "Bodies/box1"]);
+  });
+
+  it("finds the folder when a file next to it has the same name, which is not in the folder", () => {
+    expect(chain("body", "body", "body/x/y")).toEqual(["body", "body/x"]);
+  });
+
+  it("is just the path for one that is not a folder of the rows", () => {
+    expect(chain("missing", "a/b/leaf")).toEqual(["missing"]);
+    expect(chain("a/b/leaf", "a/b/leaf")).toEqual(["a/b/leaf"]);
+    expect(singleChildChain([], "a")).toEqual(["a"]);
+  });
+});
+
+describe("visibleTreeRows reusing the rows it returned last time", () => {
+  const visible = (names: string[], previous?: TreeRow<{ name: string }>[]) =>
+    visibleTreeRows(buildTreeRows(items(...names)), {}, "", () => true, previous);
+  const countOf = (rows: TreeRow<unknown>[], path: string) => rows.find((r) => r.path === path && r.type === "folder")?.fileCount;
+
+  it("gives a folder the count of the rows it is given now, not the count of the row it reuses", () => {
+    const before = visible(["a/x", "a/y", "b/z"]);
+    expect(countOf(before, "a")).toBe(2);
+
+    // a filter took one signal out of `a`, which is still shown and still open
+    const after = visible(["a/x", "b/z"], before);
+
+    expect(countOf(after, "a")).toBe(1);
+    expect(countOf(after, "b")).toBe(1);
+  });
+
+  it("follows the count up as well as down", () => {
+    const before = visible(["a/x"]);
+    expect(countOf(visible(["a/x", "a/y", "a/z"], before), "a")).toBe(3);
+  });
+
+  it("hands back the very same row when nothing about it changed", () => {
+    // signal names are strings, which are the same item however many times they are built
+    const names = ["a/x", "a/y", "b/z"];
+    const before = visibleTreeRows(buildTreeRowsFromNames(names), {}, "", () => true);
+    const after = visibleTreeRows(buildTreeRowsFromNames(names), {}, "", () => true, before);
+
+    expect(after.map((r, i) => r === before[i])).toEqual(before.map(() => true));
+  });
+
+  it("gives a file the item it is given now, which a re-listed profile or lab has a new one of", () => {
+    const old = { name: "a/x", modified: 1 };
+    const fresh = { name: "a/x", modified: 2 };
+    const before = visibleTreeRows(buildTreeRows([old]), {}, "", () => true);
+
+    const after = visibleTreeRows(buildTreeRows([fresh]), {}, "", () => true, before);
+
+    expect(after.find((r) => r.type === "file")?.item).toBe(fresh);
   });
 });

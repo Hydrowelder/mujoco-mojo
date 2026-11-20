@@ -138,13 +138,16 @@ class SignalManager:
         # ensure time is always index 0
         self._key_to_idx[TIME_COLUMN_NAME] = 0
         time_meta = ColumnMetadata(
-            dimension="[time]", transform_type=TransformType.SCALAR
+            dimension="[time]",
+            transform_type=TransformType.SCALAR,
+            description="Simulation time",
         )
         if self.unit_system is not None and self.unit_system.time is not None:
             time_meta = ColumnMetadata(
                 dimension="[time]",
                 unit=self.unit_system.time,
                 transform_type=TransformType.SCALAR,
+                description="Simulation time",
             )
         self._columns[TIME_COLUMN_NAME] = Column(
             category=TIME_COLUMN_NAME, metadata=time_meta

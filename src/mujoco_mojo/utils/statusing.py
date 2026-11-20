@@ -389,6 +389,9 @@ class JobStatus(MojoBaseModel):
 
     _lock: threading.RLock = PrivateAttr(default_factory=threading.RLock)
 
+    _refresh_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
+    """Held for the whole of `refresh_from_disk`, so two refreshes of one job cannot overlap. The Dojo runs them from separate threads (its monitor loop, and its status endpoint, which forces a re-read), and a refresh that cleared the cache landed in the middle of the other's bookkeeping, which saw a finished job as unfinished and set `elapsed` to the time since the start. A finished job never gives that value back."""
+
     @property
     def _registry(self) -> dict[int, Completion]:
         """Provides a mapping of trial_num to its last known completion status."""
@@ -459,78 +462,81 @@ class JobStatus(MojoBaseModel):
             start_from_trials: If `True`, moves `start_time` forward to when the earliest trial began (see `_move_start_to_first_trial`). For jobs whose trials are run by other processes, since the file's own start is when the job was set up, not when it ran.
 
         """
-        if force_refetch:
-            self.clear_cache()
+        with self._refresh_lock:
+            if force_refetch:
+                self.clear_cache()
 
-        max_workers = max(1, n_proc)
+            max_workers = max(1, n_proc)
 
-        # identify work
-        needed_tns = [
-            tn
-            for tn in self.trial_nums
-            if tn not in self._cache
-            or self._cache[tn].completion == Completion.INCOMPLETE
-        ]
-
-        if not needed_tns:
-            if progress_callback:
-                return progress_callback(100.0)
-            return
-
-        def _load_status(tn: int) -> tuple[int, TrialStatus | None]:
-            path = self.trial_num_to_path(tn) / TRIAL_STATUS_FNAME
-            if not path.exists():
-                return tn, None
-            try:
-                return tn, TrialStatus.model_validate_json(path.read_text())
-            except Exception:
-                return tn, None
-
-        # execute with real-time tracking
-        total_tasks = len(needed_tns)
-        completed_count = 0
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_tn = {executor.submit(_load_status, tn): tn for tn in needed_tns}
-
-            # as completed yields futures as soon as done
-            for future in as_completed(future_to_tn):
-                tn, status = future.result()
-
-                # update the cache immediately
-                if status is not None:
-                    with self._lock:
-                        self._cache[tn] = status
-
-                # broadcast status
-                completed_count += 1
-                if progress_callback:
-                    pct = (completed_count / total_tasks) * 100
-                    progress_callback(pct)
-
-        # post calculations
-        with self._lock:
-            if start_from_trials:
-                self._move_start_to_first_trial()
-
-            timed_durations = [
-                s.td.total_seconds()
-                for s in self._cache.values()
-                if s.completion in TIMED_COMPLETIONS
+            # identify work
+            needed_tns = [
+                tn
+                for tn in self.trial_nums
+                if tn not in self._cache
+                or self._cache[tn].completion == Completion.INCOMPLETE
             ]
-            if timed_durations:
-                avg_sec = sum(timed_durations) / len(timed_durations)
-                self.average_trial_duration = timedelta(seconds=avg_sec)
 
-            if not self.is_done:
-                self.elapsed = datetime.now(UTC) - self.start_time
-            elif (last_end := self._latest_trial_end()) is not None:
-                # a finished job has nobody left updating `elapsed` (SLURM workers never
-                # touch this file), so read it off the trials; never shorten a value a
-                # run that tracked its own time already stored
-                self.elapsed = max(self.elapsed, last_end - self.start_time)
-        if persist:
-            self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
+            if not needed_tns:
+                if progress_callback:
+                    return progress_callback(100.0)
+                return
+
+            def _load_status(tn: int) -> tuple[int, TrialStatus | None]:
+                path = self.trial_num_to_path(tn) / TRIAL_STATUS_FNAME
+                if not path.exists():
+                    return tn, None
+                try:
+                    return tn, TrialStatus.model_validate_json(path.read_text())
+                except Exception:
+                    return tn, None
+
+            # execute with real-time tracking
+            total_tasks = len(needed_tns)
+            completed_count = 0
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_tn = {
+                    executor.submit(_load_status, tn): tn for tn in needed_tns
+                }
+
+                # as completed yields futures as soon as done
+                for future in as_completed(future_to_tn):
+                    tn, status = future.result()
+
+                    # update the cache immediately
+                    if status is not None:
+                        with self._lock:
+                            self._cache[tn] = status
+
+                    # broadcast status
+                    completed_count += 1
+                    if progress_callback:
+                        pct = (completed_count / total_tasks) * 100
+                        progress_callback(pct)
+
+            # post calculations
+            with self._lock:
+                if start_from_trials:
+                    self._move_start_to_first_trial()
+
+                timed_durations = [
+                    s.td.total_seconds()
+                    for s in self._cache.values()
+                    if s.completion in TIMED_COMPLETIONS
+                ]
+                if timed_durations:
+                    avg_sec = sum(timed_durations) / len(timed_durations)
+                    self.average_trial_duration = timedelta(seconds=avg_sec)
+
+                if not self.is_done:
+                    self.elapsed = datetime.now(UTC) - self.start_time
+                elif (last_end := self._latest_trial_end()) is not None:
+                    # a finished job has nobody left updating `elapsed` (SLURM workers never
+                    # touch this file), so read it off the trials; never shorten a value a
+                    # run that tracked its own time already stored
+                    self.elapsed = max(self.elapsed, last_end - self.start_time)
+            if persist:
+                self.dump_to_path(self.workdir / JOB_STATUS_FNAME)
 
     def _move_start_to_first_trial(self) -> None:
         """

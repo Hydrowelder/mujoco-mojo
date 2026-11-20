@@ -290,7 +290,16 @@ export function visibleTreeRows<T>(
   if (previous) for (const r of previous) prevByKey.set(r.key, r);
   const withHidden = (row: TreeRow<T>, hidden: boolean): TreeRow<T> => {
     const prev = prevByKey.get(row.key);
-    return prev && prev.hidden === hidden ? prev : { ...row, hidden };
+    // reused only while nothing the row shows has changed. a key says which
+    // folder or file it is, not what is in it: a filter that took signals out of a
+    // folder changes its count, and a profile or lab that was listed again has a
+    // new item, and reusing the old row kept showing the old ones
+    return prev &&
+      prev.hidden === hidden &&
+      prev.fileCount === row.fileCount &&
+      prev.item === row.item
+      ? prev
+      : { ...row, hidden };
   };
 
   // Which folders/files have at least one valid descendant (or are
@@ -348,6 +357,32 @@ export function visibleTreeRows<T>(
     );
     return withHidden(row, hidden);
   });
+}
+
+/**
+ * The folder at `path` and every folder below it that opening it should open
+ * too: it goes on down for as long as a folder holds exactly one thing and
+ * that thing is a folder, so a chain with one entry at every level shows its
+ * last one at once, and stops at the first folder with several entries or with
+ * a file as its only one. `rows` are the depth-annotated rows of
+ * `buildTreeRows`, where a folder's entries are the rows after it that are
+ * one level deeper. A path that is not a folder of `rows` is just itself.
+ */
+export function singleChildChain<T>(rows: TreeRow<T>[], path: string): string[] {
+  const chain = [path];
+  let at = rows.findIndex((r) => r.type === "folder" && r.path === path);
+  while (at !== -1) {
+    const depth = rows[at]!.depth;
+    const children: number[] = [];
+    for (let i = at + 1; i < rows.length && rows[i]!.depth > depth; i++) {
+      if (rows[i]!.depth === depth + 1) children.push(i);
+    }
+    const only = children.length === 1 ? rows[children[0]!]! : undefined;
+    if (only?.type !== "folder") break;
+    chain.push(only.path);
+    at = children[0]!;
+  }
+  return chain;
 }
 
 /** Every distinct folder path in `rows` - the full set an expand-all/collapse-all action needs to touch. */

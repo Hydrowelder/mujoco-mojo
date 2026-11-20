@@ -8,7 +8,7 @@ from pydantic_ai import Agent, RunContext
 
 from mujoco_mojo.utils.log import get_logger
 
-from . import job_report
+from . import dist_report, job_report
 from .deps import SensAIDeps
 from .job_report import LogLevel, Outcome
 
@@ -45,6 +45,12 @@ are waiting to start. get_trial_breakdown()
 - compare_trials: trials side by side. compare_trials(trial_nums=[3, 7])
 - get_job_configuration: what the job was started with (seed, processes, arguments, the \
 generator and runtime). get_job_configuration()
+- get_input_distributions: the inputs the trials were sampled from, each with its type, \
+unit, nominal value and parameters (which give its range or spread). get_input_distributions()
+- get_trial_inputs: what one trial drew for each input and how far from the mean. \
+get_trial_inputs(trial_num=12)
+- get_input_outliers: the trials that drew one input far from its mean. \
+get_input_outliers(distribution="wind_speed", min_sigma=2)
 
 Rules:
 - Get every number from a tool. Never estimate or guess, and never describe something no \
@@ -53,6 +59,9 @@ tool told you.
 get_trials_by_duration once; do not look at trials one at a time with get_trial_details, \
 since a job can have hundreds and you will run out of requests. To compare chosen trials \
 call compare_trials once with all their numbers.
+- For which trials drew an input far from its mean call get_input_outliers once; do not \
+look at trials one at a time with get_trial_inputs. An input that is not measured by a z-score \
+is measured by its percentile instead, and the tool says so: tell the user that too.
 - Answer in a few short sentences or a short list, with the exact numbers and trial numbers \
 the tools gave, in the units they gave. If a tool says there is no job, or nothing yet, say \
 that plainly.
@@ -279,4 +288,68 @@ async def compare_trials(ctx: RunContext[SensAIDeps], trial_nums: list[int]) -> 
         return NO_JOB
     return await asyncio.to_thread(
         job_report.describe_comparison, job, trial_nums, job_report.now()
+    )
+
+
+@job_status_agent.tool
+async def get_input_distributions(ctx: RunContext[SensAIDeps]) -> str:
+    """Returns the input distributions the job's trials were sampled from: each one's name, type, category, unit, nominal value and parameters (which give its range or spread, such as low and high for a uniform or mu and sigma for a normal), and any display name, source and comment."""
+    logger.info("SensAI get_input_distributions")
+    job = ctx.deps.job_status
+    if job is None:
+        return NO_JOB
+    return await asyncio.to_thread(dist_report.describe_distributions, job)
+
+
+@job_status_agent.tool
+async def get_trial_inputs(ctx: RunContext[SensAIDeps], trial_num: int) -> str:
+    """
+    Returns what one trial drew for each input, in the unit the input was declared in, with how many standard deviations from the mean the draw is and its percentile.
+
+    Args:
+        ctx: The run context holding the dashboard state; it is not something you send.
+        trial_num: The number of the trial, such as 12.
+
+    Returns:
+        Each input with the value (or label) the trial drew, or that the trial saved nothing.
+
+    """
+    logger.info("SensAI get_trial_inputs: trial %s", trial_num)
+    job = ctx.deps.job_status
+    if job is None:
+        return NO_JOB
+    return await asyncio.to_thread(dist_report.describe_trial_inputs, job, trial_num)
+
+
+@job_status_agent.tool
+async def get_input_outliers(
+    ctx: RunContext[SensAIDeps],
+    distribution: str,
+    min_sigma: float = 2.0,
+    count: int = 15,
+) -> str:
+    """
+    Returns the trials that drew one input at least some number of standard deviations from its mean, most extreme first, with each draw.
+
+    Args:
+        ctx: The run context holding the dashboard state; it is not something you send.
+        distribution: The input's name or part of it, such as "wind_speed". Use get_input_distributions to see the names.
+        min_sigma: How many standard deviations from the mean a draw has to be, such as 2 (the default) or 3.
+        count: How many trials to list, such as 15 (at most 30). Every trial number is given at the end whatever this is.
+
+    Returns:
+        How many trials drew it that far out, the most extreme of them with their values, and all their numbers.
+
+    """
+    logger.info(
+        "SensAI get_input_outliers: %r min_sigma=%s count=%s",
+        distribution,
+        min_sigma,
+        count,
+    )
+    job = ctx.deps.job_status
+    if job is None:
+        return NO_JOB
+    return await asyncio.to_thread(
+        dist_report.describe_input_outliers, job, distribution, min_sigma, count
     )

@@ -78,6 +78,42 @@ _TAG_METADATA: dict[str, ColumnMetadata] = {
     "insidesite": dimensionless_metadata() | TransformType.SCALAR.metadata,
 }
 
+# the frame a tag's output is expressed in, for the tags where it is fixed
+_FIXED_FRAMES: dict[str, str] = {
+    **dict.fromkeys(
+        ("accelerometer", "velocimeter", "gyro", "force", "torque", "magnetometer"),
+        "the frame of its site",
+    ),
+    **dict.fromkeys(
+        ("subtreecom", "subtreelinvel", "subtreeangmom"), "the world frame"
+    ),
+    "ballangvel": "the local frame of its body",
+}
+
+# tags whose output is expressed in the frame of the sensor's reference object, or the world frame when it has none
+_REFERENCE_FRAME_TAGS = frozenset(
+    (
+        "framepos",
+        "framequat",
+        "framexaxis",
+        "frameyaxis",
+        "framezaxis",
+        "framelinvel",
+        "frameangvel",
+        "framelinacc",
+        "frameangacc",
+    )
+)
+
+
+def _object_label(model: mujoco.MjModel, objtype: int, objid: int) -> str | None:
+    """Names an object by its kind and name, e.g. `site s1`. None when it has no name."""
+    name = mujoco.mj_id2name(model, objtype, objid)
+    if not name:
+        return None
+    return f"{mujoco.mjtObj(objtype).name.removeprefix('mjOBJ_').lower()} {name}"
+
+
 # tags whose physical quantity depends on the referenced joint's type (hinge vs. slide),
 # resolved at sample time via sensor_referenced_joint_type(); maps tag -> joint_type_metadata() key
 _JOINT_REF_TAGS: dict[str, str] = {
@@ -195,6 +231,29 @@ class SensorBase(XMLModel, ABC):
         self._metadata_resolved = True
         return builtin
 
+    def _describe(self, state: MjState) -> str:
+        """Builds the built-in `description` of this sensor's output, naming the object the sensor reads when MuJoCo records one (a clock reads none) and the frame the output is expressed in when the tag has one."""
+        model = state.model
+        sid = self.get_id(model)
+        description = f"Output of {self.tag} sensor {self.name}"
+        objtype = int(model.sensor_objtype[sid])
+        if objtype != mujoco.mjtObj.mjOBJ_UNKNOWN and (
+            target := _object_label(model, objtype, int(model.sensor_objid[sid]))
+        ):
+            description += f" on {target}"
+
+        if self.tag in _REFERENCE_FRAME_TAGS:
+            reftype = int(model.sensor_reftype[sid])
+            if reftype == mujoco.mjtObj.mjOBJ_UNKNOWN:
+                frame = "the world frame"
+            else:
+                reference = _object_label(model, reftype, int(model.sensor_refid[sid]))
+                frame = f"the frame of {reference or 'its reference object'}"
+            return f"{description}, expressed in {frame}"
+        if frame := _FIXED_FRAMES.get(self.tag):
+            return f"{description}, expressed in {frame}"
+        return description
+
     def request(
         self,
         signal_manager: SignalManager | None = None,
@@ -250,6 +309,7 @@ class SensorBase(XMLModel, ABC):
                     self.tag,
                     metadata,
                     unit_system=state.us,
+                    description=self._describe(state),
                 )
                 if sensor_dim == 1:
                     # scalar values are considered an attr of the parent

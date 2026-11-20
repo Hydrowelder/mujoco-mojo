@@ -97,11 +97,16 @@ class TransformType(StrEnum):
         return _transform_metadata(self)
 
 
+def _is_unset(value: Any) -> bool:
+    """`None` and an empty string both mean a field was not set."""
+    return value is None or (isinstance(value, str) and not value)
+
+
 class ColumnMetadata(BaseModel):
     """
     Metadata describing one telemetry column, stored per column in the parquet footer.
 
-    The declared fields are the ones mujoco-mojo understands and validates. Any other key is kept as-is (`extra="allow"`), so callers can attach their own labels. Unset fields are omitted when dumping, so the serialized form only carries what was actually tagged.
+    The declared fields are the ones mujoco-mojo understands and validates. Any other key is kept as-is (`extra="allow"`), so callers can attach their own labels. Unset fields (`None` or an empty string) are omitted when dumping, so the serialized form only carries what was actually tagged.
     """
 
     model_config = ConfigDict(extra="allow", frozen=True, use_attribute_docstrings=True)
@@ -120,6 +125,9 @@ class ColumnMetadata(BaseModel):
 
     enumeration_map: dict[str, int] | None = None
     """Labels for an integer-coded signal, mapping each label to its code, e.g. `{"IDLE": 0, "RUNNING": 1}`. The column still holds the codes (as floats, like all telemetry); `convert_enums()` swaps them for labels and the Dojo shows the labels on the plot. Codes must be unique. Build it from an enum class with `ColumnMetadata.from_enum()`."""
+
+    description: str = ""
+    """Free-text explanation of what this column holds, e.g. `Torque the PD controller commands at the elbow, before the actuator's gear ratio`. It tells apart columns whose names look alike. An empty string means no description."""
 
     @field_validator("enumeration_map", mode="before")
     @classmethod
@@ -208,20 +216,25 @@ class ColumnMetadata(BaseModel):
 
     @model_serializer(mode="wrap")
     def _omit_unset(self, handler: Any) -> dict[str, Any]:
-        return {k: v for k, v in handler(self).items() if v is not None}
+        return {k: v for k, v in handler(self).items() if not _is_unset(v)}
 
     def _set_values(self) -> dict[str, Any]:
         """The fields that are set (declared and extra), without validating or copying deeply."""
-        declared = {
-            name: value
-            for name in type(self).model_fields
-            if (value := getattr(self, name)) is not None
-        }
-        return {**declared, **(self.__pydantic_extra__ or {})}
+        declared = {name: getattr(self, name) for name in type(self).model_fields}
+        values = {**declared, **(self.__pydantic_extra__ or {})}
+        return {k: v for k, v in values.items() if not _is_unset(v)}
 
     def __hash__(self) -> int:
         """Hashes the declared scalar fields only (equal objects still hash equal), so instances can key the per-timestep caches. `enumeration_map` is left out because a dict is not hashable; equality still compares it."""
-        return hash((self.unit, self.dimension, self.quantity, self.transform_type))
+        return hash(
+            (
+                self.unit,
+                self.dimension,
+                self.quantity,
+                self.transform_type,
+                self.description,
+            )
+        )
 
     def __bool__(self) -> bool:
         """False when nothing is set, so `if metadata:` skips empty metadata."""
@@ -403,10 +416,16 @@ def merge_signal_metadata(
     user_metadata: MetadataOverrides | None,
     *,
     unit_system: UnitSystem | None = None,
+    description: str = "",
 ) -> ColumnMetadata:
-    """Merges a built-in default with the caller-supplied override/extension for `channel`, with user-supplied fields winning on conflict. If `unit_system` is provided and `builtin` has a `dimension`, it is resolved to a concrete unit. Returns an empty `ColumnMetadata` if both are empty. Nothing here is validated: the result is validated when it is used to build a `Column`."""
+    """Merges a built-in default with the caller-supplied override/extension for `channel`, with user-supplied fields winning on conflict. If `unit_system` is provided and `builtin` has a `dimension`, it is resolved to a concrete unit. `description` is the built-in text for the column, built by the caller from the name of the object it belongs to, and a `description` in `user_metadata` replaces it like any other field. Returns an empty `ColumnMetadata` if both are empty. Nothing here is validated: the result is validated when it is used to build a `Column`."""
     if builtin is not None and unit_system is not None:
         builtin = resolve_dimension_metadata(builtin, unit_system)
+    if description:
+        # added after the dimension is resolved, so the cached resolution is shared by every column with that dimension
+        builtin = (builtin or ColumnMetadata()) | ColumnMetadata(
+            description=description
+        )
     override = (user_metadata or {}).get(channel)
     if override is None:
         return builtin if builtin is not None else ColumnMetadata()

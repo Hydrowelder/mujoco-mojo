@@ -25,7 +25,7 @@ A lab is a graph. Signals flow from left to right through **nodes**, joined by w
 Every graph has the same two ends:
 
 - **Signal In** picks one of the trial's signals as the start of a wire. Click its dropdown to search the signals the same way the Mosaic selectors do.
-- **Signal Out** ends a wire and **names the new signal**. Give it a label (it becomes the signal's name and the y-axis label), and set the metadata of the result: its unit, dimension, quantity and transform type, so that the Dojo can convert units and change reference frames for it like any recorded signal.
+- **Signal Out** ends a wire and **names the new signal**. Give it a label (it becomes the signal's name and the y-axis label), and set the metadata of the result: its unit, dimension, quantity, transform type and description, so that the Dojo can convert units and change reference frames for it like any recorded signal.
 
 Between them, the nodes are grouped in the add-node menu:
 

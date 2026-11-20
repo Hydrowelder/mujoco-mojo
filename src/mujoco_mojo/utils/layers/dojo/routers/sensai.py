@@ -435,13 +435,21 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
             with contextlib.suppress(asyncio.CancelledError):
                 await producer
 
-        if not accumulated:
+        # a run that failed is an error even when some text had already been sent: the
+        # browser shows the text as it arrives, so a reply cut off after a word would
+        # otherwise end as a finished reply that is one word long
+        if stream_exc is not None or not accumulated:
             if isinstance(stream_exc, UsageLimitExceeded):
                 detail = _stopped_message(capture.delegate, deps.max_requests)
+            elif stream_exc and accumulated:
+                detail = f"The reply was cut off: {stream_exc}"
             elif stream_exc:
                 detail = f"No response from model: {stream_exc}"
             else:
                 detail = "No response from model."
+            if accumulated:
+                # what arrived stays with the error, since it can be most of an answer
+                detail += f"\n\nWhat the model had written:\n\n{accumulated}"
             yield {
                 "event": "error",
                 "data": json.dumps(

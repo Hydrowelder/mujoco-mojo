@@ -23,6 +23,15 @@
     // vertical space the metadata widgets add to a Signal Out node
     const SO_META_HEIGHT = SO_META_FIELDS.length * (LiteGraph.NODE_WIDGET_HEIGHT + 4);
 
+    // The description readout under a Signal In node: at most SI_DESC_LINES lines
+    // of 10px monospace (SI_DESC_CHAR_W px a character, so a line's width is its
+    // length), SI_DESC_LINE_H px apart, below the SI_BASE_HEIGHT the output slot
+    // and the two widgets take.
+    const SI_BASE_HEIGHT = 78;
+    const SI_DESC_LINES = 3;
+    const SI_DESC_LINE_H = 12;
+    const SI_DESC_CHAR_W = 6;
+
     // ── Node registration ─────────────────────────────────────────────────────
     // Called once with the current column list; guarded against double-registration.
     function mojoLabRegisterNodes(columns) {
@@ -88,6 +97,8 @@
         SignalInNode.color = C_SRC;
         SignalInNode.bgcolor = BG;
         SignalInNode._columns = columns;
+        // column -> description, for the columns that have one (mojoLabSetContext)
+        SignalInNode._descriptions = {};
         SignalInNode._cyclicCols = new Map();
         LiteGraph.registerNodeType("Signal/signal_in", SignalInNode);
 
@@ -122,6 +133,20 @@
                 ctx.fillStyle = themeColor("slate-200");
                 ctx.textAlign = "right";
                 ctx.fillText(col, nw - 30, A + H * 0.7);
+                ctx.restore();
+            }
+
+            // The signal's description, under the widgets (_siColor made room for it)
+            const descLines = _siDescriptionLines(this);
+            if (descLines.length) {
+                ctx.save();
+                ctx.font = "italic 10px monospace";
+                ctx.textAlign = "left";
+                ctx.textBaseline = "top";
+                ctx.fillStyle = themeColor("slate-400");
+                descLines.forEach((line, i) => {
+                    ctx.fillText(line, 16, SI_BASE_HEIGHT + 2 + i * SI_DESC_LINE_H);
+                });
                 ctx.restore();
             }
 
@@ -1165,8 +1190,21 @@
         const isCyclic = col && cyclicCols.has(col);
         const notInTrial = col && !cols.includes(col);
         node.color = (isCyclic || notInTrial) ? themeColor("warning-900") : themeColor("node-src");
-        // cyclic gets two warning lines (110), not-in-trial gets one (96), normal (78)
-        node.size[1] = isCyclic ? 110 : (notInTrial ? 96 : 78);
+        // cyclic gets two warning lines (32 px), not-in-trial gets one (18 px), and the
+        // description its own lines (with a little room above them) between the two
+        const warningHeight = isCyclic ? 32 : (notInTrial ? 18 : 0);
+        const descLines = _siDescriptionLines(node);
+        const descHeight = descLines.length ? descLines.length * SI_DESC_LINE_H + 6 : 0;
+        node.size[1] = SI_BASE_HEIGHT + descHeight + warningHeight;
+    }
+
+    // The lines a Signal In node shows for its column's description: none when the
+    // column has none, wrapped to the node's width (so call it after the width is set)
+    function _siDescriptionLines(node) {
+        const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"] || {};
+        const text = (SiCtor._descriptions || {})[node.properties && node.properties.column];
+        if (!text) return [];
+        return window.mojoWrapText(text, Math.floor((node.size[0] - 32) / SI_DESC_CHAR_W), SI_DESC_LINES);
     }
 
     function _soColor(node) {
@@ -1292,11 +1330,15 @@
 
     // Update validation context - called from Alpine when lab opens or labSchemas refreshes.
     // cols: current trial columns; schemas: saved lab list; currentName: lab being edited (excluded).
-    function mojoLabSetContext(cols, schemas, currentName) {
+    // descriptions: column -> description for the columns that have one.
+    function mojoLabSetContext(cols, schemas, currentName, descriptions) {
         _labContext = { cols: cols || [], schemas: schemas || [], currentName: currentName || '' };
 
         const SiCtor = LiteGraph.registered_node_types["Signal/signal_in"];
-        if (SiCtor) SiCtor._columns = cols;
+        if (SiCtor) {
+            SiCtor._columns = cols;
+            SiCtor._descriptions = descriptions || {};
+        }
         const SoCtor = LiteGraph.registered_node_types["Signal/signal_out"];
         if (SoCtor) {
             // Only flag raw trial-column conflicts. Other labs use namespaced paths
@@ -1934,7 +1976,7 @@
 
         <!-- middle: action buttons (scrollable so adding more buttons doesn't crowd the bar) -->
         <!-- overflow-y-hidden prevents vertical scroll: overflow-x:auto forces overflow-y to auto -->
-        <div class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
+        <div x-hscroll class="flex flex-1 items-center gap-1.5 sm:gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar min-w-0">
             <!-- refresh validation -->
             <button @click="refreshLabValidation()"
                     class="btn btn-secondary text-sm font-bold uppercase flex items-center gap-1.5 shrink-0"
@@ -2351,7 +2393,7 @@
              if (el) {
                  mojoLabInit(el, columns, labGraph, tab ? tab.viewport : null);
              }
-             mojoLabSetContext(columns, labSchemas, labName);
+             mojoLabSetContext(columns, labSchemas, labName, signalDescriptions);
          })"
          x-init="
              const _labInitCanvas = () => $nextTick(() => {
@@ -2361,7 +2403,7 @@
                  if (el) {
                      mojoLabInit(el, columns, labGraph, tab ? tab.viewport : null);
                  }
-                 mojoLabSetContext(columns, labSchemas, labName);
+                 mojoLabSetContext(columns, labSchemas, labName, signalDescriptions);
              });
              $watch('labOpen', (open) => {
                  try { localStorage.setItem('mojo:lab:open', open ? '1' : '0'); } catch {}
@@ -2369,8 +2411,8 @@
                  if (open) _labInitCanvas();
              });
              if (labOpen) _labInitCanvas();
-             $watch('labSchemas', (s) => { if (labOpen) mojoLabSetContext(columns, s, labName); });
-             $watch('labName', (n) => { if (labOpen) mojoLabSetContext(columns, labSchemas, n); });
+             $watch('labSchemas', (s) => { if (labOpen) mojoLabSetContext(columns, s, labName, signalDescriptions); });
+             $watch('labName', (n) => { if (labOpen) mojoLabSetContext(columns, labSchemas, n, signalDescriptions); });
          ">
         <canvas id="lab-canvas"
                 tabindex="0"
@@ -2408,7 +2450,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeColSearch', 'Filter signals…') }}
+                    {{ tree_search_input('nodeColSearch', 'Filter signals…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeCol')", "collapseAllColumnFolders('nodeCol')", "getColumnTreeRows('nodeCol').some(r => r.type === 'folder')") }}
             </div>
@@ -2417,7 +2459,7 @@
             <div class="flex flex-col gap-1.5 shrink-0">
                 <template x-for="depth in getActiveLevels('nodeCol')"
                           :key="depth">
-                    <div x-show="getSegmentsAtDepth('nodeCol', depth).length > 0"
+                    <div x-hscroll x-show="getSegmentsAtDepth('nodeCol', depth).length > 0"
                          class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
                         <template x-for="seg in getSegmentsAtDepth('nodeCol', depth)"
                                   :key="seg">
@@ -2430,7 +2472,7 @@
                     </div>
                 </template>
                 <!-- suffix quick filter -->
-                <div x-show="getAvailableSuffixes('nodeCol').length > 0"
+                <div x-hscroll x-show="getAvailableSuffixes('nodeCol').length > 0"
                      class="flex items-center gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
                     <template x-for="sfx in getAvailableSuffixes('nodeCol')"
                               :key="sfx">
@@ -2460,7 +2502,8 @@
                                             :class="mojoLabIsCyclicInput && mojoLabIsCyclicInput(row.item)
                                             ? 'text-warning-500 dark:text-warning-400 hover:bg-warning-500/10 line-through'
                                             : 'text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200'"
-                                            :title="mojoLabIsCyclicInput && mojoLabIsCyclicInput(row.item) ? 'Would create a circular dependency' : row.item"
+                                            @mouseenter="showSignalTip($event, row.item, mojoLabIsCyclicInput && mojoLabIsCyclicInput(row.item) ? 'Would create a circular dependency' : '')"
+                                            @mouseleave="hideSignalTip()"
                                             class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors"
                                             x-text="row.name">
                                     </button>
@@ -2505,7 +2548,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeQuatSearch', 'Filter quaternions…') }}
+                    {{ tree_search_input('nodeQuatSearch', 'Filter quaternions…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeQuat')", "collapseAllColumnFolders('nodeQuat')", "getColumnTreeRows('nodeQuat').some(r => r.type === 'folder')") }}
             </div>
@@ -2514,7 +2557,7 @@
             <div class="flex flex-col gap-1.5 shrink-0">
                 <template x-for="depth in getActiveLevels('nodeQuat')"
                           :key="depth">
-                    <div x-show="getSegmentsAtDepth('nodeQuat', depth).length > 0"
+                    <div x-hscroll x-show="getSegmentsAtDepth('nodeQuat', depth).length > 0"
                          class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
                         <template x-for="seg in getSegmentsAtDepth('nodeQuat', depth)"
                                   :key="seg">
@@ -2542,7 +2585,8 @@
                                 <div class="flex items-center">
                                     {{ tree_indent_guides('row') }}
                                     <button @click="selectNodeQuat(row.item)"
-                                            :title="row.item"
+                                            @mouseenter="showSignalTip($event, row.item, '', row.item + ':w')"
+                                            @mouseleave="hideSignalTip()"
                                             class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200"
                                             x-text="row.name">
                                     </button>
@@ -2588,7 +2632,7 @@
             <!-- search -->
             <div class="flex items-center gap-1 shrink-0">
                 <div class="flex-1">
-                    {{ tree_search_input('nodeOriginSearch', 'Filter vectors…') }}
+                    {{ tree_search_input('nodeOriginSearch', 'Filter vectors…', signal_search=True) }}
                 </div>
                 {{ tree_expand_collapse_buttons("expandAllColumnFolders('nodeOrigin')", "collapseAllColumnFolders('nodeOrigin')", "getColumnTreeRows('nodeOrigin').some(r => r.type === 'folder')") }}
             </div>
@@ -2597,7 +2641,7 @@
             <div class="flex flex-col gap-1.5 shrink-0">
                 <template x-for="depth in getActiveLevels('nodeOrigin')"
                           :key="depth">
-                    <div x-show="getSegmentsAtDepth('nodeOrigin', depth).length > 0"
+                    <div x-hscroll x-show="getSegmentsAtDepth('nodeOrigin', depth).length > 0"
                          class="flex gap-1 overflow-x-auto pb-0.5 custom-scrollbar">
                         <template x-for="seg in getSegmentsAtDepth('nodeOrigin', depth)"
                                   :key="seg">
@@ -2625,7 +2669,8 @@
                                 <div class="flex items-center">
                                     {{ tree_indent_guides('row') }}
                                     <button @click="selectNodeOrigin(row.item)"
-                                            :title="row.item"
+                                            @mouseenter="showSignalTip($event, row.item, '', row.item + ':x')"
+                                            @mouseleave="hideSignalTip()"
                                             class="flex-1 text-left py-1 pl-1 pr-2 text-sm font-mono rounded truncate transition-colors text-ink-secondary hover:bg-accent-500/20 hover:text-accent-700 dark:hover:text-accent-200"
                                             x-text="row.name">
                                     </button>
@@ -2728,7 +2773,7 @@
     </div>
 
     <!-- status bar -->
-    <div class="h-8 shrink-0 flex items-center px-4 border-t border-subtle text-sm font-mono text-ink-secondary select-none overflow-x-auto custom-scrollbar gap-5 whitespace-nowrap">
+    <div x-hscroll class="h-8 shrink-0 flex items-center px-4 border-t border-subtle text-sm font-mono text-ink-secondary select-none overflow-x-auto custom-scrollbar gap-5 whitespace-nowrap">
         <span>Right-click → add node</span>
         <span>Scroll to zoom · drag to pan</span>
         <span class="flex items-center gap-3">

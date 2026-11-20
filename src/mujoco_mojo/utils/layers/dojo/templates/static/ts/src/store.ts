@@ -10,6 +10,9 @@ import {
   settingsDropdown,
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
+import { wrapText } from "./lib/signal-description";
+import { installRevealActive } from "./lib/tab-reveal";
+import { installSideScroll } from "./lib/wheel-scroll";
 import {
   isPlotlyPrefix,
   markAllRead,
@@ -86,6 +89,32 @@ window.mojoNearestColorName = nearestColorName;
 window.mojoResolveColorHex = resolveColorHex;
 window.mojoIsHexColor = isHexColor;
 window.mojoCollapseColorAlias = collapseColorAlias;
+
+// the Signal Lab's inline script (_signal_lab.html) is not bundled either, and
+// the Signal In node wraps a signal's description with this
+window.mojoWrapText = wrapText;
+
+// `x-hscroll` on a strip that scrolls sideways lets the mouse wheel scroll it, for a mouse with
+// no sideways wheel (lib/wheel-scroll.ts)
+document.addEventListener("alpine:init", () => {
+  Alpine.directive("hscroll", (el, { modifiers }, { cleanup }) =>
+    installSideScroll(el, cleanup, modifiers),
+  );
+
+  // `x-reveal-active="<the open tab's id>"` on a strip of tabs scrolls it to the open tab,
+  // including when the page has just loaded (lib/tab-reveal.ts)
+  Alpine.directive(
+    "reveal-active",
+    (el, { expression }, { evaluateLater, effect, cleanup }) => {
+      const read = evaluateLater<string>(expression);
+      installRevealActive(
+        el,
+        (listener) => effect(() => read((id) => listener(String(id ?? "")))),
+        cleanup,
+      );
+    },
+  );
+});
 
 document.addEventListener("alpine:init", () => {
   const dojoStore: DojoStore = {

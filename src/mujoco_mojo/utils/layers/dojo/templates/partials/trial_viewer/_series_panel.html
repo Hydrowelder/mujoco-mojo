@@ -76,16 +76,16 @@
 
                     <div class="flex items-center gap-1 mb-2">
                         <div class="flex-1">
-                            {{ tree_search_input('xSearch', 'Filter...') }}
+                            {{ tree_search_input('xSearch', 'Filter...', signal_search=True) }}
                         </div>
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('x')", "collapseAllColumnFolders('x')", "getColumnTreeRows('x').some(r => r.type === 'folder')") }}
                     </div>
 
-                    <div x-show="$store.dojo.showQuickFilters"
-                         class="flex flex-col gap-1 mb-2">
+                    <template x-if="$store.dojo.showQuickFilters && signalSearch.mode === 'regex'">
+                    <div class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('x')"
                                   :key="depth">
-                            <div x-show="getSegmentsAtDepth('x', depth).length > 0"
+                            <div x-hscroll x-show="getSegmentsAtDepth('x', depth).length > 0"
                                  class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
                                 <template x-for="seg in getSegmentsAtDepth('x', depth)"
                                           :key="seg">
@@ -97,7 +97,7 @@
                             </div>
                         </template>
 
-                        <div x-show="getAvailableSuffixes('x').length > 0"
+                        <div x-hscroll x-show="getAvailableSuffixes('x').length > 0"
                              class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
                             <template x-for="sfx in getAvailableSuffixes('x')"
                                       :key="sfx">
@@ -108,6 +108,7 @@
                             </template>
                         </div>
                     </div>
+                    </template>
 
                     <div class="max-h-80 overflow-y-auto custom-scrollbar">
                         <template x-for="row in getColumnVisibleRows('x')"
@@ -129,6 +130,12 @@
                              class="text-sm font-mono italic text-ink-muted p-2">
                             No matching signals...
                         </div>
+                    </div>
+
+                    <div class="px-1 pt-2 pb-1">
+                        <span class="text-xs font-black uppercase text-ink-muted tracking-tighter"
+                              x-text="`${getColumnCount('x')} Signals`"
+                              x-show="getColumnCount('x') > 0"></span>
                     </div>
                 </div>
             </div>
@@ -705,18 +712,18 @@
                     </div>
 
                     <div class="mb-2">
-                        {{ tree_search_input('refFrameSearch', 'Filter...') }}
+                        {{ tree_search_input('refFrameSearch', 'Filter...', signal_search=True) }}
                     </div>
 
                     <!-- quick filters - same regex-chip mechanism as the X/Y-axis
                          trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
                          reused as-is since refFrame already maps to availableQuats
                          there too. -->
-                    <div x-show="$store.dojo.showQuickFilters"
-                         class="flex flex-col gap-1 mb-2">
+                    <template x-if="$store.dojo.showQuickFilters && signalSearch.mode === 'regex'">
+                    <div class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('refFrame')"
                                   :key="depth">
-                            <div x-show="getSegmentsAtDepth('refFrame', depth).length > 0"
+                            <div x-hscroll x-show="getSegmentsAtDepth('refFrame', depth).length > 0"
                                  class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
                                 <template x-for="seg in getSegmentsAtDepth('refFrame', depth)"
                                           :key="seg">
@@ -728,6 +735,7 @@
                             </div>
                         </template>
                     </div>
+                    </template>
 
                     <!-- "world" above is a fixed pseudo-option, not part of the
                          tree itself - availableQuats' own names are never
@@ -744,7 +752,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrame', row.path)", "isColumnFolderCollapsed('refFrame', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame[0] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameQuat(row.item); refFrameMenuOpen = false; saveAndRender()", "config.refFrame[0] === row.item", ":w") }}
                                     </template>
                                 </div>
                             </div>
@@ -786,17 +794,17 @@
                     </div>
 
                     <div class="mb-2">
-                        {{ tree_search_input('refFrameOriginSearch', 'Filter...') }}
+                        {{ tree_search_input('refFrameOriginSearch', 'Filter...', signal_search=True) }}
                     </div>
 
                     <!-- quick filters - same regex-chip mechanism as the X/Y-axis
                          trees (getActiveLevels/getSegmentsAtDepth/toggleRegexSegment),
                          reused as-is; refFrameOrigin maps to rotateableVectors. -->
-                    <div x-show="$store.dojo.showQuickFilters"
-                         class="flex flex-col gap-1 mb-2">
+                    <template x-if="$store.dojo.showQuickFilters && signalSearch.mode === 'regex'">
+                    <div class="flex flex-col gap-1 mb-2">
                         <template x-for="depth in getActiveLevels('refFrameOrigin')"
                                   :key="depth">
-                            <div x-show="getSegmentsAtDepth('refFrameOrigin', depth).length > 0"
+                            <div x-hscroll x-show="getSegmentsAtDepth('refFrameOrigin', depth).length > 0"
                                  class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
                                 <template x-for="seg in getSegmentsAtDepth('refFrameOrigin', depth)"
                                           :key="seg">
@@ -808,6 +816,7 @@
                             </div>
                         </template>
                     </div>
+                    </template>
 
                     <!-- "world" above is a fixed pseudo-option, not part of the
                          tree itself - availableQuats' own names are never
@@ -824,7 +833,7 @@
                                         {{ tree_folder_row('row', "toggleColumnFolder('refFrameOrigin', row.path)", "isColumnFolderCollapsed('refFrameOrigin', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
-                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame[1] === row.item") }}
+                                        {{ tree_signal_leaf_row('row', "setRefFrameOrigin(row.item); refFrameOriginMenuOpen = false; saveAndRender()", "config.refFrame[1] === row.item", ":x") }}
                                     </template>
                                 </div>
                             </div>
@@ -904,15 +913,15 @@
                     {% from 'partials/trial_viewer/_macros.html' import tree_folder_row, tree_expand_collapse_buttons, tree_indent_guides, tree_search_input %}
                     <div class="flex items-center gap-1 mb-2">
                         <div class="flex-1">
-                            {{ tree_search_input('ySearch', 'Filter...') }}
+                            {{ tree_search_input('ySearch', 'Filter...', signal_search=True) }}
                         </div>
                         {{ tree_expand_collapse_buttons("expandAllColumnFolders('y')", "collapseAllColumnFolders('y')", "getColumnTreeRows('y').some(r => r.type === 'folder')") }}
                     </div>
-                    <div x-show="$store.dojo.showQuickFilters"
-                         class="flex flex-col gap-1 mb-4">
+                    <template x-if="$store.dojo.showQuickFilters && signalSearch.mode === 'regex'">
+                    <div class="flex flex-col gap-1 mb-4">
                         <template x-for="depth in getActiveLevels('y')"
                                   :key="depth">
-                            <div x-show="getSegmentsAtDepth('y', depth).length > 0"
+                            <div x-hscroll x-show="getSegmentsAtDepth('y', depth).length > 0"
                                  x-transition
                                  class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-1 pb-2 flex-nowrap border-b border-subtle dark:border-subtle/40 last:border-none">
 
@@ -926,7 +935,7 @@
                             </div>
                         </template>
 
-                        <div x-show="getAvailableSuffixes('y').length > 0"
+                        <div x-hscroll x-show="getAvailableSuffixes('y').length > 0"
                              class="flex items-center gap-1.5 overflow-x-auto custom-scrollbar pt-2 pb-2 flex-nowrap">
                             <template x-for="sfx in getAvailableSuffixes('y')"
                                       :key="sfx">
@@ -937,6 +946,7 @@
                             </template>
                         </div>
                     </div>
+                    </template>
 
                     <div class="max-h-80 overflow-y-auto custom-scrollbar border-b border-t border-subtle py-2">
                         <template x-for="row in getColumnVisibleRows('y', (col) => isFrameSelectable(col))"
@@ -945,7 +955,7 @@
                                  :class="!row.hidden ? 'expander-open' : ''">
                                 <div class="expander-body">
                                     <template x-if="row.type === 'folder'">
-                                        {{ tree_folder_row('row', "toggleColumnFolder('y', row.path)", "isColumnFolderCollapsed('y', row.path)") }}
+                                        {{ tree_folder_row('row', "toggleColumnFolder('y', row.path, (col) => isFrameSelectable(col))", "isColumnFolderCollapsed('y', row.path)") }}
                                     </template>
                                     <template x-if="row.type === 'file'">
                                         {# py-1 moved off the label and onto the inner span - see
@@ -958,7 +968,8 @@
                                            click on it reaches this handler too, and keeps its own handler for the
                                            keyboard (Space on the focused checkbox). #}
                                         <label class="flex items-center gap-2 pr-2 rounded hover:bg-control cursor-pointer group border-b last:border-none border-subtle"
-                                               :title="row.item"
+                                               @mouseenter="showSignalTip($event, row.item)"
+                                               @mouseleave="hideSignalTip()"
                                                @mousedown.prevent
                                                @click.prevent="toggleYRange(row, $event.shiftKey)">
                                             {{ tree_indent_guides('row') }}
@@ -980,8 +991,8 @@
 
                     <div class="flex items-center justify-between px-1 my-2 gap-2 h-8">
                         <span class="text-xs font-black uppercase text-ink-muted tracking-tighter shrink-0"
-                              x-text="`${getFilteredCols('y').length} Signals`"
-                              x-show="getFilteredCols('y').length > 0"></span>
+                              x-text="`${getColumnCount('y', (col) => isFrameSelectable(col))} Signals`"
+                              x-show="getColumnCount('y', (col) => isFrameSelectable(col)) > 0"></span>
 
                         <button @click="clearYAxes()"
                                 x-show="Object.keys(config.yAxes).length > 0"
@@ -1019,9 +1030,9 @@
         $watch('config.yAxes', () => $nextTick(() => checkScroll()));
      ">
 
-            <div x-ref="ribbon"
+            <div x-hscroll.contain x-ref="ribbon"
                  @scroll="checkScroll()"
-                 class="flex items-center h-10 gap-1 overflow-x-auto touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
+                 class="flex items-center h-10 gap-1 overflow-x-auto overscroll-contain touch-pan-x whitespace-nowrap custom-scrollbar transition-all"
                  :style="`
             mask-image: linear-gradient(
                 to right,
@@ -1844,3 +1855,19 @@
         </div>
     </div>
 </div>
+
+<!-- the tooltip over a signal in the x/y (and reference-frame) pickers, filled
+     by showSignalTip: the signal's name in bold, then its description in
+     italics. it is teleported so the pickers' scrolling lists cannot clip it,
+     and a press, a key or a scroll dismisses it, since a row that closes or
+     scrolls away under the pointer sends no mouseleave -->
+<template x-teleport="body">
+    <div x-show="signalTip"
+         @mousedown.window="hideSignalTip()"
+         @keydown.window="hideSignalTip()"
+         @scroll.window.capture="hideSignalTip()"
+         :style="signalTip ? `left:${signalTip.left}px;top:${signalTip.top}px;max-width:${signalTip.maxWidth}px;${signalTip.flip ? 'transform:translateX(-100%);' : ''}` : ''"
+         class="panel p-2! fixed z-800 w-max pointer-events-none text-xs text-ink-body leading-relaxed break-words [&_b]:text-ink-strong"
+         style="display:none;"
+         x-html="signalTip?.html ?? ''"></div>
+</template>

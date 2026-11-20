@@ -29,6 +29,7 @@ export type {
 } from "./lib/settings-panel";
 import type { SettingsPanelState } from "./lib/settings-panel";
 import type { ColumnMetadata } from "./lib/column-metadata.generated";
+import type { SignalSummary } from "./lib/signal-description";
 import type { VersusState } from "./lib/plot-profile";
 
 export type { ColumnMetadata, TransformType } from "./lib/column-metadata.generated";
@@ -161,7 +162,10 @@ export interface TrialLogsResponse {
 export type ColumnManifest = Pick<
   TrialDataResponse["columns"],
   "all" | "rotatable_vectors" | "available_quats"
->;
+> & {
+  // what the signals that say are, so SensAI can search them by it
+  column_metadata?: Record<string, SignalSummary>;
+};
 
 export interface TrialDataResponse {
   columns: {
