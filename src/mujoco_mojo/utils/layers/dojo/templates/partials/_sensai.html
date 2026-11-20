@@ -375,10 +375,13 @@
 
     <!-- chats: one tab each, with its own messages -->
     <div class="shrink-0 flex items-stretch border-b border-subtle">
-      <div x-hscroll class="flex items-stretch overflow-x-auto overflow-y-hidden overscroll-contain custom-scrollbar flex-1 min-w-0 px-1 gap-0.5">
+      <div x-hscroll
+           x-reveal-active="activeId"
+           class="flex items-stretch overflow-x-auto overflow-y-hidden overscroll-contain custom-scrollbar flex-1 min-w-0 px-1 gap-0.5">
         <template x-for="tab in tabs"
                   :key="tab.id">
-          <div @click="switchTab(tab.id)"
+          <div :data-tab-id="tab.id"
+               @click="switchTab(tab.id)"
                @auxclick.prevent="if ($event.button === 1) closeTab(tab.id)"
                @keydown.enter="switchTab(tab.id)"
                role="button"

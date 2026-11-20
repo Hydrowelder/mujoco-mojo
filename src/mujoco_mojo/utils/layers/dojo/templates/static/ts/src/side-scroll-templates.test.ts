@@ -52,6 +52,34 @@ describe("every strip that scrolls sideways lets the wheel scroll it", () => {
     expect(ribbon).toMatch(/class="[^"]*\boverscroll-contain\b/);
   });
 
+  it("keeps the open tab of the shared tab strip (the plot tabs and the Lab's) in view", () => {
+    const [strip, ...rest] = divs(templates["trial_viewer/_macros.html"]!).filter((tag) => tag.includes("x-reveal-active"));
+    expect(rest).toEqual([]);
+    expect(strip).toContain('x-reveal-active="{{ active_id_expr }}"');
+    // on the strip that scrolls, which is the one the tabs are in
+    expect(strip).toContain("overflow-x-auto");
+  });
+
+  // SensAI keeps its own tab markup rather than the shared macro, so it needs the same two marks: the id the
+  // strip follows, and the id on each tab for it to find. it had neither, and its open chat was never revealed
+  it("keeps the open chat of SensAI's tab strip in view", () => {
+    const sensai = templates["_sensai.html"]!;
+    const [strip, ...rest] = divs(sensai).filter((tag) => tag.includes("x-reveal-active"));
+    expect(rest).toEqual([]);
+    expect(strip).toContain('x-reveal-active="activeId"');
+    expect(strip).toContain("overflow-x-auto");
+    expect(divs(sensai).filter((tag) => tag.includes(':data-tab-id="tab.id"'))).toHaveLength(1);
+  });
+
+  // a strip that follows an id finds the tabs by `data-tab-id`, so a template that marks one has to mark the other
+  for (const [name, template] of Object.entries(templates)) {
+    it(`${name} marks the tabs of every strip that follows the open one`, () => {
+      const marked = divs(template).filter((tag) => tag.includes("x-reveal-active")).length;
+      const tabs = divs(template).filter((tag) => tag.includes("data-tab-id")).length;
+      expect(tabs).toBeGreaterThanOrEqual(marked);
+    });
+  }
+
   it("does not mark the distributions table, which also scrolls the other way", () => {
     const distributions = read("trial_viewer/_distributions.html");
     expect(strips(distributions).length).toBeGreaterThan(0);

@@ -635,7 +635,7 @@ tracking-widest styling every caller's <label> already has - CSS
         {% macro tab_strip(tabs_expr, active_id_expr, name_expr, dirty_expr, switch_fn, close_fn, reorder_fn, close_event, new_fn, new_title='New tab', renamable=false, duplicate_fn='', select_fn='', selected_expr='') %}
         <div class="shrink-0 flex items-stretch border-b border-subtle min-h-9">
             <!-- scrollable tab strip -->
-            <div x-hscroll class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
+            <div x-hscroll x-reveal-active="{{ active_id_expr }}" class="flex items-stretch overflow-x-auto overflow-y-hidden custom-scrollbar flex-1 min-w-0 px-1 gap-0.5"
                  x-data="{ _dragId: null, _overIdx: null, _renamingTabId: null }"
                  x-init="
              $el.addEventListener('mousedown', e => {

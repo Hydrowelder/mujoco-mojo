@@ -11,6 +11,7 @@ import {
 } from "./lib/settings-panel";
 import { themeColor } from "./lib/theme-colors";
 import { wrapText } from "./lib/signal-description";
+import { installRevealActive } from "./lib/tab-reveal";
 import { installSideScroll } from "./lib/wheel-scroll";
 import {
   isPlotlyPrefix,
@@ -98,6 +99,20 @@ window.mojoWrapText = wrapText;
 document.addEventListener("alpine:init", () => {
   Alpine.directive("hscroll", (el, { modifiers }, { cleanup }) =>
     installSideScroll(el, cleanup, modifiers),
+  );
+
+  // `x-reveal-active="<the open tab's id>"` on a strip of tabs scrolls it to the open tab,
+  // including when the page has just loaded (lib/tab-reveal.ts)
+  Alpine.directive(
+    "reveal-active",
+    (el, { expression }, { evaluateLater, effect, cleanup }) => {
+      const read = evaluateLater<string>(expression);
+      installRevealActive(
+        el,
+        (listener) => effect(() => read((id) => listener(String(id ?? "")))),
+        cleanup,
+      );
+    },
   );
 });
 
