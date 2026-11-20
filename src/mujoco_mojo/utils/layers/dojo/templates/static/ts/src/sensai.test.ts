@@ -21,6 +21,7 @@ import {
   STORAGE_KEY,
   TABS_KEY,
   loadSensAITabs,
+  saveSensAITabs,
   titleFromMessage,
   type SensAIMessage,
   type SensAITab,
@@ -163,8 +164,16 @@ afterEach(() => {
 // lets the promises and the stream the component is waiting on settle
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+// the components the current test made, destroyed after it: each listens for storage events
+// and a leftover one would answer a later test's
+const booted: SensAI[] = [];
+afterEach(() => {
+  for (const s of booted.splice(0)) s.destroy();
+});
+
 async function boot(refs: Record<string, unknown> = {}): Promise<SensAI> {
   const s = make();
+  booted.push(s);
   s.$watch = () => undefined;
   s.$refs = refs;
   s.$nextTick = (cb?: () => void) => {
@@ -431,6 +440,8 @@ describe("a request", () => {
       { role: "user", content: "other chat question", ts: 1 },
       { role: "assistant", content: "other chat answer", ts: 2 },
     ];
+    // saved, as the app saves a chat whenever it changes, since a send reads the saved chats first
+    saveSensAITabs(s.tabs, s.activeId);
 
     const sent = ask(s, "new question");
     await settle();
@@ -859,6 +870,8 @@ describe("requests from different chats", () => {
       { role: "user", content: "second chat earlier question", ts: 1 },
       { role: "assistant", content: "second chat earlier answer", ts: 2 },
     ];
+    // saved, as the app saves a chat whenever it changes, since a send reads the saved chats first
+    saveSensAITabs(s.tabs, s.activeId);
     const sentSecond = ask(s, "second chat new question");
     await settle();
     s.newTab();
@@ -2593,5 +2606,157 @@ describe("the tool calls in the page", () => {
   it("keep a paragraph out of the rows, since a message is measured by its first `.sensai-md` or `p`", () => {
     const macro = template.slice(template.indexOf("{% macro tool_call_rows("), template.indexOf("{% endmacro %}"));
     expect(macro).not.toMatch(/<p[\s>]/);
+  });
+});
+
+// what another browser tab does: it saves its chats, and the browser tells this tab with a storage
+// event. `announce` is false to leave the event out, as when one has not arrived yet. gives back the
+// text that was saved
+function elsewhere(tabs: SensAITab[], announce = true): string {
+  const saved = JSON.stringify(tabs);
+  localStorage.setItem(TABS_KEY, saved);
+  if (announce) window.dispatchEvent(Object.assign(new Event("storage"), { key: TABS_KEY }));
+  return saved;
+}
+
+const exchange = (question: string, answer: string): SensAIMessage[] => [
+  { role: "user", content: question, ts: 1 },
+  { role: "assistant", content: answer, ts: 2 },
+];
+const said = (tab: SensAITab) => tab.messages.map((m) => m.content);
+
+describe("chats shared with another browser tab", () => {
+  it("shows what the other tab saved in the open chat", async () => {
+    const s = await boot();
+
+    elsewhere([{ ...first(s), messages: exchange("what failed?", "Trial 3.") }]);
+
+    expect(said(first(s))).toEqual(["what failed?", "Trial 3."]);
+    expect(s.messages).toHaveLength(2);
+  });
+
+  it("writes nothing back, or the two tabs would answer each other for ever", async () => {
+    const s = await boot();
+
+    const saved = elsewhere([{ ...first(s), messages: exchange("q", "a") }]);
+
+    expect(localStorage.getItem(TABS_KEY)).toBe(saved);
+  });
+
+  it("changes nothing when what the other tab saved is what it has", async () => {
+    const s = await boot();
+    const before = s.tabs;
+
+    elsewhere(JSON.parse(JSON.stringify(s.tabs)) as SensAITab[]);
+
+    expect(s.tabs).toBe(before);
+  });
+
+  it("adds a chat the other tab started, and keeps the open one open", async () => {
+    const s = await boot();
+    const open = s.activeId;
+
+    elsewhere([first(s), { id: "from-the-other-tab", title: "Chat 2", messages: exchange("hi", "yo") }]);
+
+    expect(s.tabs.map((t) => t.id)).toEqual([open, "from-the-other-tab"]);
+    expect(s.activeId).toBe(open);
+  });
+
+  it("keeps the text typed here and where this chat was scrolled, which the other tab has its own of", async () => {
+    const s = await boot();
+    first(s).draft = "half a thought";
+    first(s).scrollTop = 120;
+    s.input = "half a thought";
+
+    elsewhere([{ ...first(s), draft: "theirs", scrollTop: 0, messages: exchange("q", "a") }]);
+
+    expect(first(s).draft).toBe("half a thought");
+    expect(first(s).scrollTop).toBe(120);
+    expect(s.input).toBe("half a thought");
+    expect(first(s).messages).toHaveLength(2);
+  });
+
+  it("leaves a chat with a request running as it is, and its reply still lands in it", async () => {
+    const s = await boot();
+    const done = ask(s, "my question");
+    await settle();
+    const running = first(s);
+
+    elsewhere([{ ...running, messages: exchange("theirs", "their answer") }]);
+
+    expect(first(s)).toBe(running);
+    expect(said(first(s))).toEqual(["my question"]);
+
+    calls[0]!.reply.answer("my answer");
+    await done;
+    expect(said(first(s))).toEqual(["my question", "my answer"]);
+    expect(said(loadSensAITabs().tabs[0]!)).toEqual(["my question", "my answer"]);
+  });
+
+  it("shows the chat beside it when the other tab closed the open one, with that chat's own text in the box", async () => {
+    const s = await boot();
+    s.newTab();
+    const [kept] = s.tabs;
+    kept!.draft = "the kept chat's text";
+
+    elsewhere([kept!]);
+
+    expect(s.tabs.map((t) => t.id)).toEqual([kept!.id]);
+    expect(s.activeId).toBe(kept!.id);
+    expect(s.input).toBe("the kept chat's text");
+  });
+
+  it("sends the history the other tab saved, even when the event for it has not arrived", async () => {
+    const s = await boot();
+    elsewhere([{ ...first(s), messages: exchange("earlier question", "earlier answer") }], false);
+
+    const done = ask(s, "next question");
+    await settle();
+
+    expect(calls[0]!.body.message).toBe("next question");
+    expect(calls[0]!.body.message_history).toEqual([
+      { role: "user", content: "earlier question" },
+      { role: "assistant", content: "earlier answer" },
+    ]);
+    calls[0]!.reply.answer("ok");
+    await done;
+  });
+
+  it("keeps the text for the chat that is open now, when the other tab closed the one it was typed for", async () => {
+    const s = await boot();
+    s.newTab();
+    const [kept] = s.tabs;
+    elsewhere([kept!], false);
+    s.input = "hello";
+
+    await s.send();
+
+    expect(calls).toHaveLength(0);
+    expect(s.activeId).toBe(kept!.id);
+    expect(s.input).toBe("hello");
+    expect(kept!.messages).toEqual([]);
+  });
+
+  it("ignores a change to anything else in storage, and a cleared save", async () => {
+    const s = await boot();
+    const before = s.tabs;
+
+    window.dispatchEvent(Object.assign(new Event("storage"), { key: "something-else" }));
+    expect(s.tabs).toBe(before);
+
+    localStorage.removeItem(TABS_KEY);
+    window.dispatchEvent(Object.assign(new Event("storage"), { key: TABS_KEY }));
+    expect(s.tabs).toBe(before);
+  });
+
+  it("stops taking in the other tab's chats once it is destroyed", async () => {
+    const s = await boot();
+    const before = s.tabs;
+    s.destroy();
+
+    elsewhere([{ ...first(s), messages: exchange("q", "a") }]);
+
+    expect(s.tabs).toBe(before);
+    expect(first(s).messages).toEqual([]);
   });
 });

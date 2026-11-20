@@ -368,17 +368,86 @@ export function loadSensAITabs(): { tabs: SensAITab[]; activeId: string } {
       return { tabs: [tab], activeId: tab.id };
     },
   );
-  return {
-    tabs: tabs.map((t) => ({
-      ...t,
-      title: typeof t.title === "string" ? t.title : "Chat",
-      messages: (Array.isArray(t.messages) ? t.messages : []).map((m) => ({
-        ...m,
-        ts: m.ts ?? Date.now(),
-      })),
+  return { tabs: normalizeTabs(tabs), activeId };
+}
+
+// saved chats with what an older or damaged save may lack filled in: a title, a list
+// of messages, and a time on each message
+function normalizeTabs(tabs: SensAITab[]): SensAITab[] {
+  return tabs.map((t) => ({
+    ...t,
+    title: typeof t.title === "string" ? t.title : "Chat",
+    messages: (Array.isArray(t.messages) ? t.messages : []).map((m) => ({
+      ...m,
+      ts: m.ts ?? Date.now(),
     })),
-    activeId,
-  };
+  }));
+}
+
+// the chats as the last browser tab to save them left them, or null when none are
+// saved or they cannot be read. unlike `loadSensAITabs` it never makes up an empty
+// chat, so a cleared or damaged save is not mistaken for the other tab's chats
+export function readSavedTabs(): SensAITab[] | null {
+  try {
+    const raw = localStorage.getItem(TABS_KEY);
+    if (!raw) return null;
+    const tabs = JSON.parse(raw) as unknown;
+    if (!Array.isArray(tabs)) return null;
+    const usable = (tabs as SensAITab[]).filter(
+      (t) => typeof t?.id === "string",
+    );
+    return usable.length > 0 ? normalizeTabs(usable) : null;
+  } catch {
+    return null;
+  }
+}
+
+// the chats this browser tab should hold once another browser tab has saved its own: the
+// saved list, in the saved order, with
+// - a chat this tab has no copy of (the other tab started it) as it was saved
+// - a chat this tab has (`current`) taking the saved title and messages, which are the
+//   newest, but keeping what belongs to this tab alone: the text typed in it and not
+//   sent, where its list was scrolled, and whether it is unread
+// - a chat this tab is in the middle of (`inProgress`: its request is running or waiting)
+//   left exactly as it is, the same object, since the reply being streamed into it
+//   would otherwise land in a copy nobody shows. one the other tab closed stays too, at the end
+// - a chat the other tab closed gone
+// `changed` is false when that is the list this tab already has, object for object, so
+// nothing has to be reassigned
+export function mergeSavedTabs(
+  current: SensAITab[],
+  saved: SensAITab[],
+  inProgress: (id: string) => boolean,
+): { tabs: SensAITab[]; changed: boolean } {
+  const mine = new Map(current.map((t) => [t.id, t]));
+  const tabs: SensAITab[] = [];
+  for (const theirs of saved) {
+    const own = mine.get(theirs.id);
+    if (!own) {
+      tabs.push(theirs);
+    } else if (inProgress(own.id)) {
+      tabs.push(own);
+    } else if (
+      own.title === theirs.title &&
+      own.autoTitled === theirs.autoTitled &&
+      JSON.stringify(own.messages) === JSON.stringify(theirs.messages)
+    ) {
+      tabs.push(own);
+    } else {
+      tabs.push({
+        ...own,
+        title: theirs.title,
+        autoTitled: theirs.autoTitled,
+        messages: theirs.messages,
+      });
+    }
+  }
+  for (const own of current) {
+    if (inProgress(own.id) && !tabs.some((t) => t.id === own.id)) tabs.push(own);
+  }
+  const changed =
+    tabs.length !== current.length || tabs.some((t, i) => t !== current[i]);
+  return { tabs, changed };
 }
 
 // the old single history is dropped once the chats are saved, so it cannot

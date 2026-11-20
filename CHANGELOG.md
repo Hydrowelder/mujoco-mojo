@@ -6,6 +6,7 @@
 - The Dojo's signal selectors show a signal's description when you hover it, and the Signal Lab's Signal In node shows it
 - SensAI's signal search now also matches the descriptions of signals
 - Fixed SensAI showing a reply the model cut off as if it were whole, with no error
+- Fixed SensAI chats going out of step between browser tabs: a question asked in one tab is now in the others, and what you ask in a second tab knows what you asked in the first
 - SensAI can now look up a job's input distributions and what each trial drew, and compare the trials that drew an input far from its mean
 - The signal lists' search box can now switch between a regular expression and plain text, and search signal descriptions too
 
