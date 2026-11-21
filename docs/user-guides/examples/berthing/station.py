@@ -1,10 +1,11 @@
-"""The station: a cylinder with a pedestal on top that the arm will stand on."""
+"""The station: a cylinder with a grapple fixture on top that the arm will be attached to."""
 
 from __future__ import annotations
 
 from typing import Self
 
 import numpy as np
+from fixture import GrappleFixture
 
 import mujoco_mojo as mojo
 
@@ -23,12 +24,6 @@ class StationInput(mojo.UserData):
     LENGTH: float = 6.0 * US.m
     """Length of the station's main cylinder, which lies along Y and is centered on the origin."""
 
-    PEDESTAL_RADIUS: float = 0.3 * US.m
-    """Radius of the pedestal the arm stands on."""
-
-    SHOULDER_HEIGHT: float = 1.2 * US.m
-    """Height of the top of the pedestal above the station's center line, which is where the arm's shoulder will sit."""
-
 
 STATION = StationInput()
 # --8<-- [end:inputs]
@@ -36,7 +31,7 @@ STATION = StationInput()
 
 # --8<-- [start:station]
 class Station(mojo.UserData):
-    """The station's main cylinder and the pedestal that rises out of it, in one body."""
+    """The station's main cylinder and the grapple fixture on top of it that the arm's base attaches to, in one body."""
 
     body: mojo.Body
     """The station's body. It has no joint, so it is fixed in the world. A free joint here would let it float."""
@@ -44,8 +39,8 @@ class Station(mojo.UserData):
     cylinder: mojo.GeomCylinder
     """The station's main cylinder."""
 
-    pedestal: mojo.GeomCylinder
-    """The pedestal, which starts at the station's center line so it never leaves a gap against the curved surface."""
+    fixture: GrappleFixture
+    """The grapple fixture on top of the station, the same part the visitor carries. Its site's X axis points down into the station."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
@@ -59,22 +54,26 @@ class Station(mojo.UserData):
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
         )
 
-        # make the pedestal which the arm will be attached to
-        pedestal = mojo.GeomCylinder(
-            name=mojo.GeomName("pedestal_geom"),
-            size=STATION.PEDESTAL_RADIUS,
-            fromto=np.array((0, 0, 0, 0, 0, STATION.SHOULDER_HEIGHT)),
-            rgba=mojo.utils.Color.SLATE_600.with_alpha(OPACITY),
+        # mount the same grapple fixture the visitor carries on top of the cylinder, where the arm will be attached, turned so its X axis points down into the station
+        fixture = GrappleFixture.new(
+            mojo_model,
+            "station",
+            mojo.PoseEuler(
+                euler=np.array((0, 90, 0)),
+                angle=mojo.Angle.DEGREE,
+                pos=np.array((0, 0, STATION.RADIUS)),
+            ),
         )
 
-        # attach these geometries to a body which can be made freely moving later on
+        # attach these to a body which can be made freely moving later on
         body = mojo.Body(
             name=mojo.BodyName("station"),
-            geoms=[cylinder, pedestal],
+            geoms=[cylinder],
+            frames=[fixture.frame],
         )
         mojo_model.mjcf.worldbody.bodies.append(body)
 
-        return cls(body=body, cylinder=cylinder, pedestal=pedestal)
+        return cls(body=body, cylinder=cylinder, fixture=fixture)
 
 
 # --8<-- [end:station]

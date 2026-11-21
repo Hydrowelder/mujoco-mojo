@@ -1,10 +1,11 @@
-"""The visiting vehicle: a cylindrical hull that is free to move."""
+"""The visiting vehicle: a cylindrical hull with a grapple fixture, free to move."""
 
 from __future__ import annotations
 
 from typing import Self
 
 import numpy as np
+from fixture import GrappleFixture
 from shapes import cylinder_mesh, lying_along
 
 import mujoco_mojo as mojo
@@ -36,15 +37,6 @@ class VisitorInput(mojo.UserData):
     HEIGHT: float = 1.5 * US.m
     """Height of the hull's center above the station's center line."""
 
-    FIXTURE_LENGTH: float = 0.4 * US.m
-    """How far the grapple fixture sticks out of the side of the hull that faces the station."""
-
-    FIXTURE_RADIUS: float = 0.15 * US.m
-    """Radius of the grapple fixture."""
-
-    FIXTURE_MASS: float = 20 * US.kg
-    """Mass of the grapple fixture."""
-
 
 VISITOR = VisitorInput()
 # --8<-- [end:inputs]
@@ -60,31 +52,24 @@ class Visitor(mojo.UserData):
     hull: mojo.GeomMesh
     """The hull's volume."""
 
-    fixture: mojo.GeomMesh
-    """The grapple fixture's volume, a short cylinder on the side of the hull that faces the station."""
-
-    grapple_site: mojo.SiteSphere
-    """The site at the fixture's tip that the arm's end effector will meet. Its X axis points into the hull, along the visitor's own X axis."""
+    fixture: GrappleFixture
+    """The grapple fixture on the side of the hull that faces the station. Its site's X axis points into the hull, along the visitor's own X axis."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # for type hinting
 
-        # the hull and the fixture are builtin cylinders, which MuJoCo makes when it compiles the model
+        # the hull is a builtin cylinder, which MuJoCo makes when it compiles the model, laid down along Y
         mojo_model.mjcf.assets.append(
             mojo.Asset(
                 meshes=[
                     hull_mesh := cylinder_mesh(
                         "hull_mesh", VISITOR.HULL_RADIUS, VISITOR.HULL_LENGTH
-                    ),
-                    fixture_mesh := cylinder_mesh(
-                        "fixture_mesh", VISITOR.FIXTURE_RADIUS, VISITOR.FIXTURE_LENGTH
-                    ),
+                    )
                 ]
             )
         )
         assert hull_mesh.name
-        assert fixture_mesh.name
 
         hull = mojo.GeomMesh(
             name=mojo.GeomName("hull_geom"),
@@ -94,28 +79,11 @@ class Visitor(mojo.UserData):
             rgba=mojo.utils.Color.CYAN_500.with_alpha(OPACITY),
         )
 
-        # the body's X axis points away from the station, so the side that faces the station is -X: the fixture starts at the hull's surface there and sticks out along -X
-        fixture = mojo.GeomMesh(
-            name=mojo.GeomName("fixture_geom"),
-            mesh=fixture_mesh.name,
-            pose=lying_along(
-                "x",
-                center=np.array(
-                    (-(VISITOR.HULL_RADIUS + VISITOR.FIXTURE_LENGTH / 2), 0, 0)
-                ),
-            ),
-            mass=VISITOR.FIXTURE_MASS,
-            rgba=mojo.utils.Color.ORANGE_500.rgba,
-        )
-
-        # the site is at the fixture's tip, and with no rotation of its own its X axis is the body's, which points from the tip into the hull
-        grapple_site = mojo.SiteSphere(
-            name=mojo.SiteName("grapple_site"),
-            size=0.05 * US.m,
-            pose=mojo.PoseQuat(
-                pos=np.array((-(VISITOR.HULL_RADIUS + VISITOR.FIXTURE_LENGTH), 0, 0))
-            ),
-            rgba=mojo.utils.Color.ORANGE_500.rgba,
+        # the body's X axis points away from the station, so the side that faces the station is -X: the fixture is mounted on the hull's surface there, and the body's own orientation already has X pointing into the hull
+        fixture = GrappleFixture.new(
+            mojo_model,
+            "visitor",
+            mojo.PoseQuat(pos=np.array((-VISITOR.HULL_RADIUS, 0, 0))),
         )
 
         # the body sits on the line from the shoulder's axis out through the azimuth, turned to face along it
@@ -134,13 +102,13 @@ class Visitor(mojo.UserData):
                 angle=mojo.Angle.DEGREE,
                 pos=center,
             ),
-            geoms=[hull, fixture],
-            sites=[grapple_site],
+            geoms=[hull],
+            frames=[fixture.frame],
             freejoints=[mojo.FreeJoint()],
         )
         mojo_model.mjcf.worldbody.bodies.append(body)
 
-        return cls(body=body, hull=hull, fixture=fixture, grapple_site=grapple_site)
+        return cls(body=body, hull=hull, fixture=fixture)
 
 
 # --8<-- [end:visitor]
