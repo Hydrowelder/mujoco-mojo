@@ -9,6 +9,8 @@
 - Fixed SensAI chats going out of step between browser tabs: a question asked in one tab is now in the others, and what you ask in a second tab knows what you asked in the first
 - SensAI can now look up a job's input distributions and what each trial drew, and compare the trials that drew an input far from its mean
 - The signal lists' search box can now switch between a regular expression and plain text, and search signal descriptions too
+- Setting an attribute MuJoCo has deprecated (`Light.directional`, `Size.njmax`, `Size.nconmax`, `Size.nstack`, `Statistic.meaninertia`, `Compiler.settotalmass`) now gives a `DeprecationWarning`, and logs it
+- Fixed Reloaded's log pane not showing what the first model generation logged
 
 ## Version 2.8.3 (2026-11-17)
 

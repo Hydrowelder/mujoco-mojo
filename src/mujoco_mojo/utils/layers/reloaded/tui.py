@@ -837,8 +837,9 @@ class ReloadedApp(App[None]):
         watch_css: bool = False,
         explain: bool = True,
         rain_seconds: float = 1.5,
+        logs: LogBuffer | None = None,
     ) -> None:
-        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, and `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it."""
+        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it, and `logs` is a buffer that already holds what was logged before the app started, which the log pane shows first and the app goes on filling."""
         super().__init__(watch_css=watch_css)
         self.shortcuts = shortcut_bindings(keys or ReloadedKeySettings())
         """The keys bound to actions, in the order the footer shows them."""
@@ -857,7 +858,7 @@ class ReloadedApp(App[None]):
         self.sub_title = subtitle
         self._saved_handlers: list[logging.Handler] = []
         self._log_handler: TuiLogHandler | None = None
-        self._logs = LogBuffer()
+        self._logs = logs if logs is not None else LogBuffer()
         self._quitting = False
         controller.sink = self._deliver
 

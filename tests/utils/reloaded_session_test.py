@@ -32,6 +32,7 @@ from mujoco_mojo.utils.layers.reloaded.backends import (
     StudioBackend,
     ViewerUnavailableError,
 )
+from mujoco_mojo.utils.layers.reloaded.tui import LogBuffer
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -281,6 +282,7 @@ class AppProbe:
     backend: FakeBackend | None = None
     keys: ReloadedKeySettings | None = None
     subtitle: str = ""
+    logs: LogBuffer | None = None
     fail_with: Exception | None = None
     seen: dict[str, object] = field(default_factory=dict)
 
@@ -290,10 +292,12 @@ class AppProbe:
         backend: FakeBackend,
         keys: ReloadedKeySettings | None = None,
         subtitle: str = "",
+        logs: LogBuffer | None = None,
     ) -> "AppProbe":
         self.backend = backend
         self.keys = keys
         self.subtitle = subtitle
+        self.logs = logs
         return self
 
     def run(self) -> None:
@@ -372,6 +376,55 @@ def test_a_viewer_that_stopped_on_its_own_says_why_after_the_app_exits(
     session.run()
 
     assert "the viewer thread died" in _ANSI_ESCAPE.sub("", capsys.readouterr().out)
+
+
+def test_what_the_first_generation_logs_is_handed_to_the_app(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The log pane does not exist while the model is first generated, so a warning from the generator would otherwise be lost to the terminal the app then covers."""
+    session = probe.session
+    monkeypatch.setattr(session, "_create_backend", lambda: FakeBackend())
+
+    def generate(**_: Any) -> Any:
+        log = logging.getLogger("early.generation")
+        log.warning("Light.directional is deprecated.")
+        log.warning("only for the file", extra={"file_only": True})
+        return make_state()
+
+    monkeypatch.setattr(session, "generate_construct", generate)
+
+    session.run()
+
+    assert probe.logs is not None
+    items, dropped = probe.logs.take(10)
+    assert dropped == 0
+    assert [i.getMessage() for i in items if isinstance(i, logging.LogRecord)] == [
+        "Light.directional is deprecated."
+    ]
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["generated", "failed"])
+def test_the_collector_for_the_first_generation_is_removed_afterwards(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch, fails: bool
+) -> None:
+    session = probe.session
+    monkeypatch.setattr(session, "_create_backend", lambda: FakeBackend())
+
+    def generate(**_: Any) -> Any:
+        if fails:
+            raise RuntimeError("the generator broke")
+        return make_state()
+
+    monkeypatch.setattr(session, "generate_construct", generate)
+    before = list(logging.getLogger().handlers)
+
+    if fails:
+        with pytest.raises(typer.Exit):
+            session.run()
+    else:
+        session.run()
+
+    assert logging.getLogger().handlers == before
 
 
 def test_the_keys_from_settings_reach_the_app(probe: AppProbe) -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from mujoco_mojo.mjcf.xml_model import XMLModel
 
 __all__ = ["Size"]
@@ -30,13 +32,18 @@ class Size(XMLModel):
     memory: str = "-1"
     """This attribute specifies the size of memory allocated for dynamic arrays in the mjData.arena memory space, in bytes. The default setting of -1 instructs the compiler to guess how much space to allocate. Appending the digits with one of the letters {K, M, G, T, P, E} sets the unit to be {kilo, mega, giga, tera, peta, exa}-byte, respectively. Thus "16M" means "allocate 16 megabytes of arena memory". See the Memory allocation section for details."""
 
-    njmax: int = -1
+    njmax: int = Field(-1, deprecated="Size.njmax is deprecated, set `memory` instead.")
     """This is a deprecated legacy attribute. It previously determined the maximum allowed number of constraints. Currently it means "allocate as much memory as would have previously been required for this number of constraints". Specifying both njmax and memory leads to an error."""
 
-    nconmax: int = -1
+    nconmax: int = Field(
+        -1,
+        deprecated="Size.nconmax is deprecated, and is kept only for backwards compatibility and debugging.",
+    )
     """This attribute specifies the maximum number of contacts that will be generated at runtime. If the number of active contacts is about to exceed this value, the extra contacts are discarded and a warning is generated. This is a deprecated legacy attribute which previously affected memory allocation. It is kept for backwards compatibility and debugging purposes."""
 
-    nstack: int = -1
+    nstack: int = Field(
+        -1, deprecated="Size.nstack is deprecated, set `memory` instead."
+    )
     """This is a deprecated legacy attribute. It previously determined the maximum size of the stack. If nstack is specified, then the size of mjData.narena is `nstack * sizeof(mjtNum)` bytes, plus an additional space for the constraint solver. Specifying both nstack and memory leads to an error."""
 
     nuserdata: int = 0

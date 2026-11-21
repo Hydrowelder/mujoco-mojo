@@ -73,7 +73,10 @@ class Light(XMLModel):
     type: LightType = LightType.SPOT
     """Determines the type of light. Note that some light types may not be supported by some renderers (e.g. only spot and directional lights are supported by the default native renderer)."""
 
-    directional: bool = False
+    directional: bool = Field(
+        False,
+        deprecated="Light.directional is deprecated, set `type=LightType.DIRECTIONAL` instead.",
+    )
     """This is a deprecated legacy attribute. Please use light type instead. If set to "true", and no type is specified, this will change the light type to be directional."""
 
     castshadow: bool = True
