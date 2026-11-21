@@ -11,6 +11,7 @@
 - The signal lists' search box can now switch between a regular expression and plain text, and search signal descriptions too
 - Setting an attribute MuJoCo has deprecated (`Light.directional`, `Size.njmax`, `Size.nconmax`, `Size.nstack`, `Statistic.meaninertia`, `Compiler.settotalmass`) now gives a `DeprecationWarning`, and logs it
 - Fixed Reloaded's log pane not showing what the first model generation logged
+- Added `reloaded.studio` settings for which panels Studio shows when it opens
 
 ## Version 2.8.3 (2026-11-17)
 

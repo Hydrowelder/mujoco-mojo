@@ -164,6 +164,16 @@ Your generator builds the model, so a model file dropped onto Studio is ignored,
 
 If the native window (`-ui studio`) fails to draw on a machine whose display only has software OpenGL, such as a remote desktop, run it with `--gfx opengl_software`, or set `reloaded.gfx`.
 
+Studio opens with its Options and Inspector panels and its status bar showing. To change what shows when it opens, set the `reloaded.studio` options, one for each item in Studio's View menu. The menu still toggles them once Studio is open.
+
+```toml linenums="0"
+[reloaded.studio]
+show_console = true
+show_inspector = false
+```
+
+The options are `show_info`, `show_profiler`, `show_console`, `show_options`, `show_toolbar`, `show_view_gizmo`, `show_status_bar`, and `show_inspector`. They apply to `-ui studio` and `-ui web`, not to `-ui opengl`.
+
 With `-ui web`, the address to open is printed at the top of the log, right after the line that says Reloaded is live. Over SSH it is followed by the command that forwards the port. Reloaded takes the first free port from `--port` upward.
 
 ### Changing the Keys

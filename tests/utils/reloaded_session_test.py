@@ -5,7 +5,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -23,7 +23,11 @@ import mujoco_mojo.utils.layers.reloaded as reloaded_package
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
 import mujoco_mojo.utils.layers.reloaded.session as session_module
 from mujoco_mojo.runtime import RunTarget, TargetKind
-from mujoco_mojo.settings import ReloadedKeySettings, ReloadedSettings
+from mujoco_mojo.settings import (
+    ReloadedKeySettings,
+    ReloadedSettings,
+    ReloadedStudioSettings,
+)
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.layers.reloaded import MojoReloaded
@@ -146,6 +150,52 @@ def test_a_settings_file_can_choose_the_studio_graphics() -> None:
     assert settings.gfx is StudioGraphics.OPENGL_SOFTWARE
     with pytest.raises(ValueError):
         ReloadedSettings.model_validate({"gfx": "hologram"})
+
+
+def test_the_studio_settings_default_to_the_options_studio_opens_with() -> None:
+    """The defaults are Studio's own, so nothing changes until someone sets one."""
+    studio_config = pytest.importorskip("mujoco.studio.app").Config
+    studios = {f.name: f.default for f in fields(studio_config)}
+
+    mine = ReloadedStudioSettings().model_dump()
+
+    assert {name: mine[name] for name in studios if name in mine} == {
+        name: studios[name] for name in studios if name in mine
+    }
+
+
+def test_every_option_studio_can_open_with_has_a_setting() -> None:
+    """A Studio that adds an option fails this, which is the cue to add the setting."""
+    studio_config = pytest.importorskip("mujoco.studio.app").Config
+
+    assert {f.name for f in fields(studio_config)} <= set(
+        ReloadedStudioSettings.model_fields
+    )
+
+
+def test_a_settings_file_can_choose_what_studio_opens_with() -> None:
+    settings = ReloadedSettings.model_validate(
+        {"studio": {"show_console": True, "show_inspector": False}}
+    )
+
+    assert settings.studio.show_console is True
+    assert settings.studio.show_inspector is False
+    assert settings.studio.show_options is True
+    with pytest.raises(ValueError):
+        ReloadedSettings.model_validate({"studio": {"show_nothing": True}})
+
+
+def test_the_studio_settings_go_to_the_studio_viewer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+    session = make_session(tmp_path, UserInterface.STUDIO)
+    session.studio = ReloadedStudioSettings(show_console=True)
+
+    backend = session._create_backend()
+
+    assert isinstance(backend, StudioBackend)
+    assert backend.studio is session.studio
 
 
 def test_the_command_line_rejects_an_unknown_graphics_mode() -> None:

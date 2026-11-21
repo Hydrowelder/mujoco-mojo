@@ -15,10 +15,12 @@ from typing import Any
 import mujoco
 import numpy as np
 import pytest
+from mujoco.studio import app as studio_app
 from mujoco.studio import launch_native, launch_web, messages, sim
 from reloaded_fakes import make_state
 
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
+from mujoco_mojo.settings import ReloadedStudioSettings
 from mujoco_mojo.typing import StudioGraphics
 from mujoco_mojo.utils.layers.reloaded.backends import (
     StudioBackend,
@@ -636,6 +638,66 @@ def test_a_viewer_that_cannot_start_ends_the_start_with_its_own_reason(
     assert fake_viewer.closed
     assert not backend.is_running()
     assert not [t for t in threading.enumerate() if t.name == "studio-pump"]
+
+
+@pytest.mark.parametrize("web", [True, False], ids=["web", "native"])
+def test_the_studio_settings_decide_what_shows_when_studio_opens(
+    fake_viewer: FakeHandle,
+    controls: FakeControls,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    web: bool,
+) -> None:
+    plugins: list[Any] = []
+
+    def spy(launcher: Any) -> Any:
+        def launch(*args: Any, **kwargs: Any) -> Any:
+            plugins.extend(kwargs["plugins"])
+            return launcher(*args, **kwargs)
+
+        return launch
+
+    monkeypatch.setattr(launch_web, "launch", spy(launch_web.launch))
+    monkeypatch.setattr(launch_native, "launch", spy(launch_native.launch))
+    backend = StudioBackend(
+        xml_path=lambda: tmp_path / "model.xml",
+        web=web,
+        studio=ReloadedStudioSettings(show_console=True, show_inspector=False),
+    )
+    backend.attach(controls)
+
+    backend.start(make_state())
+
+    app = next(p for p in plugins if isinstance(p, studio_app.App))
+    assert app.config.show_console is True
+    assert app.config.show_inspector is False
+    # whatever was not set keeps Studio's own default
+    assert app.config.show_options is True
+    assert app.config.show_info is False
+    backend.close()
+
+
+def test_studio_opens_as_it_always_did_when_nothing_is_set(
+    fake_viewer: FakeHandle,
+    controls: FakeControls,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugins: list[Any] = []
+    launcher = launch_web.launch
+
+    def launch(*args: Any, **kwargs: Any) -> Any:
+        plugins.extend(kwargs["plugins"])
+        return launcher(*args, **kwargs)
+
+    monkeypatch.setattr(launch_web, "launch", launch)
+    backend = started_backend(controls, tmp_path)
+
+    backend.start(make_state())
+
+    app = next(p for p in plugins if isinstance(p, studio_app.App))
+    assert app.config == studio_app.Config()
+    backend.close()
 
 
 def test_a_viewer_that_dies_mid_run_stops_the_backend_and_keeps_its_reason(

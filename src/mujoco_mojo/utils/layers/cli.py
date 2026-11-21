@@ -1722,6 +1722,7 @@ def run_reloaded(
         watch=watch,
         record=record,
         keys=_SETTINGS.reloaded.keys,
+        studio=_SETTINGS.reloaded.studio,
         args=processed_args,
         kwargs=processed_kwargs,
         port=web_port,

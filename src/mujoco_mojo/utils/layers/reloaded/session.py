@@ -20,7 +20,7 @@ from rich.markup import escape
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.settings import ReloadedKeySettings
+from mujoco_mojo.settings import ReloadedKeySettings, ReloadedStudioSettings
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.defaults import (
@@ -197,6 +197,9 @@ class MojoReloaded:
 
     keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
     """The keys that trigger the terminal UI's actions, from the `reloaded.keys` settings."""
+
+    studio: ReloadedStudioSettings = field(default_factory=ReloadedStudioSettings)
+    """Which parts of Studio are showing when it opens, from the `reloaded.studio` settings."""
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     """Called by the runtime manager after every step with the state and the arrows and lines to draw, so the viewer follows the run. Set from the viewer backend while the session runs."""
@@ -662,6 +665,7 @@ class MojoReloaded:
                     web=self.ui is UserInterface.WEB,
                     port=self.port,
                     gfx=self.gfx,
+                    studio=self.studio,
                 )
             case _ as unreachable:
                 assert_never(unreachable)

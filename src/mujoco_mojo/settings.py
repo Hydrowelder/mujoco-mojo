@@ -741,6 +741,60 @@ class ReloadedKeySettings(BaseModel):
         return self
 
 
+class ReloadedStudioSettings(BaseModel):
+    """Which parts of MuJoCo Studio show when it opens, as Studio's own `show_` options, which its View menu still toggles. Not used by the `opengl` viewer. The defaults are Studio's own."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="Studio")
+
+    show_info: bool = Field(
+        default=False,
+        title="Info",
+        description="Show Studio's Info panel. Toggled with `F2`.",
+    )
+
+    show_profiler: bool = Field(
+        default=False,
+        title="Profiler",
+        description="Show the simulation profiler. Toggled with `F3`.",
+    )
+
+    show_console: bool = Field(
+        default=False,
+        title="Console",
+        description="Show the Studio Console, which collects MuJoCo's log messages, Python logging records, warnings, and uncaught thread exceptions.",
+    )
+
+    show_options: bool = Field(
+        default=True,
+        title="Options",
+        description="Show the visualization options panel. Toggled with `Tab`.",
+    )
+
+    show_toolbar: bool = Field(
+        default=False,
+        title="Toolbar",
+        description="Show Studio's toolbar.",
+    )
+
+    show_view_gizmo: bool = Field(
+        default=True,
+        title="View Gizmo",
+        description="Show Studio's view gizmo.",
+    )
+
+    show_status_bar: bool = Field(
+        default=True,
+        title="Status Bar",
+        description="Show the status bar, whose counts open the Console.",
+    )
+
+    show_inspector: bool = Field(
+        default=True,
+        title="Inspector",
+        description="Show the model hierarchy and the property inspector. Toggled with `Shift+Tab`.",
+    )
+
+
 class ReloadedSettings(BaseModel):
     """Settings for `mujoco-mojo reloaded`."""
 
@@ -793,6 +847,8 @@ class ReloadedSettings(BaseModel):
     )
 
     keys: ReloadedKeySettings = Field(default_factory=ReloadedKeySettings)
+
+    studio: ReloadedStudioSettings = Field(default_factory=ReloadedStudioSettings)
 
 
 class _RunDefaults(BaseModel):
