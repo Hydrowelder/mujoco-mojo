@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 from arm import Arm
 from environment import Environment
+from overview import Overview
 from station import Station
 from visitor import Visitor
 
@@ -23,7 +24,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     station = Station.new(mojo_model)
     Arm.new(mojo_model, station.fixture)
     Environment.new(mojo_model)
-    Visitor.new(mojo_model)
+    visitor = Visitor.new(mojo_model)
+    Overview.new(mojo_model, visitor.body)
 
     mojo_model.mjcf.options.append(
         mojo.Option(
