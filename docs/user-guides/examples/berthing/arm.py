@@ -22,6 +22,19 @@ REACH_OPACITY = 0.02
 
 
 # --8<-- [start:inputs]
+class CameraInput(mojo.UserData):
+    """Where the camera on the free end effector sits, in the end effector's frame, and how wide it sees. It looks along the end effector."""
+
+    FOVY: float = 70
+    """Vertical field of view, in degrees."""
+
+    HEIGHT: float = 0.22 * US.m
+    """How far the camera sits off the end effector's axis, clear of its radius, so the end effector stays out of the picture."""
+
+    SETBACK: float = 0.1 * US.m
+    """How far the camera sits behind the end effector's tip."""
+
+
 class ArmInput(mojo.UserData):
     """Dimensions and masses of the arm's parts, from the station out. The end effector is `END_EFFECTOR`, in its own module, since both ends use it. The roll, yaw and pitch housings are the same at both ends of the arm."""
 
@@ -54,6 +67,9 @@ class ArmInput(mojo.UserData):
         RADIUS=0.12 * US.m, LENGTH=3.0 * US.m, MASS=120 * US.kg
     )
     """The second boom, from the elbow to the wrist."""
+
+    camera: CameraInput = CameraInput()
+    """The camera on the free end effector. The base end effector has none."""
 
     @property
     def LENGTH(self) -> float:
@@ -151,6 +167,9 @@ class Arm(mojo.UserData):
 
     reach: mojo.GeomMesh
     """The reach envelope, a translucent hemisphere centered on the tip of the base end effector with the arm's full length as its radius. The free end can never get outside it."""
+
+    camera: mojo.Camera
+    """The camera on the free end effector, looking along it. Its `name` is what a video recorder needs."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, base: GrappleFixture) -> Self:
@@ -314,6 +333,17 @@ class Arm(mojo.UserData):
             mojo_model, "free", mojo.PoseQuat(pos=np.array((ARM.roll.LENGTH, 0, 0)))
         )
         wrist_roll_body.frames.append(free_effector.frame)
+
+        # the camera is only on the free end effector, in its frame so the roll turns it too: it sits just behind the tip and off the axis, and looks along the end effector (+X in its frame, with +Z up), so the grapple fixture grows in the picture as the end effector closes in
+        eye = np.array((END_EFFECTOR.LENGTH - ARM.camera.SETBACK, 0, ARM.camera.HEIGHT))
+        camera = mojo.Camera(
+            name=mojo.CameraName("arm_camera"),
+            fovy=ARM.camera.FOVY,
+            pose=mojo.PoseQuat.look_at(
+                target=eye + np.array((1, 0, 0)), eye=eye, roll=-90
+            ),
+        )
+        free_effector.frame.cameras.append(camera)
         wrist_roll = mojo.Joint(
             name=mojo.JointName("wrist_roll"),
             type=mojo.JointType.HINGE,
@@ -339,6 +369,7 @@ class Arm(mojo.UserData):
             base_effector=base_effector,
             free_effector=free_effector,
             reach=reach,
+            camera=camera,
         )
 
 
