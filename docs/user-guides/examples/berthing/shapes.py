@@ -10,6 +10,19 @@ import mujoco_mojo as mojo
 
 
 # --8<-- [start:shapes]
+class CylinderInput(mojo.UserData):
+    """Radius, length and mass of a cylinder, which the inputs of a part made of one can share."""
+
+    RADIUS: float
+    """Radius of the cylinder."""
+
+    LENGTH: float
+    """Length of the cylinder, along its axis."""
+
+    MASS: float
+    """Mass of the cylinder."""
+
+
 def cylinder_mesh(
     name: str, radius: float, length: float, cells: int = 8
 ) -> mojo.MeshCylinder:

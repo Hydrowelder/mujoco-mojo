@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from arm import Arm
 from environment import Environment
 from station import Station
 from visitor import Visitor
@@ -19,7 +20,8 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     mojo_model.mjcf.model = mojo.ModelName("Berthing")
     mojo_model.mjcf.worldbody = mojo.WorldBody()
 
-    Station.new(mojo_model)
+    station = Station.new(mojo_model)
+    Arm.new(mojo_model, station.fixture)
     Environment.new(mojo_model)
     Visitor.new(mojo_model)
 
