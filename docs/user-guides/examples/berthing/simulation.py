@@ -8,12 +8,16 @@ import numpy as np
 from arm import Arm
 from capture import Capture
 from environment import Environment
+from mission import MISSION
 from overview import Overview
+from pydantic import PrivateAttr
 from station import Station
 from visitor import Visitor
 
 import mujoco_mojo as mojo
+import mujoco_mojo.runtime as rt
 
+logger = mojo.utils.get_logger(__name__)
 US = mojo.UnitSystem.si()  # define a unit system used throughout the model
 
 
@@ -35,6 +39,43 @@ class Berthing(mojo.UserData):
 
     capture: Capture
     """The weld that joins the arm to the visitor, which starts switched off."""
+
+    _clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
+    """The distance from each part of the arm that could hit the hull to the hull, made by `register_proximities`."""
+
+    _gap: mojo.utils.Proximity | None = PrivateAttr(default=None)
+    """The distance from the free end effector to the visitor's grapple fixture, made by `register_proximities`."""
+
+    def register_proximities(self) -> None:
+        """
+        Starts measuring the two distances the mission watches, and logs them. Call it inside the runtime manager's `with` block.
+
+        The clearance is how close each boom and the end effector are to the visitor's hull, which has to stay above zero. The gap is how far the end effector is from the visitor's grapple fixture, which the arm is closing. `Proximity` measures between mesh volumes, which is why all of these parts are builtin meshes: it uses the convex hull of each, which is exact for the cylinders here.
+        """
+        arm, visitor = self.arm, self.visitor
+        self._clearances = [
+            mojo.utils.Proximity(
+                volume_1=part, volume_2=visitor.hull, dist_max=MISSION.CLEARANCE_RANGE
+            ).register_to_rm()
+            for part in (arm.boom_1, arm.boom_2, arm.free_effector.geom)
+        ]
+        self._gap = mojo.utils.Proximity(
+            volume_1=arm.free_effector.geom,
+            volume_2=visitor.fixture.geom,
+            dist_max=MISSION.GAP_RANGE,
+        ).register_to_rm()
+
+        for proximity in (*self._clearances, self._gap):
+            proximity.request(channels=["dist", "fromto", "prox_type"])
+
+    def gap(self, state: mojo.MjState) -> float:
+        """The distance from the free end effector to the visitor's grapple fixture, in meters."""
+        assert self._gap  # made by register_proximities
+        return self._gap.get_proximity(state)[0]
+
+    def clearance(self, state: mojo.MjState) -> float:
+        """The distance from the closest of the booms and the free end effector to the visitor's hull, in meters, which is capped at `MISSION.CLEARANCE_RANGE`."""
+        return min(part.get_proximity(state)[0] for part in self._clearances)
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
@@ -87,3 +128,44 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
 
 # --8<-- [end:generate]
+
+
+# --8<-- [start:runtime]
+def runtime(
+    mojo_model: mojo.MojoModel,
+    runtime_manager: rt.RuntimeManager,
+    state: mojo.MjState,
+    *args,
+    **kwargs,
+) -> mojo.MojoModel:
+    """Runs the berthing. Each part of the model that needs a control applied has a method of its own for it, and this only calls them."""
+    with runtime_manager as rm:
+        berthing = mojo_model.get_user_data(Berthing)
+        arm, visitor = berthing.arm, berthing.visitor
+        arm.register_servos()
+        berthing.register_proximities()
+
+        parked = False
+        while state.data.time < MISSION.END_TIME:
+            # the goal is worked out from where the grapple fixture is now, so the arm keeps following it if the visitor drifts
+            remaining = arm.approach(state, visitor.fixture.site, MISSION.PRE_STANDOFF)
+
+            # being at the parking spot is not enough: the end effector also has to be on the fixture's axis and pointing along it
+            off_axis, angle = arm.misalignment(state, visitor.fixture.site)
+            lined_up = off_axis < MISSION.COLINEAR_DISTANCE and angle < np.deg2rad(
+                MISSION.COLINEAR_ANGLE_DEG
+            )
+            if remaining < MISSION.PARKED_TOLERANCE and lined_up and not parked:
+                parked = True
+                logger.info(
+                    f"t={state.data.time:.1f}s: parked, gap {berthing.gap(state):.3f} m, "
+                    f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees "
+                    f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
+                )
+
+            rm.step(state)
+
+    return mojo_model
+
+
+# --8<-- [end:runtime]

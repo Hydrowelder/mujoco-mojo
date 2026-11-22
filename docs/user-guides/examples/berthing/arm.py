@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from typing import Literal, Self
 
+import mujoco
 import numpy as np
 from end_effector import END_EFFECTOR, EndEffector
 from fixture import GrappleFixture
+from pydantic import PrivateAttr
 from shapes import CylinderInput, cylinder_mesh, lying_along
 from visitor import VISITOR
 
 import mujoco_mojo as mojo
+import mujoco_mojo.runtime as rt
 
 US = mojo.UnitSystem.si()  # define a unit system used throughout the model
 
@@ -20,6 +23,13 @@ PITCH_COLOR = mojo.utils.Color.GREEN_500.rgba
 YAW_COLOR = mojo.utils.Color.BLUE_500.rgba
 
 REACH_OPACITY = 0.02
+
+# how `Arm.solve` works: it stops when the tip is this close to the goal (in meters and in radians), gives up after this many iterations, damps its steps so they stay sane near a singular pose, never moves a joint more than this far (in radians) in one iteration, and pulls the joints toward home by this fraction of their angle in the direction that does not move the tip. The pull is what stops the seventh joint drifting, but it also leaves a small error that grows with it (about 2e-5 at this value), so the tolerance has to stay above that
+SOLVER_TOLERANCE = 1e-4
+SOLVER_ITERATIONS = 100
+SOLVER_DAMPING = 0.05
+SOLVER_MAX_STEP = 0.2
+SOLVER_HOME_PULL = 0.01
 
 
 # --8<-- [start:inputs]
@@ -50,6 +60,9 @@ class ServoInput(mojo.UserData):
 
     RANGE_DEG: float = 180
     """Largest angle a servo can be commanded to, in degrees either way. It is also the range of a viewer's control sliders."""
+
+    SLEW_RATE_DEG: float = 8
+    """Fastest a servo's commanded angle may move, in degrees per second. A step in the command would make a huge torque, so the runtime moves it at this rate instead."""
 
 
 class HomeInput(mojo.UserData):
@@ -240,6 +253,139 @@ class Arm(mojo.UserData):
 
     servos: list[mojo.ActuatorPosition]
     """The position servo of each joint, in the same order as `joints`. A servo's control value is the angle its joint is commanded to, in radians from home, so zero holds the arm in its home pose."""
+
+    _command: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7))
+    """The angle each servo is commanded to hold, in radians from home, in the order of `joints`. It is runtime state, so it is not saved with the model, and it starts at zero, which is home."""
+
+    _solution: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7))
+    """The answer of the last `solve`, in radians from home, which the next one starts from. It starts at zero, which is home."""
+
+    _scratch: mujoco.MjData | None = PrivateAttr(default=None)
+    """A private copy of the model's state, which `solve` moves the joints of so the live simulation is never disturbed. It is made the first time it is needed."""
+
+    _qpos_address: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7, int))
+    """Where each joint's angle is in `qpos`, in the order of `joints`. Found along with `_scratch`."""
+
+    _dof_address: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7, int))
+    """Where each joint's column is in the Jacobian, in the order of `joints`. Found along with `_scratch`."""
+
+    _tip_id: int = PrivateAttr(default=-1)
+    """The free end effector's tip site in the compiled model. Found along with `_scratch`."""
+
+    @property
+    def command(self) -> np.ndarray:
+        """A copy of the angles the servos are commanded to hold, in radians from home, in the order of `joints`."""
+        return self._command.copy()
+
+    def register_servos(self) -> None:
+        """Hands each servo to the runtime. Every step the control value of each is read from the commanded angles, so the arm holds whatever it was last commanded to, which at first is home. Call it inside the runtime manager's `with` block."""
+        for i, servo in enumerate(self.servos):
+            rt.ActuatorControl(
+                name=f"{servo.name}_command",
+                actuator=servo,
+                control_func=lambda user_data, state, i=i: float(self._command[i]),
+            ).register_to_rm()
+
+    def solve(
+        self, state: mojo.MjState, tip: mojo.Vec3, frame: mojo.Mat3
+    ) -> np.ndarray:
+        """
+        Joint angles, in radians from home, that put the free end effector's tip at `tip` with the orientation `frame`, both in the world. They are in the order of `joints`.
+
+        It is a damped least squares solve on a private copy of the state: it repeatedly moves the joints by the step that the arm's Jacobian says brings the tip closer to the goal. It starts from its own last answer, not from the angles the servos are commanded to (which lag behind while the arm slews), so a goal that holds still costs nothing and one that moves slowly costs a step or two, and the answer is continuous from one call to the next. The seventh joint, which the goal leaves free, is settled by pulling the arm toward its home pose in the one direction that does not move the tip. A goal out of reach gives the nearest the arm can get.
+        """
+        model = state.model
+        if self._scratch is None:
+            self._scratch = mujoco.MjData(model)
+            self._qpos_address = np.array(
+                [model.jnt_qposadr[joint.get_id(model)] for joint in self.joints]
+            )
+            self._dof_address = np.array(
+                [model.jnt_dofadr[joint.get_id(model)] for joint in self.joints]
+            )
+            self._tip_id = self.free_effector.tip.get_id(model)
+        scratch = self._scratch
+
+        goal_quat = np.empty(4)
+        mujoco.mju_mat2Quat(goal_quat, np.asarray(frame, dtype=float).ravel())
+
+        angles = self._solution.copy()
+        for _ in range(SOLVER_ITERATIONS):
+            scratch.qpos[self._qpos_address] = angles
+            mujoco.mj_kinematics(model, scratch)
+            mujoco.mj_comPos(model, scratch)
+
+            # the orientation error is the rotation, as a vector in the world, that takes the tip's frame to the goal's
+            tip_quat, tip_inverse, difference = np.empty(4), np.empty(4), np.empty(4)
+            mujoco.mju_mat2Quat(tip_quat, scratch.site_xmat[self._tip_id])
+            mujoco.mju_negQuat(tip_inverse, tip_quat)
+            mujoco.mju_mulQuat(difference, goal_quat, tip_inverse)
+            rotation_error = np.empty(3)
+            mujoco.mju_quat2Vel(rotation_error, difference, 1.0)
+            position_error = tip - scratch.site_xpos[self._tip_id]
+            if (
+                np.linalg.norm(position_error) < SOLVER_TOLERANCE
+                and np.linalg.norm(rotation_error) < SOLVER_TOLERANCE
+            ):
+                break
+
+            jacobian_position = np.zeros((3, model.nv))
+            jacobian_rotation = np.zeros((3, model.nv))
+            mujoco.mj_jacSite(
+                model, scratch, jacobian_position, jacobian_rotation, self._tip_id
+            )
+            jacobian = np.vstack((jacobian_position, jacobian_rotation))[
+                :, self._dof_address
+            ]
+            error = np.concatenate((position_error, rotation_error))
+            pseudo_inverse = jacobian.T @ np.linalg.inv(
+                jacobian @ jacobian.T + SOLVER_DAMPING**2 * np.eye(6)
+            )
+            step = pseudo_inverse @ error
+
+            # the seventh joint leaves the goal a whole family of answers (the elbow can swivel around the line from shoulder to wrist), and nothing in the goal chooses between them, so numerical noise alone would walk the arm along it. The answer closest to home is chosen instead, by a pull toward home that is projected so that it cannot move the tip
+            null_space = np.eye(len(angles)) - pseudo_inverse @ jacobian
+            step -= null_space @ (SOLVER_HOME_PULL * angles)
+
+            angles += np.clip(step, -SOLVER_MAX_STEP, SOLVER_MAX_STEP)
+
+        self._solution = angles
+        return angles.copy()
+
+    def slew(self, goal: np.ndarray, dt: float) -> None:
+        """Moves the commanded angles one step of `dt` seconds toward `goal`, in radians from home and in the order of `joints`, no faster than the servos' slew rate and never past their range."""
+        limit = np.deg2rad(ARM.servo.RANGE_DEG)
+        step = np.deg2rad(ARM.servo.SLEW_RATE_DEG) * dt
+        goal = np.clip(goal, -limit, limit)
+        self._command += np.clip(goal - self._command, -step, step)
+
+    def approach(
+        self, state: mojo.MjState, site: mojo.SiteSphere, standoff: float
+    ) -> float:
+        """
+        Takes one step toward putting the free end effector's tip `standoff` meters in front of `site`, facing it, and returns how far the tip still is from there, in meters.
+
+        In front means back along the site's X axis, which points into whatever the site is on, and facing it means the tip's frame matches the site's, which is the frame the capture weld pulls the two together in. A `standoff` of zero is on the site itself. The goal is worked out from where the site is now, so it follows a site that moves.
+        """
+        frame = site.rt_xmat(state)
+        goal = site.rt_pos(state) - standoff * frame[:, 0]
+        self.slew(self.solve(state, goal, frame), state.model.opt.timestep)
+        return float(np.linalg.norm(self.free_effector.tip.rt_pos(state) - goal))
+
+    def misalignment(
+        self, state: mojo.MjState, site: mojo.SiteSphere
+    ) -> tuple[float, float]:
+        """
+        How far the free end effector is from being colinear with `site`: the distance of the tip from the line through the site along its X axis, in meters, and the angle between the tip's X axis and the site's, in radians. Both zero means the end effector is on the site's axis and pointing along it, which is how it has to be to go in straight.
+
+        Being close to a spot on the axis does not say so: the tip can be in the right place and turned, or on the right heading and off to one side.
+        """
+        axis = site.rt_xmat(state)[:, 0]
+        to_tip = self.free_effector.tip.rt_pos(state) - site.rt_pos(state)
+        off_axis = np.linalg.norm(to_tip - (to_tip @ axis) * axis)
+        tip_axis = self.free_effector.tip.rt_xmat(state)[:, 0]
+        angle = np.arccos(np.clip(tip_axis @ axis, -1.0, 1.0))
+        return float(off_axis), float(angle)
 
     @property
     def joints(self) -> list[mojo.Joint]:
