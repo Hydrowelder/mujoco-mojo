@@ -17,6 +17,18 @@ class Capture(mojo.UserData):
     weld: mojo.EqualityWeldSite
     """The weld. It starts inactive. Its `name` is what the runtime needs to switch it on and off."""
 
+    def engage(self, state: mojo.MjState) -> None:
+        """Switches the weld on, so the end effector's tip and the visitor's grapple site are pulled together and the visitor goes wherever the arm goes."""
+        self.weld.enable(state)
+
+    def release(self, state: mojo.MjState) -> None:
+        """Switches the weld off, which lets the visitor go."""
+        self.weld.disable(state)
+
+    def is_engaged(self, state: mojo.MjState) -> bool:
+        """Whether the weld is on."""
+        return self.weld.is_active(state)
+
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, arm: Arm, visitor: Visitor) -> Self:
         """Makes the weld between the tip of the arm's free end effector and the site at the tip of the visitor's grapple fixture, and adds it to the model."""

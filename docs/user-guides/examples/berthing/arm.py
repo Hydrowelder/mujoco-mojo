@@ -359,18 +359,21 @@ class Arm(mojo.UserData):
         goal = np.clip(goal, -limit, limit)
         self._command += np.clip(goal - self._command, -step, step)
 
+    def move_to(self, state: mojo.MjState, tip: mojo.Vec3, frame: mojo.Mat3) -> float:
+        """Takes one step toward putting the free end effector's tip at `tip` with the orientation `frame`, both fixed in the world, and returns how far the tip still is from there, in meters."""
+        self.slew(self.solve(state, tip, frame), state.model.opt.timestep)
+        return float(np.linalg.norm(self.free_effector.tip.rt_pos(state) - tip))
+
     def approach(
         self, state: mojo.MjState, site: mojo.SiteSphere, standoff: float
     ) -> float:
         """
         Takes one step toward putting the free end effector's tip `standoff` meters in front of `site`, facing it, and returns how far the tip still is from there, in meters.
 
-        In front means back along the site's X axis, which points into whatever the site is on, and facing it means the tip's frame matches the site's, which is the frame the capture weld pulls the two together in. A `standoff` of zero is on the site itself. The goal is worked out from where the site is now, so it follows a site that moves.
+        In front means back along the site's X axis, which points into whatever the site is on, and facing it means the tip's frame matches the site's, which is the frame the capture weld pulls the two together in. A `standoff` of zero is on the site itself, and a negative one is past it. The goal is worked out from where the site is now, so it follows a site that moves, which is what lets the arm close in on a drifting visitor, but also means it is no use once the visitor is held by the arm: the site then goes wherever the tip goes, so use `move_to` with a goal fixed in the world.
         """
         frame = site.rt_xmat(state)
-        goal = site.rt_pos(state) - standoff * frame[:, 0]
-        self.slew(self.solve(state, goal, frame), state.model.opt.timestep)
-        return float(np.linalg.norm(self.free_effector.tip.rt_pos(state) - goal))
+        return self.move_to(state, site.rt_pos(state) - standoff * frame[:, 0], frame)
 
     def misalignment(
         self, state: mojo.MjState, site: mojo.SiteSphere

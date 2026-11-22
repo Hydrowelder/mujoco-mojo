@@ -8,7 +8,7 @@ import numpy as np
 from arm import Arm
 from capture import Capture
 from environment import Environment
-from mission import MISSION
+from mission import MISSION, Phase
 from overview import Overview
 from pydantic import PrivateAttr
 from station import Station
@@ -141,29 +141,80 @@ def runtime(
     """Runs the berthing. Each part of the model that needs a control applied has a method of its own for it, and this only calls them."""
     with runtime_manager as rm:
         berthing = mojo_model.get_user_data(Berthing)
-        arm, visitor = berthing.arm, berthing.visitor
+        arm, visitor, capture = berthing.arm, berthing.visitor, berthing.capture
+        site = visitor.fixture.site
         arm.register_servos()
         berthing.register_proximities()
 
-        parked = False
-        while state.data.time < MISSION.END_TIME:
-            # the goal is worked out from where the grapple fixture is now, so the arm keeps following it if the visitor drifts
-            remaining = arm.approach(state, visitor.fixture.site, MISSION.PRE_STANDOFF)
+        dt = state.model.opt.timestep
+        phase = Phase.APPROACH
+        standoff = (
+            MISSION.PRE_STANDOFF
+        )  # how far in front of the fixture the tip is aimed
+        goal_tip, goal_frame = (
+            np.zeros(3),
+            np.eye(3),
+        )  # where the visitor is carried to, set at capture
+        arrived_at: float | None = None
 
-            # being at the parking spot is not enough: the end effector also has to be on the fixture's axis and pointing along it
-            off_axis, angle = arm.misalignment(state, visitor.fixture.site)
+        while state.data.time < MISSION.END_TIME:
+            # the end effector has to be on the fixture's axis and pointing along it before it goes in, not just near a spot on it
+            off_axis, angle = arm.misalignment(state, site)
             lined_up = off_axis < MISSION.COLINEAR_DISTANCE and angle < np.deg2rad(
                 MISSION.COLINEAR_ANGLE_DEG
             )
-            if remaining < MISSION.PARKED_TOLERANCE and lined_up and not parked:
-                parked = True
-                logger.info(
-                    f"t={state.data.time:.1f}s: parked, gap {berthing.gap(state):.3f} m, "
-                    f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees "
-                    f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
-                )
+
+            match phase:
+                case Phase.APPROACH:
+                    # the goal is worked out from where the grapple fixture is now, so the arm keeps following it if the visitor drifts
+                    remaining = arm.approach(state, site, standoff)
+                    if remaining < MISSION.PARKED_TOLERANCE and lined_up:
+                        logger.info(
+                            f"t={state.data.time:.1f}s: parked, gap {berthing.gap(state):.3f} m, "
+                            f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees "
+                            f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
+                        )
+                        phase = Phase.CAPTURE
+
+                case Phase.CAPTURE:
+                    # creep in, but only while lined up, and aim a little past the fixture so the servos' lag never stalls the end effector short of the capture gap
+                    if lined_up:
+                        standoff = max(
+                            standoff - MISSION.APPROACH_SPEED * dt, -MISSION.OVERSHOOT
+                        )
+                    arm.approach(state, site, standoff)
+
+                    gap = berthing.gap(state)
+                    if gap < MISSION.CAPTURE_GAP and lined_up:
+                        capture.engage(state)
+                        logger.info(
+                            f"t={state.data.time:.1f}s: captured, gap {gap * 1000:.1f} mm, "
+                            f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees out of line"
+                        )
+
+                        # from here the fixture goes wherever the tip goes, so the goal is fixed in the world: back along the fixture's axis, with the same orientation. The frame is copied because `rt_xmat` is a view of the live data, which would follow the visitor round instead of holding it
+                        goal_frame = site.rt_xmat(state).copy()
+                        goal_tip = (
+                            site.rt_pos(state)
+                            - MISSION.PULL_DISTANCE * goal_frame[:, 0]
+                        )
+                        phase = Phase.BERTH
+
+                case Phase.BERTH:
+                    remaining = arm.move_to(state, goal_tip, goal_frame)
+                    if remaining < MISSION.PARKED_TOLERANCE:
+                        if arrived_at is None:
+                            arrived_at = state.data.time
+                            logger.info(f"t={arrived_at:.1f}s: pulled in, holding")
+                        if state.data.time - arrived_at > MISSION.HOLD_TIME:
+                            break
 
             rm.step(state)
+
+        logger.info(
+            f"finished at t={state.data.time:.1f}s with the weld "
+            f"{'on' if capture.is_engaged(state) else 'off'}"
+        )
 
     return mojo_model
 
