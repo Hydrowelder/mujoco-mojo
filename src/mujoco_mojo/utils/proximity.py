@@ -224,6 +224,10 @@ class Proximity(MojoBaseModel):
 
         min_dist = max(0.0, min_dist)  # clip from below to zero
 
+        # past `distmax` MuJoCo returns `distmax` with the points zeroed, so keep the broadphase's points, which the broadphase already stored
+        if min_dist >= self.dist_max:
+            return min_dist, p1, p2, ProximityType.CONVEX_HULL
+
         p1 = mj_fromto[:3].copy()
         p2 = mj_fromto[3:6].copy()
         self.update_last(p1, p2, state)

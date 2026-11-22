@@ -14,6 +14,7 @@
 - Added `reloaded.studio` settings for which panels Studio shows when it opens
 - Fixed a `VideoRecorder` with a `recording_trigger` that turns on late starting with a burst of near-identical frames
 - Added `Proximity.active`, which switches a pair off so it is no longer measured, drawn or logged
+- Fixed a `CONVEX_HULL` `Proximity` logging and drawing nearest points of zero when the two volumes are further apart than `dist_max`
 - Added a Proximity guide, and the berthing example's model to open in MuJoCo Live
 
 ## Version 2.8.3 (2026-11-17)

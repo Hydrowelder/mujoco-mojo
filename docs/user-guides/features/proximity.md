@@ -2,14 +2,16 @@
 
 !!! abstract
 
-    **Proximity** measures the shortest distance between two mesh volumes while a model runs, logs it, and draws it as a line between the two nearest points. It answers "how close do these two parts get?" without waiting for them to touch. The berthing example uses it twice: the clearance between the arm and the visiting vehicle's hull, which must stay above zero, and the gap between the arm's end effector and the grapple fixture it is closing on.
+    **Proximity** measures the shortest distance between two mesh volumes while a model runs, logs it, and draws it as a line between the two nearest points. It answers "how close do these two parts get?" without waiting for them to touch, so a runtime can act on a clearance that must stay above zero or a gap that is closing.
 
     <figure markdown="span">
         <video controls muted loop playsinline width="80%">
-            <source src="../examples/berthing/overview.mp4" type="video/mp4">
+            <source src="proximity.mp4" type="video/mp4">
         </video>
-        <figcaption>The berthing example, filmed by its overview camera. The label shows the gap and the clearance, which are Proximity measurements, and the thin line joins the nearest points of the end effector and the grapple fixture. Once the visitor is grabbed, the pairs are switched off and the label drops the numbers.</figcaption>
+        <figcaption>The two cylinders from the example below, at half speed. The probe drifts toward the target and spins, the thin line joins the nearest points and moves around the surfaces as the probe turns, and the label shows the distance and the algorithm that produced it.</figcaption>
     </figure>
+
+    <!-- proximity.mp4 is made by record_clip in proximity_example.py: run that file to remake it (set MUJOCO_GL=egl if there is no display) -->
 
 ---
 
@@ -27,7 +29,7 @@ Inside the runtime function, make the [`Proximity`][mujoco_mojo.utils.proximity.
 --8<-- "docs/user-guides/features/proximity_example.py:pair"
 ```
 
-The distance is logged every step as `Proximities/probe_to_target:dist`, and the nearest points as `Proximities/probe_to_target/fromto/probe:x` (and `y`, `z`, and the same for `target`). A pair is named `<volume_1>_to_<volume_2>`.
+The distance is logged every step as `Proximities/probe_to_target:dist`, the nearest points as `Proximities/probe_to_target/fromto/probe:x` (and `y`, `z`, and the same for `target`), and the algorithm as `Proximities/probe_to_target:prox_type`. A pair is named `<volume_1>_to_<volume_2>`.
 
 You can also read a pair yourself at any step, which is how a runtime acts on a distance:
 
@@ -35,7 +37,7 @@ You can also read a pair yourself at any step, which is how a runtime acts on a 
 --8<-- "docs/user-guides/features/proximity_example.py:read"
 ```
 
-The surfaces start 0.8 m apart and the probe drifts 0.5 m, so after a second `distance` is about 0.3 m, measured between `probe_point` and `target_point`.
+The surfaces start 1.3 m apart. The probe drifts toward the target at 0.8 m/s and spins at 10 rad/s about Y, so it is tumbling as it arrives. After 1.4 s `distance` is about 0.07 m, measured between `probe_point` on the probe's tilted end and `target_point` on the side of the target. `algorithm` says how it was measured, which changes during this run (see below).
 
 ---
 
@@ -45,6 +47,8 @@ By default the distance is between the **convex hulls** of the two meshes (`algo
 
 `dist_max` is how far apart two volumes can be and still get an exact distance. When their bounding spheres are further apart than that, Mojo returns the sphere-to-sphere estimate and skips the rest, which is cheap and all you need when you only care about a part getting close. A closer pair gets its exact distance, but never more than `dist_max`. The `prox_type` channel says which you got.
 
+In the example `dist_max` is 0.4 m. The probe starts far enough away to get the estimate, `SPHERE_TO_SPHERE`, and the label above changes to `CONVEX_HULL` once the bounding spheres are within 0.4 m. The distance then reads 0.4 m, with the nearest points still those of the bounding spheres, until the surfaces themselves are closer than that.
+
 ---
 
 ## Drawing, Cost and Switching Off
@@ -53,32 +57,16 @@ Each registered pair is drawn as a line between its nearest points, in the viewe
 
 A pair that is drawn or logged costs a distance calculation every step, though it is calculated once per step however many times it is read. When a pair stops mattering, set its `active` flag to `False`. It is then no longer measured, drawn or logged, so it costs nothing, and setting `active` back to `True` starts it again. A direct call to `get_proximity` still works either way.
 
----
-
-## In the Berthing Example
-
-The berthing example makes four pairs: the first boom, the second boom and the end effector, each against the visitor's hull, and the end effector against the visitor's grapple fixture. Two methods of the model's user data read them: `clearance` is the smallest of the first three, and `gap` is the last.
-
-Once the arm has grabbed the visitor, the gap is zero and the arm carries the hull wherever it goes, so there is nothing left to watch. The runtime calls `stop_proximities` at that moment, which sets every pair's `active` flag to `False` and also makes the video labels drop the numbers.
-
-??? example "The Proximity Code in the Berthing Example"
-
-    ```python
-    --8<-- "docs/user-guides/examples/berthing/simulation.py:proximities"
-    ```
-
-<!-- docs/assets/models/berthing/model.xml is written by scripts/gen_docs_models.py, and a pre-push hook keeps it current. Do not edit it by hand. -->
-
-You can look around the berthing model in your browser with MuJoCo Live. It is the model as `generate` leaves it, before any runtime behavior, so nothing drives the arm, the weld is off, and no distance is measured.
-
-[Open the model in MuJoCo Live :material-open-in-new:](https://live.mujoco.org/?model=github:Hydrowelder/mujoco-mojo/master/docs/assets/models/berthing/model.xml){ .md-button .md-button--primary target=_blank }
+```python
+--8<-- "docs/user-guides/features/proximity_example.py:stop"
+```
 
 ---
 
 ??? example "All Code"
 
     ```python
-    --8<-- "docs/user-guides/features/proximity_example.py"
+    --8<-- "docs/user-guides/features/proximity_example.py:example"
     ```
 
 ---

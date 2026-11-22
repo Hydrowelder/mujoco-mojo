@@ -795,6 +795,23 @@ def _cube_proximity(dist_max: float = 10.0) -> Proximity:
     )
 
 
+# --- the cap on the convex hull distance ---
+
+
+def test_convex_hull_past_dist_max_keeps_the_bounding_sphere_points() -> None:
+    """The cubes are 0.8 m apart, further than `dist_max`, but their bounding spheres are not. MuJoCo then reports `dist_max` and zeroed points, so the points of the spheres are kept for the line."""
+    state = _separated_state()
+    proximity = _cube_proximity(dist_max=0.7)
+
+    dist, p1, p2, prox_type = proximity.get_proximity(state)
+
+    radius = 0.1 * np.sqrt(3)
+    assert prox_type == mojo.ProximityType.CONVEX_HULL
+    assert dist == pytest.approx(0.7)
+    assert p1 == pytest.approx((radius, 0, 0))
+    assert p2 == pytest.approx((1 - radius, 0, 0))
+
+
 # --- switching a pair off ---
 
 
