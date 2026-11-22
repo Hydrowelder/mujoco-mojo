@@ -5,7 +5,7 @@
     **VideoRecorder** films any camera in your model while a run goes and saves the video in the trial's folder. It is the quickest way to check that a run did what you meant, and to show it to someone else.
 
     <figure markdown="span">
-        <video controls muted loop playsinline width="80%">
+        <video autoplay controls muted loop playsinline width="80%">
             <source src="video-recording.mp4" type="video/mp4">
         </video>
         <figcaption>The example below, at half speed. The recorder switches on when the ball first comes within 0.6 m of the floor, and then keeps going. The violet line is the ball's trail.</figcaption>

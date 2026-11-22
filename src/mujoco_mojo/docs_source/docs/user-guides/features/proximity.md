@@ -5,7 +5,7 @@
     **Proximity** measures the shortest distance between two mesh volumes while a model runs, logs it, and draws it as a line between the two nearest points. It answers "how close do these two parts get?" without waiting for them to touch, so a runtime can act on a clearance that must stay above zero or a gap that is closing.
 
     <figure markdown="span">
-        <video controls muted loop playsinline width="80%">
+        <video autoplay controls muted loop playsinline width="80%">
             <source src="proximity.mp4" type="video/mp4">
         </video>
         <figcaption>The two cylinders from the example below, at half speed. The probe drifts toward the target and spins, the thin line joins the nearest points and moves around the surfaces as the probe turns, and the label shows the distance and the algorithm that produced it.</figcaption>

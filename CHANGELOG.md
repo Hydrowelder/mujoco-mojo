@@ -16,7 +16,7 @@
 - Added `Proximity.active`, which switches a pair off so it is no longer measured, drawn or logged
 - Fixed a `CONVEX_HULL` `Proximity` logging and drawing nearest points of zero when the two volumes are further apart than `dist_max`
 - Added `VideoRecorder.unregister_from_rm`, which takes a recorder back out of the runtime manager
-- Added a Proximity guide and a Video Recording guide, and the berthing example's model to open in MuJoCo Live
+- Added Proximity, Video Recording and Equality Constraints guides, and the berthing example's model to open in MuJoCo Live
 
 > [!WARNING]
 > - **Breaking:** `VideoRecorder`'s `fps` is now `frame_rate`, which is frames per unit of simulation time, since a unit of time is not always a second

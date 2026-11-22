@@ -46,6 +46,7 @@ nav:
           - Requirements: user-guides/features/requirements.md
           - Proximity: user-guides/features/proximity.md
           - Video Recording: user-guides/features/video-recording.md
+          - Equality Constraints: user-guides/features/equality-constraints.md
       - Examples:
           - user-guides/examples/examples.md
           - Vertically Landed Rocket:
