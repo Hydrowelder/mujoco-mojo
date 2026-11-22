@@ -77,7 +77,7 @@ class Proximity(MojoBaseModel):
     """Wheter or not to visualize this proximity in the MuJoCo viewer."""
 
     active: bool = True
-    """Whether this pair is being measured. An inactive pair is not drawn, and `request()` stops logging it and skips the distance calculation for it, so a pair that no longer matters costs nothing. It can be switched on again. A direct call to `get_proximity` still works."""
+    """Whether this pair is being measured. An inactive pair is not drawn, logged or calculated, so a pair that no longer matters costs nothing. A direct call to `get_proximity` still works."""
 
     _last_t: float = PrivateAttr(default=np.nan)
     _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))

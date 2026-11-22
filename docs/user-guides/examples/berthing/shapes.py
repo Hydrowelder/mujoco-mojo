@@ -1,4 +1,4 @@
-"""Shapes shared by the components."""
+"""Helpers shared by the parts."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import mujoco_mojo as mojo
 
 # --8<-- [start:shapes]
 class CylinderInput(mojo.UserData):
-    """Radius, length and mass of a cylinder, which the inputs of a part made of one can share."""
+    """Radius, length and mass of a cylinder."""
 
     RADIUS: float
     """Radius of the cylinder."""
@@ -26,7 +26,8 @@ class CylinderInput(mojo.UserData):
 def cylinder_mesh(
     name: str, radius: float, length: float, cells: int = 8
 ) -> mojo.MeshCylinder:
-    """A builtin cylinder that MuJoCo generates at compile time, along Z and centered on the origin. Its extent along each axis is `(count - 1) * spacing`, so a count of `cells + 1` and a spacing of the size over `cells` gives the size asked for."""
+    """A builtin cylinder mesh along Z, centered on the origin."""
+    # a builtin mesh spans (count - 1) * spacing along each axis, so count is one more than the cells
     return mojo.MeshCylinder(
         name=mojo.MeshName(name),
         count=(cells + 1, cells + 1, cells + 1),
@@ -37,7 +38,7 @@ def cylinder_mesh(
 def lying_along(
     axis: Literal["x", "y"], center: mojo.Vec3 | None = None
 ) -> mojo.PoseEuler:
-    """A pose at `center` that lays a mesh built along Z down along `axis` instead."""
+    """A pose at `center` that turns a mesh built along Z to lie along `axis`."""
     euler = {"x": (0, 90, 0), "y": (-90, 0, 0)}[axis]
     return mojo.PoseEuler(
         euler=np.array(euler),

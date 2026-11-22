@@ -1,4 +1,4 @@
-"""The capture weld: the constraint that joins the arm's free end effector to the visitor's grapple fixture, switched off until the arm has grabbed it."""
+"""The weld that joins the arm's free end effector to the visitor's grapple fixture."""
 
 from __future__ import annotations
 
@@ -12,13 +12,13 @@ import mujoco_mojo as mojo
 
 # --8<-- [start:capture]
 class Capture(mojo.UserData):
-    """The weld between the free end effector's tip and the visitor's grapple site. It pulls the two site frames together, position and orientation, wherever the bodies happen to be, so it can be switched on mid-run: until then the arm and the visitor do not know about each other, and once it is on the visitor is carried wherever the arm goes."""
+    """A weld between the end effector's tip and the visitor's grapple site, switched off until the capture."""
 
     weld: mojo.EqualityWeldSite
-    """The weld. It starts inactive. Its `name` is what the runtime needs to switch it on and off."""
+    """The weld, inactive at the start."""
 
     def engage(self, state: mojo.MjState) -> None:
-        """Switches the weld on, so the end effector's tip and the visitor's grapple site are pulled together and the visitor goes wherever the arm goes."""
+        """Switches the weld on, so the visitor goes wherever the arm goes."""
         self.weld.enable(state)
 
     def release(self, state: mojo.MjState) -> None:
@@ -31,7 +31,7 @@ class Capture(mojo.UserData):
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, arm: Arm, visitor: Visitor) -> Self:
-        """Makes the weld between the tip of the arm's free end effector and the site at the tip of the visitor's grapple fixture, and adds it to the model."""
+        """Makes the weld and adds it to the model."""
         tip = arm.free_effector.tip.name
         grapple = visitor.fixture.site.name
         assert tip

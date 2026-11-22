@@ -1,4 +1,4 @@
-"""The station: a cylinder with a grapple fixture on top that the arm will be attached to."""
+"""The station: a cylinder with a grapple fixture on top for the arm's base, and a berthing point."""
 
 from __future__ import annotations
 
@@ -9,9 +9,9 @@ from fixture import GrappleFixture
 
 import mujoco_mojo as mojo
 
-US = mojo.UnitSystem.si()  # define a unit system used throughout the model
+US = mojo.UnitSystem.si()
 
-OPACITY = 0.3  # how opaque the station is, from 0 (invisible) to 1 (solid)
+OPACITY = 0.3  # 0 is invisible, 1 is solid
 
 
 # --8<-- [start:inputs]
@@ -19,10 +19,13 @@ class StationInput(mojo.UserData):
     """Dimensions of the station."""
 
     RADIUS: float = 0.8 * US.m
-    """Radius of the station's main cylinder."""
+    """Radius of the station's cylinder."""
 
     LENGTH: float = 6.0 * US.m
-    """Length of the station's main cylinder, which lies along Y and is centered on the origin."""
+    """Length of the station's cylinder, which lies along Y and is centered on the origin."""
+
+    BERTH_POSITION: tuple[float, float, float] = (3.0 * US.m, 0.0 * US.m, 1.5 * US.m)
+    """Where the visitor's grapple site is brought to, as X, Y and Z in the world. It must be far enough out for the end effector, which lies behind the site, to clear the station."""
 
 
 STATION = StationInput()
@@ -31,22 +34,24 @@ STATION = StationInput()
 
 # --8<-- [start:station]
 class Station(mojo.UserData):
-    """The station's main cylinder and the grapple fixture on top of it that the arm's base attaches to, in one body."""
+    """The station's cylinder, the grapple fixture for the arm's base and the berthing point, in one fixed body."""
 
     body: mojo.Body
-    """The station's body. It has no joint, so it is fixed in the world. A free joint here would let it float."""
+    """The station's body, fixed in the world."""
 
     cylinder: mojo.GeomCylinder
-    """The station's main cylinder."""
+    """The station's cylinder."""
 
     fixture: GrappleFixture
-    """The grapple fixture on top of the station, the same part the visitor carries. Its site's X axis points down into the station."""
+    """The grapple fixture the arm's base attaches to. Its site's X axis points down into the station."""
+
+    berth: mojo.SiteSphere
+    """The berthing point, a marker for where the visitor goes. Its X axis points away from the station."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # for type hinting
 
-        # make the main truss structure as a cylinder
         cylinder = mojo.GeomCylinder(
             name=mojo.GeomName("station_geom"),
             size=STATION.RADIUS,
@@ -54,7 +59,7 @@ class Station(mojo.UserData):
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
         )
 
-        # mount the same grapple fixture the visitor carries on top of the cylinder, where the arm will be attached, turned so its X axis points down into the station
+        # turned so the fixture's X axis points down into the station
         fixture = GrappleFixture.new(
             mojo_model,
             "station",
@@ -65,15 +70,23 @@ class Station(mojo.UserData):
             ),
         )
 
-        # attach these to a body which can be made freely moving later on
+        # no rotation of its own, so its X axis points away from the station and the visitor lies along it
+        berth = mojo.SiteSphere(
+            name=mojo.SiteName("berth_site"),
+            size=0.1 * US.m,
+            pose=mojo.PoseQuat(pos=np.array(STATION.BERTH_POSITION)),
+            rgba=mojo.utils.Color.LIME_400.rgba,
+        )
+
         body = mojo.Body(
             name=mojo.BodyName("station"),
             geoms=[cylinder],
+            sites=[berth],
             frames=[fixture.frame],
         )
         mojo_model.mjcf.worldbody.bodies.append(body)
 
-        return cls(body=body, cylinder=cylinder, fixture=fixture)
+        return cls(body=body, cylinder=cylinder, fixture=fixture, berth=berth)
 
 
 # --8<-- [end:station]

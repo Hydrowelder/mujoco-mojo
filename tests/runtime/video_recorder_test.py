@@ -191,8 +191,7 @@ class TestIsDueAndCaptureFrame:
             state.data.time = i * 0.01
             rec.capture_frame(state, [], [], [])
         rec.close()
-        # 1.0 s to 1.5 s at 10 fps is about 6 frames; the time before the trigger must
-        # not be owed back as a burst of frames on consecutive steps
+        # about 6 frames fit in 1.0 s to 1.5 s at 10 fps; the time before the trigger must not come back as a burst
         assert rec._frame_count <= 7
 
     def test_capture_frame_warns_once_at_max_frames(

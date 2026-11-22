@@ -366,7 +366,7 @@ class VideoRecorder:
             return
 
         if not self.recording_trigger(state):
-            # not recording: keep the next frame time up with the clock, so the first frame after the trigger turns on is taken then, and the time that was skipped is not owed back as a burst of frames on consecutive steps
+            # while not recording, keep the schedule up with the clock, so the frames the trigger skipped are not owed back as a burst
             self._next_record_time = state.data.time
             return
 

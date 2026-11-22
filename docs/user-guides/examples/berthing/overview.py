@@ -1,4 +1,4 @@
-"""The overview camera: fixed in the world, and always pointing at the visitor."""
+"""A fixed camera that follows the visitor."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import numpy as np
 
 import mujoco_mojo as mojo
 
-US = mojo.UnitSystem.si()  # define a unit system used throughout the model
+US = mojo.UnitSystem.si()
 
 
 # --8<-- [start:inputs]
@@ -16,7 +16,7 @@ class OverviewInput(mojo.UserData):
     """Where the overview camera is and how wide it sees."""
 
     POSITION: tuple[float, float, float] = (2.0 * US.m, -16.0 * US.m, 7.0 * US.m)
-    """Where the camera is in the world, as X, Y and Z. It stays there and turns to follow the visitor."""
+    """Where the camera is in the world, as X, Y and Z."""
 
     FOVY: float = 30
     """Vertical field of view, in degrees."""
@@ -28,18 +28,18 @@ OVERVIEW = OverviewInput()
 
 # --8<-- [start:overview]
 class Overview(mojo.UserData):
-    """A camera fixed in the world that turns to keep the visitor's center of mass in view, so it follows the visitor as it drifts and when the arm moves it."""
+    """A camera fixed in the world that turns to keep the visitor's center of mass in view."""
 
     camera: mojo.Camera
-    """The overview camera. Its `name` is what a video recorder needs."""
+    """The camera. Its `name` is what a video recorder needs."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, target: mojo.Body) -> Self:
-        """Makes the camera and puts it in the world, aimed at the center of mass of `target` and everything attached to it."""
+        """Makes the camera and puts it in the world, aimed at `target`."""
         assert mojo_model.mjcf.worldbody  # for type hinting
         assert target.name
 
-        # in this mode MuJoCo works out the camera's orientation itself, so only its position is given
+        # in this mode MuJoCo works out the orientation, so only the position is given
         camera = mojo.Camera(
             name=mojo.CameraName("overview"),
             mode=mojo.TrackingMode.TARGETBODYCOM,

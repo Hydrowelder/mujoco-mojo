@@ -1,4 +1,4 @@
-"""The end effector: a cylinder with a site at its tip that latches onto a grapple fixture. The arm has one at each end, and they are the same part."""
+"""A cylinder with a site at its tip that latches onto a grapple fixture. The arm has the same one at each end."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from shapes import CylinderInput, cylinder_mesh, lying_along
 
 import mujoco_mojo as mojo
 
-US = mojo.UnitSystem.si()  # define a unit system used throughout the model
+US = mojo.UnitSystem.si()
 
 
 # --8<-- [start:inputs]
 class EndEffectorInput(CylinderInput):
-    """Dimensions and mass of an end effector, which is a cylinder, and the size of the site at its tip."""
+    """Dimensions and mass of an end effector, and the size of its tip site."""
 
     RADIUS: float = 0.14 * US.m
     """Radius of the end effector."""
@@ -26,7 +26,7 @@ class EndEffectorInput(CylinderInput):
     """Mass of the end effector."""
 
     TIP_SITE_SIZE: float = 0.04 * US.m
-    """Radius of the sphere that marks the site at the tip."""
+    """Radius of the sphere that marks the tip site."""
 
 
 END_EFFECTOR = EndEffectorInput()
@@ -35,10 +35,10 @@ END_EFFECTOR = EndEffectorInput()
 
 # --8<-- [start:end_effector]
 class EndEffector(mojo.UserData):
-    """A cylinder with a site at its tip. In its frame it runs along +X from its root, at the origin, to its tip, so the tip site's X axis points out toward whatever it is reaching for, which is the way a grapple fixture's site points into its structure."""
+    """A cylinder that runs along +X from its root to a site at its tip."""
 
     frame: mojo.Frame
-    """The frame at the end effector's root, with its X axis along the end effector. Add it to the body the end effector belongs to."""
+    """The frame at the root, with its X axis along the end effector. Add it to the body it belongs to."""
 
     geom: mojo.GeomMesh
     """The end effector's volume."""
@@ -48,8 +48,7 @@ class EndEffector(mojo.UserData):
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, name: str, mount: mojo.AnyPose) -> Self:
-        """Makes an end effector whose root is at `mount`, a pose in the body's frame whose X axis is the direction the end effector points. The `name` is put in front of the names of the mesh, the geom, the site and the frame, so each end effector in the model has its own."""
-        # the end effector is a builtin cylinder, which MuJoCo makes when it compiles the model
+        """Makes an end effector with its root at `mount`, a pose whose X axis is the direction it points. `name` prefixes the names of everything it makes."""
         mojo_model.mjcf.assets.append(
             mojo.Asset(
                 meshes=[
@@ -63,7 +62,6 @@ class EndEffector(mojo.UserData):
         )
         assert mesh.name
 
-        # everything below is in the end effector's own frame: laid down along X and moved out by half its length, with the site at the far end
         geom = mojo.GeomMesh(
             name=mojo.GeomName(f"{name}_effector_geom"),
             mesh=mesh.name,
@@ -72,7 +70,7 @@ class EndEffector(mojo.UserData):
             rgba=mojo.utils.Color.SLATE_300.rgba,
         )
 
-        # with no rotation of its own, the site's X axis is the frame's, which points along the end effector
+        # no rotation of its own, so the site's X axis points along the end effector, the same way a fixture's site points into its structure
         tip = mojo.SiteSphere(
             name=mojo.SiteName(f"{name}_tip_site"),
             size=END_EFFECTOR.TIP_SITE_SIZE,

@@ -1,4 +1,4 @@
-"""The environment: a dark gradient sky and the sun."""
+"""A dark gradient sky and the sun."""
 
 from __future__ import annotations
 
@@ -14,16 +14,16 @@ class Environment(mojo.UserData):
     """The sky behind everything and the sun that lights it."""
 
     sky: mojo.TextureBuiltIn
-    """The skybox texture, a gradient from `SKY_TOP` to `SKY_BOTTOM`."""
+    """The skybox texture, a gradient."""
 
     sun: mojo.Light
-    """The sun, a directional light, so its rays are parallel and its position does not matter."""
+    """The sun, a directional light, so its position does not matter."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # for type hinting
 
-        # a skybox is picked up by the viewer on its own, without anything referring to it by name
+        # the viewer finds a skybox on its own, so nothing refers to it by name
         sky = mojo.TextureBuiltIn(
             name=mojo.TextureName("sky"),
             type=mojo.TextureType.SKYBOX,

@@ -1,4 +1,4 @@
-"""The whole model: the components put together, and the `generate` entry point that builds it."""
+"""The whole model: the parts put together, with the `generate` and `runtime` entry points."""
 
 from __future__ import annotations
 
@@ -18,41 +18,39 @@ import mujoco_mojo as mojo
 import mujoco_mojo.runtime as rt
 
 logger = mojo.utils.get_logger(__name__)
-US = mojo.UnitSystem.si()  # define a unit system used throughout the model
+US = mojo.UnitSystem.si()
 
 
 # --8<-- [start:model]
 class Berthing(mojo.UserData):
-    """Root user data for the whole model, which collects the parts the runtime will need. `generate` stores it on `mojo_model.user_data`, and the runtime reads it back with `mojo_model.get_user_data(Berthing)`."""
+    """Root user data: the parts the runtime needs. `generate` stores it on `mojo_model.user_data`, and the runtime reads it back with `get_user_data`."""
 
     station: Station
-    """The station, with the grapple fixture the arm is latched onto."""
+    """The station, with the fixture the arm's base is attached to."""
 
     arm: Arm
-    """The arm, with its joints and servos, its two end effectors and its camera."""
+    """The arm, with its joints, servos, end effectors and camera."""
 
     visitor: Visitor
-    """The visiting vehicle, with the grapple fixture the arm grabs."""
+    """The visiting vehicle, with the fixture the arm grabs."""
 
     overview: Overview
     """The fixed camera that follows the visitor."""
 
     capture: Capture
-    """The weld that joins the arm to the visitor, which starts switched off."""
+    """The weld that joins the arm to the visitor."""
 
     _clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
-    """The distance from each part of the arm that could hit the hull to the hull, made by `register_proximities`."""
+    """Distances from each boom and the free end effector to the hull."""
 
     _gap: mojo.utils.Proximity | None = PrivateAttr(default=None)
-    """The distance from the free end effector to the visitor's grapple fixture, made by `register_proximities`."""
+    """Distance from the free end effector to the visitor's grapple fixture."""
 
     def register_proximities(self) -> None:
-        """
-        Starts measuring the two distances the mission watches, and logs them. Call it inside the runtime manager's `with` block.
-
-        The clearance is how close each boom and the end effector are to the visitor's hull, which has to stay above zero. The gap is how far the end effector is from the visitor's grapple fixture, which the arm is closing. `Proximity` measures between mesh volumes, which is why all of these parts are builtin meshes: it uses the convex hull of each, which is exact for the cylinders here.
-        """
+        """Starts measuring and logging the clearance from the arm to the hull and the gap to the grapple fixture. Call it inside the runtime manager's `with` block."""
         arm, visitor = self.arm, self.visitor
+
+        # `Proximity` works on mesh volumes, which is why these parts are meshes
         self._clearances = [
             mojo.utils.Proximity(
                 volume_1=part, volume_2=visitor.hull, dist_max=MISSION.CLEARANCE_RANGE
@@ -69,17 +67,84 @@ class Berthing(mojo.UserData):
             proximity.request(channels=["dist", "fromto", "prox_type"])
 
     def gap(self, state: mojo.MjState) -> float:
-        """The distance from the free end effector to the visitor's grapple fixture, in meters."""
+        """Distance from the free end effector to the visitor's grapple fixture."""
         assert self._gap  # made by register_proximities
         return self._gap.get_proximity(state)[0]
 
     def clearance(self, state: mojo.MjState) -> float:
-        """The distance from the closest of the booms and the free end effector to the visitor's hull, in meters, which is capped at `MISSION.CLEARANCE_RANGE`."""
+        """Distance from the closest boom or the free end effector to the hull."""
         return min(part.get_proximity(state)[0] for part in self._clearances)
+
+    @property
+    def tracking(self) -> bool:
+        """Whether the distances are still being measured."""
+        return self._gap is not None and self._gap.active
+
+    def stop_proximities(self) -> None:
+        """Stops measuring, drawing and logging the distances. Call it once the weld is on: the visitor is held, so there is nothing left to watch."""
+        assert self._gap  # made by register_proximities
+        for proximity in (*self._clearances, self._gap):
+            proximity.active = False
+
+    def lined_up(self, state: mojo.MjState) -> bool:
+        """Whether the free end effector is on the fixture's axis and pointing along it, within the mission's tolerances."""
+        off_axis, angle = self.arm.misalignment(state, self.visitor.fixture.site)
+        return bool(
+            off_axis < MISSION.COLINEAR_DISTANCE
+            and angle < np.deg2rad(MISSION.COLINEAR_ANGLE_DEG)
+        )
+
+    def register_videos(self, mojo_model: mojo.MojoModel, state: mojo.MjState) -> None:
+        """Films both cameras into the trial's folder, with a label on every frame. Only the nominal trial films. Call it inside the runtime manager's `with` block, after `register_proximities`."""
+        if not mojo_model.is_nominal:
+            return
+
+        arm_camera, overview_camera = self.arm.camera.name, self.overview.camera.name
+        assert arm_camera
+        assert overview_camera
+
+        def label(state: mojo.MjState) -> rt.LabelConfig:
+            weld = "on" if self.capture.is_engaged(state) else "off"
+            distances = (
+                f"gap = {self.gap(state):5.2f} m    clearance = {self.clearance(state):4.2f} m    "
+                if self.tracking
+                else ""
+            )
+            return {
+                "text": f"t = {state.data.time:6.1f} s    {distances}weld {weld}",
+                "background_color": mojo.utils.Color.SLATE_900.with_alpha(0.7),
+            }
+
+        # the clip starts when first lined up and then carries on, since the arm can drift out of tolerance for a moment as it starts to move
+        started = False
+
+        def arm_camera_trigger(state: mojo.MjState) -> bool:
+            nonlocal started
+            started = started or self.lined_up(state)
+            return started and (
+                not self.tracking or self.gap(state) < MISSION.RECORD_RANGE
+            )
+
+        rt.VideoRecorder(
+            path=mojo_model.trial_dir / "arm_camera.mp4",
+            camera_name=arm_camera,
+            fps=MISSION.ARM_CAMERA_FPS,
+            show_proximities=True,
+            recording_trigger=arm_camera_trigger,
+            frame_label=label,
+        ).setup(state).register_to_rm()
+
+        rt.VideoRecorder(
+            path=mojo_model.trial_dir / "overview.mp4",
+            camera_name=overview_camera,
+            fps=MISSION.OVERVIEW_FPS,
+            show_proximities=True,
+            frame_label=label,
+        ).setup(state).register_to_rm()
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
-        """Builds every component and puts it in the model."""
+        """Builds every part and puts it in the model."""
         mojo_model.mjcf.model = mojo.ModelName("Berthing")
         mojo_model.mjcf.worldbody = mojo.WorldBody()
 
@@ -112,14 +177,14 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         mojo.Option(
             timestep=0.002 * US.s,
             gravity=np.array((0, 0, 0)) * US["m/s**2"],
-            # the arm's servos are stiff and heavily damped, so the integrator treats that damping implicitly
+            # the servos are stiff and heavily damped, which only an implicit integrator keeps stable at this timestep
             integrator=mojo.Integrator.IMPLICITFAST,
-            # nothing in this model is meant to touch, so contacts are off (the parts overlap in places, which would push them apart) and the distances that matter are measured by Proximity; the capture weld is a constraint, not a contact, so it still works
+            # parts overlap in places and nothing is meant to touch, so contacts are off; the weld is a constraint, not a contact, so it still works
             flag=mojo.Flag(contact=mojo.typing.EnableDisable.DISABLE),
         )
     )
 
-    # a viewer sizes its frames, joint axes and other markers in units of the model's mean body size, which MuJoCo works out on its own (and the big station makes it large), so it is fixed at one meter and the scales below are lengths in meters
+    # fixed at one meter because the viewer sizes frames and joint axes by the mean body size, which the large station inflates
     mojo_model.mjcf.statistics.append(mojo.Statistic(meansize=1.0 * US.m))
     mojo_model.mjcf.visuals.append(
         mojo.Visual(scale=mojo.VisualScale(framelength=0.5, framewidth=0.03))
@@ -138,35 +203,32 @@ def runtime(
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
-    """Runs the berthing. Each part of the model that needs a control applied has a method of its own for it, and this only calls them."""
+    """Runs the berthing through its phases: approach, capture, berth and release. Each part that needs a control has a method for it, and this only calls them."""
     with runtime_manager as rm:
+        if rm.signal_manager:
+            rm.signal_manager.record_decimation = 10
         berthing = mojo_model.get_user_data(Berthing)
         arm, visitor, capture = berthing.arm, berthing.visitor, berthing.capture
         site = visitor.fixture.site
         arm.register_servos()
         berthing.register_proximities()
+        berthing.register_videos(mojo_model, state)
 
         dt = state.model.opt.timestep
+        berth = berthing.station.berth
         phase = Phase.APPROACH
-        standoff = (
-            MISSION.PRE_STANDOFF
-        )  # how far in front of the fixture the tip is aimed
-        goal_tip, goal_frame = (
-            np.zeros(3),
-            np.eye(3),
-        )  # where the visitor is carried to, set at capture
+        standoff = MISSION.PRE_STANDOFF
         arrived_at: float | None = None
+        released_at: float | None = None
 
         while state.data.time < MISSION.END_TIME:
-            # the end effector has to be on the fixture's axis and pointing along it before it goes in, not just near a spot on it
+            # the end effector must be on the fixture's axis and pointing along it before it goes in
             off_axis, angle = arm.misalignment(state, site)
-            lined_up = off_axis < MISSION.COLINEAR_DISTANCE and angle < np.deg2rad(
-                MISSION.COLINEAR_ANGLE_DEG
-            )
+            lined_up = berthing.lined_up(state)
 
             match phase:
                 case Phase.APPROACH:
-                    # the goal is worked out from where the grapple fixture is now, so the arm keeps following it if the visitor drifts
+                    # the goal follows the fixture, so the arm keeps up if the visitor drifts
                     remaining = arm.approach(state, site, standoff)
                     if remaining < MISSION.PARKED_TOLERANCE and lined_up:
                         logger.info(
@@ -177,7 +239,7 @@ def runtime(
                         phase = Phase.CAPTURE
 
                 case Phase.CAPTURE:
-                    # creep in, but only while lined up, and aim a little past the fixture so the servos' lag never stalls the end effector short of the capture gap
+                    # creep in only while lined up, aiming a little past the fixture so the servos' lag cannot stall the end effector short of the capture gap
                     if lined_up:
                         standoff = max(
                             standoff - MISSION.APPROACH_SPEED * dt, -MISSION.OVERSHOOT
@@ -192,28 +254,42 @@ def runtime(
                             f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees out of line"
                         )
 
-                        # from here the fixture goes wherever the tip goes, so the goal is fixed in the world: back along the fixture's axis, with the same orientation. The frame is copied because `rt_xmat` is a view of the live data, which would follow the visitor round instead of holding it
-                        goal_frame = site.rt_xmat(state).copy()
-                        goal_tip = (
-                            site.rt_pos(state)
-                            - MISSION.PULL_DISTANCE * goal_frame[:, 0]
-                        )
+                        # the visitor is held, so the gap is zero and the clearance cannot change
+                        berthing.stop_proximities()
                         phase = Phase.BERTH
 
                 case Phase.BERTH:
-                    remaining = arm.move_to(state, goal_tip, goal_frame)
+                    # the weld ties the tip to the visitor's grapple site, so putting the tip on the berthing point puts the visitor there
+                    remaining = arm.carry_to(
+                        state,
+                        berth.rt_pos(state),
+                        berth.rt_xmat(state),
+                        MISSION.BERTH_SPEED,
+                    )
                     if remaining < MISSION.PARKED_TOLERANCE:
                         if arrived_at is None:
                             arrived_at = state.data.time
-                            logger.info(f"t={arrived_at:.1f}s: pulled in, holding")
+                            logger.info(
+                                f"t={arrived_at:.1f}s: at the berthing point, holding"
+                            )
                         if state.data.time - arrived_at > MISSION.HOLD_TIME:
-                            break
+                            capture.release(state)
+                            released_at = state.data.time
+                            logger.info(f"t={released_at:.1f}s: released")
+                            phase = Phase.RELEASE
+
+                case Phase.RELEASE:
+                    # nothing holds the visitor now, so it should stay where it was put
+                    assert released_at is not None
+                    if state.data.time - released_at > MISSION.SETTLE_TIME:
+                        break
 
             rm.step(state)
 
         logger.info(
             f"finished at t={state.data.time:.1f}s with the weld "
-            f"{'on' if capture.is_engaged(state) else 'off'}"
+            f"{'on' if capture.is_engaged(state) else 'off'}, the visitor's grapple site "
+            f"{1000 * np.linalg.norm(site.rt_pos(state) - berth.rt_pos(state)):.1f} mm from the berthing point"
         )
 
     return mojo_model

@@ -801,7 +801,7 @@ def _cube_proximity(dist_max: float = 10.0) -> Proximity:
 def test_inactive_proximity_is_not_logged_drawn_or_measured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A pair with `active=False` posts nothing, draws no line, and skips the distance calculation, and measures again when switched back on."""
+    """An inactive pair posts nothing, draws no line and skips the calculation, and measures again when switched back on."""
     state = _separated_state()
     proximity = _cube_proximity()
     sm = SignalManager(export_path=tmp_path / "tel.parquet")
@@ -820,9 +820,8 @@ def test_inactive_proximity_is_not_logged_drawn_or_measured(
     sm.record(state)
     assert posted == []
     assert proximity.get_visuals(state) is None
-    assert (
-        proximity._last_t == measured_at
-    )  # nothing was calculated for the new timestep
+    # nothing was calculated for the new timestep
+    assert proximity._last_t == measured_at
 
     proximity.active = True
     sm.record(state)
