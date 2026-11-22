@@ -16,6 +16,7 @@
 - Added `Proximity.active`, which switches a pair off so it is no longer measured, drawn or logged
 - Fixed a `CONVEX_HULL` `Proximity` logging and drawing nearest points of zero when the two volumes are further apart than `dist_max`
 - Added `VideoRecorder.unregister_from_rm`, which takes a recorder back out of the runtime manager
+- Added `Joint.qpos_address` and `Joint.dof_address`, which say where a joint is in `qpos` and `qvel`
 - Added Proximity, Video Recording and Equality Constraints guides, and a berthing example guide with its model to open in MuJoCo Live
 
 > [!WARNING]

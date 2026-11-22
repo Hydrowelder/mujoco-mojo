@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    This guide builds the arm: a shoulder with three degrees of freedom (DOF), two booms, an elbow with one DOF, and a wrist with three DOF, with an end effector at each end. The base end is latched onto the station's fixture, and the free end reaches for the visitor. Each of the seven joints has a position servo, and an inverse-kinematics solver works out the joint angles that move the free end effector to a goal position and orientation.
+    This guide builds the arm: a shoulder with three degrees of freedom (DOF), two booms, an elbow with one DOF, and a wrist with three DOF, with an end effector at each end. The base end is latched onto the station's fixture, and the free end reaches for the visitor. Each of the seven joints has a position servo, and [`mink`](https://github.com/kevinzakka/mink), an inverse-kinematics library built on MuJoCo, works out the joint angles that move the free end effector to a goal position and orientation.
 
 ---
 
@@ -36,6 +36,10 @@ Inputs for the arm hold the dimensions and masses of its parts, the servos, the 
 
 Built bent into a V that points toward the visitor, the arm starts in its home pose, and every joint angle is measured from it. The home angles are part of the joint bodies' poses, so a servo commanded to zero holds the arm in the home pose.
 
+???+ tip "Tip: Try Other Home Poses"
+
+    `arm.py` has `HOME_POSES`, a set of start poses the arm was tested from: the default, a fully extended arm, an arm with the elbow folded back, an arm folded tightly, and six drawn at random. Each completes the berthing. Set `ARM.home = HOME_POSES["straight"]` before `generate` to try one.
+
 ---
 
 ## Joints
@@ -43,7 +47,7 @@ Built bent into a V that points toward the visitor, the arm starts in its home p
 A few small helpers build the joints, and each is used many times:
 
 - **Housings**, one each for roll, yaw and pitch, are the shapes at a joint. They are colored by the axis they turn about, red for roll (X), green for pitch (Y) and blue for yaw (Z), which makes each joint's axis visible in the viewer. The shoulder and the wrist have the same three, and building each housing once means the two ends cannot differ.
-- `hinge` makes every joint. It gives each one the arm's armature, an added inertia that keeps the light joints stable under the servos' high gains, so the servos can be stiff.
+- `hinge` makes every joint. It gives each one the arm's armature, an added inertia that keeps the light joints stable under the servos' high gains, so the servos can be stiff. It also gives each joint the servos' range as a joint limit, which is how `mink` learns the range.
 - `turned` places a joint's body at its home angle. The arm is built bent, so each body is turned from straight by its home angle about its own axis. This is how the home pose gets into the model.
 - `out_of_station` places the whole arm. The station's fixture points into the station, but the arm should point out of it, so the first body is given a half turn about Y, and everything after it follows.
 
@@ -70,7 +74,6 @@ The rest of the chain follows the same pattern:
 - **Wrist:** three bodies, the same as the shoulder, hanging from the elbow body.
 - **Free end effector:** attached to the last wrist body.
 - **Base end effector:** latched onto the station's fixture, with its end at the fixture's site. The whole chain sits in the fixture's frame.
-- **Reach envelope:** a translucent hemisphere as large as the arm is long, which shows how far the arm can reach. For visualization only.
 
 ---
 
@@ -92,35 +95,38 @@ Commanded angles live in a list on the arm, one for each joint. Each servo gets 
 --8<-- "docs/user-guides/examples/berthing/arm.py:register"
 ```
 
-`slew` moves the commanded angles toward goal angles, one step at a time, at a limited rate. The joint with the furthest to go moves at the full rate, and the others move slower, so all of them arrive together. `move_to` asks the solver for the angles that put the end effector at a goal, then calls `slew` with them:
+The arm's methods change those commanded angles. `move_to` is the one that moves them, and it uses `mink`.
+
+---
+
+## Inverse Kinematics
+
+Inverse kinematics finds the joint motion that puts the end effector at a goal. [`mink`](https://kevinzakka.github.io/mink/) is an established library for it, built on MuJoCo, so it reads the same compiled model as the simulation and the arm is described only once. The arm sets `mink` up with these pieces:
+
+- A frame task asks the end effector's site to be at the goal, in position and orientation.
+- A posture task pulls the joints weakly toward home. A goal does not fix all seven joints, because the elbow can swivel about the line from the shoulder to the wrist, so the pull picks one answer.
+- A configuration limit keeps every joint inside its range, which `mink` reads from the model.
+- A velocity limit caps how fast each joint moves.
+- A collision avoidance limit slows any part of the arm that gets within a keep-out distance of the station or the visitor's hull, and `keep_clear_of` says which geoms those are. The free end effector may touch the visitor's grapple fixture, since that is its job, but no other part of the arm may.
+- A frozen set of degrees of freedom holds everything that is not one of the arm's joints still, which here is the visitor's free joint. `mink` treats every degree of freedom in the model as something it can move, so without this it could satisfy a distance limit by pushing the visitor out of the arm's way.
+
+`move_to` gives `mink` the goal, asks for the joint velocities, integrates them for one timestep, and copies the result into the commanded angles, so all the joints move at once. Mojo helps with the setup: `Joint.qpos_address` and `Joint.dof_address` say where each joint sits in the configuration and in the Jacobian.
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:slew"
+--8<-- "docs/user-guides/examples/berthing/arm.py:ik"
 ```
 
-`approach` does the same for a goal in front of a site, with the end effector facing it. The goal follows the site, so the arm keeps up if the visitor drifts:
+---
+
+## Goals
+
+`approach` calls `move_to` with a goal in front of a site, with the end effector facing it. The goal follows the site, so the arm keeps up if the visitor drifts:
 
 ``` python
 --8<-- "docs/user-guides/examples/berthing/arm.py:approach"
 ```
 
 `carry_to` is like `move_to`, but the goal travels to the target in a straight line at a set speed. That is how the arm carries the visitor. `misalignment` measures how far the end effector is from lining up with a site, and the runtime uses it to decide when the arm can move in.
-
----
-
-## Solving for the Angles
-
-Damped least squares solves for the angles. Each iteration moves the joints a small step that the Jacobian says brings the end effector closer to the goal, and it repeats until the end effector is close enough.
-
-- It works on a private copy of the state, so it does not disturb the running simulation.
-- It starts from its own last answer, so a goal that holds still costs almost nothing.
-- A goal does not fix all seven joints, because the elbow can swivel about the line from the shoulder to the wrist. A gentle pull toward home picks one answer from the many.
-
-??? example "Solver Code"
-
-    ``` python
-    --8<-- "docs/user-guides/examples/berthing/arm.py:solve"
-    ```
 
 ---
 

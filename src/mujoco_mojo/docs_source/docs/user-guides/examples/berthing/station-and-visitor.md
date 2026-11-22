@@ -10,7 +10,7 @@
 
 ## Shared Helpers
 
-[Proximity](../../features/proximity.md) measures distances between mesh volumes, so the hull and the fixtures are meshes instead of primitive `Geom`s. MuJoCo can generate a mesh itself, so no mesh file is needed. `CylinderInput` holds the radius, length and mass of a cylindrical part, and its `mesh` method uses Mojo's `MeshCylinder` to make the mesh. A generated cylinder is built along Z, and `lying_along` gives the pose that turns one to lie along X or Y.
+[Proximity](../../features/proximity.md) measures distances between mesh volumes, so the station, the hull and the fixtures are meshes instead of primitive `Geom`s. MuJoCo can generate a mesh itself, so no mesh file is needed. `CylinderInput` holds the radius, length and mass of a cylindrical part, and its `mesh` method uses Mojo's `MeshCylinder` to make the mesh. A generated cylinder is built along Z, and `lying_along` gives the pose that turns one to lie along X or Y.
 
 ??? example "Helper Code"
 
@@ -140,12 +140,12 @@ class GrappleFixture(mojo.UserData):
 
 ## Station
 
-A station is one fixed body: a cylinder that lies along Y, a grapple fixture on top for the arm's base, and the berthing point. The berthing point is a site where the arm will bring the visitor's grapple site.
+A station is one fixed body: a cylinder mesh that lies along Y, a grapple fixture on top for the arm's base, and the berthing point. The berthing point is a site where the arm will bring the visitor's grapple site.
 
 ??? example "Station Inputs"
 
     ``` python
-    class StationInput(mojo.UserData):
+    class StationInput(CylinderInput):
         """Dimensions of the station."""
 
         RADIUS: float = 0.8 * US.m
@@ -153,6 +153,9 @@ A station is one fixed body: a cylinder that lies along Y, a grapple fixture on 
 
         LENGTH: float = 6.0 * US.m
         """Length of the station's cylinder, which lies along Y and is centered on the origin."""
+
+        MASS: float = 400_000 * US.kg
+        """Mass of the station's cylinder. It has no effect, since the station is fixed in the world."""
 
         BERTH_POSITION: tuple[float, float, float] = (3.0 * US.m, 0.0 * US.m, 1.5 * US.m)
         """Where the visitor's grapple site is brought to, as X, Y and Z in the world. It must be far enough out for the end effector, which lies behind the site, to clear the station."""
@@ -168,7 +171,7 @@ class Station(mojo.UserData):
     body: mojo.Body
     """The station's body, fixed in the world."""
 
-    cylinder: mojo.GeomCylinder
+    cylinder: mojo.GeomMesh
     """The station's cylinder."""
 
     fixture: GrappleFixture
@@ -181,10 +184,16 @@ class Station(mojo.UserData):
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # for type hinting
 
-        cylinder = mojo.GeomCylinder(
+        mojo_model.mjcf.assets.append(
+            mojo.Asset(meshes=[mesh := STATION.mesh("station_mesh")])
+        )
+        assert mesh.name
+
+        cylinder = mojo.GeomMesh(
             name=mojo.GeomName("station_geom"),
-            size=STATION.RADIUS,
-            fromto=np.array((0, -STATION.LENGTH / 2, 0, 0, STATION.LENGTH / 2, 0)),
+            mesh=mesh.name,
+            pose=lying_along("y"),
+            mass=STATION.MASS,
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
         )
 
@@ -219,8 +228,6 @@ class Station(mojo.UserData):
 
 
 ```
-
-Nothing measures a distance to the station's cylinder, so it is a plain primitive `Geom`, not a mesh.
 
 ---
 
@@ -320,7 +327,7 @@ class Visitor(mojo.UserData):
 
 ## Sky and Overview Camera
 
-Two small parts finish the scene. `Environment` is a dark gradient sky and the sun, a directional light that illuminates everything. `Overview` is a fixed camera that pivots to keep the visitor's center of mass in view, which is how the [overview video](introduction.md) follows the vehicle. [Video Recording](../../features/video-recording.md) covers filming a camera.
+Two small parts finish the scene. `Environment` is a dark gradient sky and the sun, a directional light that illuminates everything. `Overview` is a fixed camera that pivots to keep the center of mass of the arm's free end in view, which is how the [overview video](introduction.md) follows the action. It is built after the arm, since it aims at one of the arm's bodies. [Video Recording](../../features/video-recording.md) covers filming a camera.
 
 ??? example "Sky and Overview Camera Code"
 
@@ -364,7 +371,7 @@ Two small parts finish the scene. `Environment` is a dark gradient sky and the s
 
     ``` python
     class Overview(mojo.UserData):
-        """A camera fixed in the world that turns to keep the visitor's center of mass in view."""
+        """A camera fixed in the world that turns to keep the center of mass of the arm's free end in view."""
 
         camera: mojo.Camera
         """The camera. Its `name` is what a video recorder needs."""

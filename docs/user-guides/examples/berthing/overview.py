@@ -1,4 +1,4 @@
-"""A fixed camera that follows the visitor."""
+"""A fixed camera that follows the arm's free end."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ class OverviewInput(mojo.UserData):
     POSITION: tuple[float, float, float] = (2.0 * US.m, -16.0 * US.m, 7.0 * US.m)
     """Where the camera is in the world, as X, Y and Z."""
 
-    FOVY: float = 30
+    FOVY: float = 20
     """Vertical field of view, in degrees."""
 
 
@@ -28,7 +28,7 @@ OVERVIEW = OverviewInput()
 
 # --8<-- [start:overview]
 class Overview(mojo.UserData):
-    """A camera fixed in the world that turns to keep the visitor's center of mass in view."""
+    """A camera fixed in the world that turns to keep the center of mass of the arm's free end in view."""
 
     camera: mojo.Camera
     """The camera. Its `name` is what a video recorder needs."""

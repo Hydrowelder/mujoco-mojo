@@ -45,6 +45,7 @@ The runtime opens the runtime manager, reads the `Berthing` user data back, and 
 
 - `record_decimation` records telemetry every tenth step, which keeps the files small.
 - `arm.register_servos()` gives each servo an `ActuatorControl`, as in the [arm guide](7-dof-arm.md#driving-the-servos).
+- `berthing.keep_arm_clear()` tells the arm to keep out of the station and the visitor's hull, which the [arm guide](7-dof-arm.md#inverse-kinematics) covers.
 - `berthing.register_proximities()` starts the distance measurements.
 - `berthing.register_videos(...)` sets up the two cameras.
 
@@ -81,7 +82,7 @@ In the approach, the goal follows the fixture, so the arm keeps up if the visito
 - The end effector moves in only while it is lined up.
 - It aims a little past the fixture, so the servos' lag cannot stall it short of the capture gap.
 - When the gap is small enough and the arm is lined up, `capture.engage` switches the weld on.
-- The visitor is then held, so the gap is zero and the clearance cannot change, and `stop_proximities` stops measuring them.
+- The visitor is then held, so the gap is zero and its distance to the arm cannot change, and `stop_proximities` stops measuring those.
 
 ---
 
@@ -100,12 +101,19 @@ In the approach, the goal follows the fixture, so the arm keeps up if the visito
 
 ## Distances
 
-[Proximity](../../features/proximity.md) measures four pairs of mesh volumes:
+[Proximity](../../features/proximity.md) measures ten pairs of mesh volumes, nine for the **clearance** and one for the **gap**.
 
-- the first boom, the second boom and the free end effector, each against the visitor's hull, for the **clearance**
-- the free end effector against the visitor's grapple fixture, for the **gap**
+The clearance pairs are everything the arm must keep clear of:
 
-`clearance` is the smallest of the first three, and `gap` is the last. After capture, `stop_proximities` sets every pair's `active` flag to `False`.
+- the first boom, the second boom and the free end effector, each against the visitor's hull
+- the same three parts, each against the station's cylinder
+- the arm against itself: the free end effector against the first boom and the base end effector, and the second boom against the base end effector. Parts that meet at a joint are left out, since they would always read zero.
+
+The gap pair is the free end effector against the visitor's grapple fixture. `clearance` is the smallest of the nine clearance pairs, and a value of zero means two parts touch.
+
+Once the weld is on, the visitor moves with the arm, so the gap and the hull cannot change any more. `stop_proximities` then sets the `active` flag of those pairs to `False`. The station and arm pairs keep measuring, since the arm still has to clear the station while it carries the visitor.
+
+The housings at the joints are primitive shapes, so these pairs do not see them. [`mink`](7-dof-arm.md#inverse-kinematics) does, since it works from the whole model, which is why the arm also steers clear of the station and the hull on its own.
 
 ??? example "Distance Code"
 
@@ -127,7 +135,7 @@ The capture weld joins the end effector's site to the visitor's grapple site. It
 
 ## Videos
 
-[Video Recording](../../features/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the distances are no longer measured, so the label drops them.
+[Video Recording](../../features/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the gap is no longer measured, so the label drops it.
 
 The overview camera records the whole run. The arm camera starts the first time the end effector lines up with the fixture and keeps going from there, since the arm can drift out of tolerance for a moment as it starts to move.
 

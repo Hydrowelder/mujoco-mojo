@@ -29,7 +29,7 @@ Distances, speeds and times that steer the berthing are in one input class, so t
         """How far, in degrees, the tip's axis may turn from the fixture's and still count as lined up."""
 
         CLEARANCE_RANGE: float = 3.0 * US.m
-        """Range of the clearance measurement: when the arm and the hull are further apart than this, the distance is only estimated."""
+        """Range of the clearance measurements: when two parts are further apart than this, the distance is only estimated."""
 
         GAP_RANGE: float = 10.0 * US.m
         """Range of the gap measurement: when the end effector and the grapple fixture are further apart than this, the distance is only estimated."""
@@ -113,6 +113,7 @@ berthing = mojo_model.get_user_data(Berthing)
 arm, visitor, capture = berthing.arm, berthing.visitor, berthing.capture
 site = visitor.fixture.site
 arm.register_servos()
+berthing.keep_arm_clear()
 berthing.register_proximities()
 berthing.register_videos(mojo_model, state)
 
@@ -126,6 +127,7 @@ released_at: float | None = None
 
 - `record_decimation` records telemetry every tenth step, which keeps the files small.
 - `arm.register_servos()` gives each servo an `ActuatorControl`, as in the [arm guide](7-dof-arm.md#driving-the-servos).
+- `berthing.keep_arm_clear()` tells the arm to keep out of the station and the visitor's hull, which the [arm guide](7-dof-arm.md#inverse-kinematics) covers.
 - `berthing.register_proximities()` starts the distance measurements.
 - `berthing.register_videos(...)` sets up the two cameras.
 
@@ -155,6 +157,7 @@ Each step, the loop works out how well the end effector lines up with the fixtur
             arm, visitor, capture = berthing.arm, berthing.visitor, berthing.capture
             site = visitor.fixture.site
             arm.register_servos()
+            berthing.keep_arm_clear()
             berthing.register_proximities()
             berthing.register_videos(mojo_model, state)
 
@@ -178,7 +181,7 @@ Each step, the loop works out how well the end effector lines up with the fixtur
                             logger.info(
                                 f"t={state.data.time:.1f}s: parked, gap {berthing.gap(state):.3f} m, "
                                 f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees "
-                                f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
+                                f"out of line, {berthing.clearance(state):.2f} m of clearance"
                             )
                             phase = Phase.CAPTURE
 
@@ -198,7 +201,7 @@ Each step, the loop works out how well the end effector lines up with the fixtur
                                 f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees out of line"
                             )
 
-                            # the visitor is held, so the gap is zero and the clearance cannot change
+                            # the visitor is held, so its gap and distance to the arm cannot change
                             berthing.stop_proximities()
                             phase = Phase.BERTH
 
@@ -252,7 +255,7 @@ case Phase.APPROACH:
         logger.info(
             f"t={state.data.time:.1f}s: parked, gap {berthing.gap(state):.3f} m, "
             f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees "
-            f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
+            f"out of line, {berthing.clearance(state):.2f} m of clearance"
         )
         phase = Phase.CAPTURE
 ```
@@ -280,7 +283,7 @@ case Phase.CAPTURE:
             f"{1000 * off_axis:.1f} mm off the fixture's axis and {np.degrees(angle):.2f} degrees out of line"
         )
 
-        # the visitor is held, so the gap is zero and the clearance cannot change
+        # the visitor is held, so its gap and distance to the arm cannot change
         berthing.stop_proximities()
         phase = Phase.BERTH
 
@@ -289,7 +292,7 @@ case Phase.CAPTURE:
 - The end effector moves in only while it is lined up.
 - It aims a little past the fixture, so the servos' lag cannot stall it short of the capture gap.
 - When the gap is small enough and the arm is lined up, `capture.engage` switches the weld on.
-- The visitor is then held, so the gap is zero and the clearance cannot change, and `stop_proximities` stops measuring them.
+- The visitor is then held, so the gap is zero and its distance to the arm cannot change, and `stop_proximities` stops measuring those.
 
 ---
 
@@ -332,32 +335,57 @@ case Phase.RELEASE:
 
 ## Distances
 
-[Proximity](../../features/proximity.md) measures four pairs of mesh volumes:
+[Proximity](../../features/proximity.md) measures ten pairs of mesh volumes, nine for the **clearance** and one for the **gap**.
 
-- the first boom, the second boom and the free end effector, each against the visitor's hull, for the **clearance**
-- the free end effector against the visitor's grapple fixture, for the **gap**
+The clearance pairs are everything the arm must keep clear of:
 
-`clearance` is the smallest of the first three, and `gap` is the last. After capture, `stop_proximities` sets every pair's `active` flag to `False`.
+- the first boom, the second boom and the free end effector, each against the visitor's hull
+- the same three parts, each against the station's cylinder
+- the arm against itself: the free end effector against the first boom and the base end effector, and the second boom against the base end effector. Parts that meet at a joint are left out, since they would always read zero.
+
+The gap pair is the free end effector against the visitor's grapple fixture. `clearance` is the smallest of the nine clearance pairs, and a value of zero means two parts touch.
+
+Once the weld is on, the visitor moves with the arm, so the gap and the hull cannot change any more. `stop_proximities` then sets the `active` flag of those pairs to `False`. The station and arm pairs keep measuring, since the arm still has to clear the station while it carries the visitor.
+
+The housings at the joints are primitive shapes, so these pairs do not see them. [`mink`](7-dof-arm.md#inverse-kinematics) does, since it works from the whole model, which is why the arm also steers clear of the station and the hull on its own.
 
 ??? example "Distance Code"
 
     ``` python
-    _clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
-    """Distances from each boom and the free end effector to the hull."""
+    _hull_clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
+    """Distances from each boom and the free end effector to the hull, which stop mattering once the visitor is held."""
+
+    _other_clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
+    """Distances from the arm to the station and to itself, which matter until the end."""
 
     _gap: mojo.utils.Proximity | None = PrivateAttr(default=None)
     """Distance from the free end effector to the visitor's grapple fixture."""
 
     def register_proximities(self) -> None:
-        """Starts measuring and logging the clearance from the arm to the hull and the gap to the grapple fixture. Call it inside the runtime manager's `with` block."""
-        arm, visitor = self.arm, self.visitor
+        """Starts measuring and logging the clearance of the arm from the hull, the station and itself, and the gap to the grapple fixture. Call it inside the runtime manager's `with` block."""
+        arm, visitor, station = self.arm, self.visitor, self.station
 
         # `Proximity` works on mesh volumes, which is why these parts are meshes
-        self._clearances = [
-            mojo.utils.Proximity(
-                volume_1=part, volume_2=visitor.hull, dist_max=MISSION.CLEARANCE_RANGE
+        def measure(
+            one: mojo.GeomMesh, other: mojo.GeomMesh, visualize: bool = False
+        ) -> mojo.utils.Proximity:
+            return mojo.utils.Proximity(
+                volume_1=one,
+                volume_2=other,
+                dist_max=MISSION.CLEARANCE_RANGE,
+                visualize=visualize,
             ).register_to_rm()
-            for part in (arm.boom_1, arm.boom_2, arm.free_effector.geom)
+
+        moving = (arm.boom_1, arm.boom_2, arm.free_effector.geom)
+        self._hull_clearances = [
+            measure(part, visitor.hull, visualize=True) for part in moving
+        ]
+        self._other_clearances = [
+            *(measure(part, station.cylinder) for part in moving),
+            # parts that meet at a joint are left out, since they would always read zero
+            measure(arm.free_effector.geom, arm.boom_1),
+            measure(arm.free_effector.geom, arm.base_effector.geom),
+            measure(arm.boom_2, arm.base_effector.geom),
         ]
         self._gap = mojo.utils.Proximity(
             volume_1=arm.free_effector.geom,
@@ -365,7 +393,7 @@ case Phase.RELEASE:
             dist_max=MISSION.GAP_RANGE,
         ).register_to_rm()
 
-        for proximity in (*self._clearances, self._gap):
+        for proximity in (*self._hull_clearances, *self._other_clearances, self._gap):
             proximity.request(channels=["dist", "fromto", "prox_type"])
 
     def gap(self, state: mojo.MjState) -> float:
@@ -374,18 +402,22 @@ case Phase.RELEASE:
         return self._gap.get_proximity(state)[0]
 
     def clearance(self, state: mojo.MjState) -> float:
-        """Distance from the closest boom or the free end effector to the hull."""
-        return min(part.get_proximity(state)[0] for part in self._clearances)
+        """Distance from the arm to the closest thing it must keep clear of, which is zero if two of them touch."""
+        return min(
+            proximity.get_proximity(state)[0]
+            for proximity in (*self._hull_clearances, *self._other_clearances)
+            if proximity.active
+        )
 
     @property
     def tracking(self) -> bool:
-        """Whether the distances are still being measured."""
+        """Whether the gap and the hull distances are still being measured."""
         return self._gap is not None and self._gap.active
 
     def stop_proximities(self) -> None:
-        """Stops measuring, drawing and logging the distances. Call it once the weld is on: the visitor is held, so there is nothing left to watch."""
+        """Stops measuring, drawing and logging the gap and the hull distances. Call it once the weld is on: the visitor is held, so there is nothing left to watch there."""
         assert self._gap  # made by register_proximities
-        for proximity in (*self._clearances, self._gap):
+        for proximity in (*self._hull_clearances, self._gap):
             proximity.active = False
 
     ```
@@ -440,7 +472,7 @@ class Capture(mojo.UserData):
 
 ## Videos
 
-[Video Recording](../../features/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the distances are no longer measured, so the label drops them.
+[Video Recording](../../features/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the gap is no longer measured, so the label drops it.
 
 The overview camera records the whole run. The arm camera starts the first time the end effector lines up with the fixture and keeps going from there, since the arm can drift out of tolerance for a moment as it starts to move.
 
@@ -458,13 +490,9 @@ The overview camera records the whole run. The arm camera starts the first time 
 
         def label(state: mojo.MjState) -> rt.LabelConfig:
             weld = "on" if self.capture.is_engaged(state) else "off"
-            distances = (
-                f"gap = {self.gap(state):5.2f} m    clearance = {self.clearance(state):4.2f} m    "
-                if self.tracking
-                else ""
-            )
+            gap = f"gap = {self.gap(state):5.2f} m    " if self.tracking else ""
             return {
-                "text": f"t = {state.data.time:6.1f} s    {distances}weld {weld}",
+                "text": f"t = {state.data.time:6.1f} s    {gap}clearance = {self.clearance(state):4.2f} m    weld {weld}",
                 "background_color": mojo.utils.Color.SLATE_900.with_alpha(0.7),
             }
 

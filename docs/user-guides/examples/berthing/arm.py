@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, Self
 
+import mink
 import mujoco
 import numpy as np
 from end_effector import END_EFFECTOR, EndEffector
@@ -22,18 +23,18 @@ ROLL_COLOR = mojo.utils.Color.RED_500.rgba
 PITCH_COLOR = mojo.utils.Color.GREEN_500.rgba
 YAW_COLOR = mojo.utils.Color.BLUE_500.rgba
 
-REACH_OPACITY = 0.02
-
-# settings for `Arm.solve`
-SOLVER_TOLERANCE = (
-    1e-4  # meters and radians; must stay above the small error the home pull leaves
+# settings for `Arm.move_to`
+IK_SOLVER = "daqp"  # the backend that solves each step's quadratic program
+IK_POSITION_COST = 1.0
+IK_ORIENTATION_COST = 1.0
+IK_POSTURE_COST = (
+    1e-3  # small, so the pull toward home only picks among answers that reach the goal
 )
-SOLVER_ITERATIONS = 100
-SOLVER_DAMPING = 0.05  # keeps steps small near a singular pose
-SOLVER_MAX_STEP = 0.2  # radians a joint may move in one iteration
-SOLVER_HOME_PULL = (
-    0.01  # fraction of each joint's angle pulled toward home per iteration
-)
+IK_DAMPING = 1e-3  # keeps steps small near a singular pose
+KEEP_OUT_DISTANCE = 0.1 * US.m  # how close the arm may come to anything it must not hit
+KEEP_OUT_DETECTION = (
+    0.4 * US.m
+)  # where the avoidance starts to act, wider than the keep-out distance by more than a step can close
 
 
 # --8<-- [start:inputs]
@@ -136,19 +137,73 @@ class ArmInput(mojo.UserData):
     home: HomeInput = HomeInput()
     """The pose the arm starts in."""
 
-    @property
-    def LENGTH(self) -> float:
-        """The arm's length from end to end when straight."""
-        return (
-            2 * END_EFFECTOR.LENGTH
-            + 2 * self.roll.LENGTH
-            + self.boom_1.LENGTH
-            + self.boom_2.LENGTH
-        )
-
 
 ARM = ArmInput()
 # --8<-- [end:inputs]
+
+
+# start poses the arm was tested from, and every one berths: set `ARM.home = HOME_POSES["straight"]` before `generate` to try one
+HOME_POSES: dict[str, HomeInput] = {
+    "default": HomeInput(),
+    "straight": HomeInput(SHOULDER_PITCH=0, ELBOW_PITCH=0, WRIST_PITCH=0),
+    "elbow_back": HomeInput(SHOULDER_PITCH=-40, ELBOW_PITCH=-100, WRIST_PITCH=40),
+    "folded": HomeInput(SHOULDER_PITCH=30, ELBOW_PITCH=165, WRIST_PITCH=-60),
+    # drawn at random in degrees from seeds 1 to 6, rounded to a tenth
+    "random_1": HomeInput(
+        SHOULDER_ROLL=4.3,
+        SHOULDER_YAW=54.1,
+        SHOULDER_PITCH=-64.1,
+        ELBOW_PITCH=134.6,
+        WRIST_PITCH=-33.9,
+        WRIST_YAW=-9.2,
+        WRIST_ROLL=118.0,
+    ),
+    "random_2": HomeInput(
+        SHOULDER_ROLL=-85.8,
+        SHOULDER_YAW=-24.2,
+        SHOULDER_PITCH=56.6,
+        ELBOW_PITCH=-122.4,
+        WRIST_PITCH=18.0,
+        WRIST_YAW=27.4,
+        WRIST_ROLL=-112.4,
+    ),
+    "random_3": HomeInput(
+        SHOULDER_ROLL=-149.2,
+        SHOULDER_YAW=-31.6,
+        SHOULDER_PITCH=54.2,
+        ELBOW_PITCH=24.6,
+        WRIST_PITCH=-73.1,
+        WRIST_YAW=-8.0,
+        WRIST_ROLL=-7.5,
+    ),
+    "random_4": HomeInput(
+        SHOULDER_ROLL=159.5,
+        SHOULDER_YAW=1.4,
+        SHOULDER_PITCH=85.7,
+        ELBOW_PITCH=-125.7,
+        WRIST_PITCH=19.3,
+        WRIST_YAW=-14.8,
+        WRIST_ROLL=108.7,
+    ),
+    "random_5": HomeInput(
+        SHOULDER_ROLL=109.8,
+        SHOULDER_YAW=37.0,
+        SHOULDER_PITCH=2.8,
+        ELBOW_PITCH=-64.3,
+        WRIST_PITCH=-80.3,
+        WRIST_YAW=-14.0,
+        WRIST_ROLL=-32.9,
+    ),
+    "random_6": HomeInput(
+        SHOULDER_ROLL=13.7,
+        SHOULDER_YAW=-18.8,
+        SHOULDER_PITCH=-23.6,
+        ELBOW_PITCH=-37.7,
+        WRIST_PITCH=87.7,
+        WRIST_YAW=15.9,
+        WRIST_ROLL=62.8,
+    ),
+}
 
 
 # --8<-- [start:helpers]
@@ -193,6 +248,9 @@ def hinge(name: str, axis: tuple[float, float, float]) -> mojo.Joint:
         type=mojo.JointType.HINGE,
         axis=np.array(axis),
         armature=ARM.servo.ARMATURE,
+        limited=mojo.JointLimited.TRUE,
+        # in degrees, the unit MuJoCo's compiler reads by default
+        range=np.array((-ARM.servo.RANGE_DEG, ARM.servo.RANGE_DEG)),
     )
 
 
@@ -254,8 +312,8 @@ class Arm(mojo.UserData):
     free_effector: EndEffector
     """The end effector at the free end."""
 
-    reach: mojo.GeomMesh
-    """The reach envelope: a translucent hemisphere on the base end effector's tip, as large as the arm is long."""
+    free_end: mojo.Body
+    """The last body in the chain, which carries the free end effector. Aiming a camera at it aims at the free end's center of mass."""
 
     camera: mojo.Camera
     """The camera on the free end effector. Its `name` is what a video recorder needs."""
@@ -266,20 +324,32 @@ class Arm(mojo.UserData):
     _command: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7))
     """The angles the servos are commanded to hold, in radians from home, in the order of `joints`. Runtime state, so not saved with the model."""
 
-    _solution: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7))
-    """The last answer of `solve`, which the next call starts from."""
+    _configuration: mink.Configuration | None = PrivateAttr(default=None)
+    """The solver's own copy of the model's configuration, which it moves one step at a time. Made on the first `move_to`."""
 
-    _scratch: mujoco.MjData | None = PrivateAttr(default=None)
-    """A private copy of the state that `solve` moves, so the live simulation is not disturbed."""
+    _frame_task: mink.FrameTask | None = PrivateAttr(default=None)
+    """Asks the free end effector's site to be at the goal."""
+
+    _tasks: list[mink.Task] = PrivateAttr(default_factory=list)
+    """What the solver works toward: the frame task, then the pull toward home."""
+
+    _limits: list[mink.Limit] = PrivateAttr(default_factory=list)
+    """What the solver must respect: each joint's range and its speed, and what the arm must keep clear of."""
+
+    _held: list[mink.Task] = PrivateAttr(default_factory=list)
+    """What the solver must keep still, which is everything that is not one of the arm's joints."""
 
     _qpos_address: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7, int))
     """Where each joint is in `qpos`."""
 
-    _dof_address: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(7, int))
-    """Where each joint's column is in the Jacobian."""
+    _other_qpos: np.ndarray = PrivateAttr(default_factory=lambda: np.zeros(0, int))
+    """Where everything that is not one of the arm's joints is in `qpos`, such as the visitor."""
 
-    _tip_id: int = PrivateAttr(default=-1)
-    """The free end effector's tip site in the compiled model."""
+    _obstacles: list[mojo.GeomMesh] = PrivateAttr(default_factory=list)
+    """What the arm must keep clear of, set by `keep_clear_of`."""
+
+    _grapple: mojo.GeomMesh | None = PrivateAttr(default=None)
+    """The one thing the free end effector may touch."""
 
     _waypoint_pos: np.ndarray | None = PrivateAttr(default=None)
     """The goal `carry_to` has moved to so far, in the world."""
@@ -304,90 +374,110 @@ class Arm(mojo.UserData):
 
     # --8<-- [end:register]
 
-    # --8<-- [start:solve]
-    def solve(
-        self, state: mojo.MjState, tip: mojo.Vec3, frame: mojo.Mat3
-    ) -> np.ndarray:
-        """Joint angles, in radians from home, that put the free end effector's tip at `tip` with orientation `frame`, both in the world."""
-        # damped least squares on a private copy of the state: move the joints by the step the Jacobian says brings the tip closer, until it is close enough
-        # it starts from its own last answer, not the commanded angles, which lag while the arm slews, so a goal that holds still costs nothing
+    # --8<-- [start:ik]
+    def keep_clear_of(
+        self,
+        *obstacles: mojo.GeomMesh,
+        grapple: mojo.GeomMesh,
+    ) -> None:
+        """Makes the arm keep clear of `obstacles`, and of `grapple` too, except that the free end effector may touch `grapple`. Call it before the first `move_to`."""
+        self._obstacles = list(obstacles)
+        self._grapple = grapple
+
+    def _keep_out(self, model: mujoco.MjModel) -> mink.CollisionAvoidanceLimit:
+        """The limit that keeps the arm's geoms away from the obstacles."""
+        assert self._grapple is not None
+        arm = [
+            int(g) for g in mink.get_subtree_geom_ids(model, self.body.get_id(model))
+        ]
+        free_end = self.free_effector.geom.get_id(model)
+        obstacles = [obstacle.get_id(model) for obstacle in self._obstacles]
+        return mink.CollisionAvoidanceLimit(
+            model,
+            geom_pairs=[
+                (arm, obstacles),
+                # the free end effector is meant to meet the grapple fixture, so it is left out
+                ([g for g in arm if g != free_end], [self._grapple.get_id(model)]),
+            ],
+            minimum_distance_from_collisions=KEEP_OUT_DISTANCE,
+            collision_detection_distance=KEEP_OUT_DETECTION,
+        )
+
+    def _start_ik(self, state: mojo.MjState) -> None:
+        """Sets up mink, starting from the state's configuration."""
         model = state.model
-        if self._scratch is None:
-            self._scratch = mujoco.MjData(model)
-            self._qpos_address = np.array(
-                [model.jnt_qposadr[joint.get_id(model)] for joint in self.joints]
-            )
-            self._dof_address = np.array(
-                [model.jnt_dofadr[joint.get_id(model)] for joint in self.joints]
-            )
-            self._tip_id = self.free_effector.tip.get_id(model)
-        scratch = self._scratch
+        q = state.data.qpos.copy()
+        self._qpos_address = np.array([j.qpos_address(state) for j in self.joints])
+        dof_address = np.array([j.dof_address(state) for j in self.joints])
+        assert self.free_effector.tip.name
 
-        goal_quat = np.empty(4)
-        mujoco.mju_mat2Quat(goal_quat, np.asarray(frame, dtype=float).ravel())
+        self._configuration = mink.Configuration(model, q)
+        self._frame_task = mink.FrameTask(
+            frame_name=self.free_effector.tip.name,
+            frame_type="site",
+            position_cost=IK_POSITION_COST,
+            orientation_cost=IK_ORIENTATION_COST,
+        )
 
-        angles = self._solution.copy()
-        for _ in range(SOLVER_ITERATIONS):
-            scratch.qpos[self._qpos_address] = angles
-            mujoco.mj_kinematics(model, scratch)
-            mujoco.mj_comPos(model, scratch)
+        # the goal leaves one joint free (the elbow can swivel about the line from shoulder to wrist), so a weak pull toward home picks one answer
+        cost = np.zeros(model.nv)
+        cost[dof_address] = IK_POSTURE_COST
+        posture = mink.PostureTask(model, cost=cost)
+        home = q.copy()
+        home[self._qpos_address] = 0
+        posture.set_target(home)
 
-            # the orientation error is the world-frame rotation that takes the tip's orientation to the goal's
-            tip_quat, tip_inverse, difference = np.empty(4), np.empty(4), np.empty(4)
-            mujoco.mju_mat2Quat(tip_quat, scratch.site_xmat[self._tip_id])
-            mujoco.mju_negQuat(tip_inverse, tip_quat)
-            mujoco.mju_mulQuat(difference, goal_quat, tip_inverse)
-            rotation_error = np.empty(3)
-            mujoco.mju_quat2Vel(rotation_error, difference, 1.0)
-            position_error = tip - scratch.site_xpos[self._tip_id]
-            if (
-                np.linalg.norm(position_error) < SOLVER_TOLERANCE
-                and np.linalg.norm(rotation_error) < SOLVER_TOLERANCE
-            ):
-                break
+        self._other_qpos = np.setdiff1d(np.arange(model.nq), self._qpos_address)
 
-            jacobian_position = np.zeros((3, model.nv))
-            jacobian_rotation = np.zeros((3, model.nv))
-            mujoco.mj_jacSite(
-                model, scratch, jacobian_position, jacobian_rotation, self._tip_id
-            )
-            jacobian = np.vstack((jacobian_position, jacobian_rotation))[
-                :, self._dof_address
-            ]
-            error = np.concatenate((position_error, rotation_error))
-            pseudo_inverse = jacobian.T @ np.linalg.inv(
-                jacobian @ jacobian.T + SOLVER_DAMPING**2 * np.eye(6)
-            )
-            step = pseudo_inverse @ error
+        # with nothing holding it, the solver can satisfy a distance limit by moving the visitor away instead of the arm
+        others = np.setdiff1d(np.arange(model.nv), dof_address)
+        self._held = [mink.DofFreezingTask(model, [int(dof) for dof in others])]
 
-            # the goal leaves the seventh joint free (the elbow can swivel about the line from shoulder to wrist), so noise alone would walk the arm along that family of answers; a pull toward home in the direction that cannot move the tip picks one
-            null_space = np.eye(len(angles)) - pseudo_inverse @ jacobian
-            step -= null_space @ (SOLVER_HOME_PULL * angles)
-
-            angles += np.clip(step, -SOLVER_MAX_STEP, SOLVER_MAX_STEP)
-
-        self._solution = angles
-        return angles.copy()
-
-    # --8<-- [end:solve]
-
-    # --8<-- [start:slew]
-    def slew(self, goal: np.ndarray, dt: float) -> None:
-        """Moves the commanded angles one step of `dt` toward `goal`, in radians from home. The joint with the furthest to go moves at the slew rate and the others are scaled down, so they all arrive together."""
-        limit = np.deg2rad(ARM.servo.RANGE_DEG)
-        step = np.deg2rad(ARM.servo.SLEW_RATE_DEG) * dt
-        remaining = np.clip(goal, -limit, limit) - self._command
-        furthest = np.abs(remaining).max()
-        if furthest > step:
-            remaining *= step / furthest
-        self._command += remaining
+        speeds: dict[str, float] = {}
+        for joint in self.joints:
+            assert joint.name
+            speeds[joint.name] = np.deg2rad(ARM.servo.SLEW_RATE_DEG)
+        self._tasks = [self._frame_task, posture]
+        self._limits = [
+            mink.ConfigurationLimit(model),
+            mink.VelocityLimit(model, speeds),
+        ]
+        if self._obstacles:
+            self._limits.append(self._keep_out(model))
 
     def move_to(self, state: mojo.MjState, tip: mojo.Vec3, frame: mojo.Mat3) -> float:
-        """Takes one step toward the tip being at `tip` with orientation `frame`, both fixed in the world. Returns the distance the tip still has to go."""
-        self.slew(self.solve(state, tip, frame), state.model.opt.timestep)
+        """Takes one step toward the end effector's site being at `tip` with orientation `frame`, both fixed in the world. Returns the distance the site still has to go."""
+        if self._configuration is None:
+            self._start_ik(state)
+        assert self._configuration is not None
+        assert self._frame_task is not None
+
+        self._frame_task.set_target(
+            mink.SE3.from_rotation_and_translation(
+                mink.SO3.from_matrix(np.asarray(frame, dtype=float)),
+                np.asarray(tip, dtype=float),
+            )
+        )
+        # the visitor moves in the simulation but not in mink's copy, so bring it up to date
+        q = self._configuration.q.copy()
+        q[self._other_qpos] = state.data.qpos[self._other_qpos]
+        self._configuration.update(q)
+
+        timestep = state.model.opt.timestep
+        velocity = mink.solve_ik(
+            self._configuration,
+            self._tasks,
+            timestep,
+            IK_SOLVER,
+            damping=IK_DAMPING,
+            limits=self._limits,
+            constraints=self._held,
+        )
+        self._configuration.integrate_inplace(velocity, timestep)
+        self._command[:] = self._configuration.q[self._qpos_address]
         return float(np.linalg.norm(self.free_effector.tip.rt_pos(state) - tip))
 
-    # --8<-- [end:slew]
+    # --8<-- [end:ik]
 
     def carry_to(
         self,
@@ -426,10 +516,7 @@ class Arm(mojo.UserData):
         waypoint_frame = np.empty(9)
         mujoco.mju_quat2Mat(waypoint_frame, self._waypoint_quat)
 
-        self.slew(
-            self.solve(state, self._waypoint_pos, waypoint_frame.reshape(3, 3)),
-            timestep,
-        )
+        self.move_to(state, self._waypoint_pos, waypoint_frame.reshape(3, 3))
         return float(np.linalg.norm(tip_site.rt_pos(state) - tip))
 
     # --8<-- [start:approach]
@@ -474,17 +561,11 @@ class Arm(mojo.UserData):
                 meshes=[
                     boom_1_mesh := ARM.boom_1.mesh("boom_1_mesh"),
                     boom_2_mesh := ARM.boom_2.mesh("boom_2_mesh"),
-                    reach_mesh := mojo.MeshHemisphere(
-                        name=mojo.MeshName("reach_mesh"),
-                        resolution=8,
-                        scale=np.full(3, ARM.LENGTH),
-                    ),
                 ]
             )
         )
         assert boom_1_mesh.name
         assert boom_2_mesh.name
-        assert reach_mesh.name
 
         # laid down along X and moved out by half their length, so each runs from its joint outward
         boom_1 = mojo.GeomMesh(
@@ -506,22 +587,6 @@ class Arm(mojo.UserData):
         root = base.site.pose.pos - np.array((END_EFFECTOR.LENGTH, 0, 0))
         base_effector = EndEffector.new(mojo_model, "base", mojo.PoseQuat(pos=root))
         base.frame.frames.append(base_effector.frame)
-
-        # no mass or collisions; the flat face is on the fixture's site, and a hemisphere's dome points along its own Z, so a quarter turn about Y points it out of the station
-        reach = mojo.GeomMesh(
-            name=mojo.GeomName("reach_geom"),
-            mesh=reach_mesh.name,
-            pose=mojo.PoseEuler(
-                euler=np.array((0, -90, 0)),
-                angle=mojo.Angle.DEGREE,
-                pos=base.site.pose.pos,
-            ),
-            density=0,
-            contype=0,
-            conaffinity=0,
-            rgba=mojo.utils.Color.TEAL_500.with_alpha(REACH_OPACITY),
-        )
-        base.frame.geoms.append(reach)
 
         # --8<-- [start:shoulder]
         # one body per joint, from the station out, so each joint turns everything after it
@@ -637,7 +702,7 @@ class Arm(mojo.UserData):
             wrist_roll=wrist_roll,
             base_effector=base_effector,
             free_effector=free_effector,
-            reach=reach,
+            free_end=wrist_roll_body,
             camera=camera,
             servos=[],
         )

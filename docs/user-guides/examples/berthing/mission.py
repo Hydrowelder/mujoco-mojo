@@ -26,7 +26,7 @@ class MissionInput(mojo.UserData):
     """How far, in degrees, the tip's axis may turn from the fixture's and still count as lined up."""
 
     CLEARANCE_RANGE: float = 3.0 * US.m
-    """Range of the clearance measurement: when the arm and the hull are further apart than this, the distance is only estimated."""
+    """Range of the clearance measurements: when two parts are further apart than this, the distance is only estimated."""
 
     GAP_RANGE: float = 10.0 * US.m
     """Range of the gap measurement: when the end effector and the grapple fixture are further apart than this, the distance is only estimated."""

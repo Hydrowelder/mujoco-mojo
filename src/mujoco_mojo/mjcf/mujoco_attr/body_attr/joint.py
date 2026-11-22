@@ -266,6 +266,14 @@ class Joint(XMLModel):
         self._dims_cache = (qpos_adr, dof_adr, nq, nv)
         return self._dims_cache
 
+    def qpos_address(self, state: MjState) -> int:
+        """Where this joint starts in `qpos`, and in any vector laid out like it, such as a configuration."""
+        return self._dims(state)[0]
+
+    def dof_address(self, state: MjState) -> int:
+        """Where this joint starts in `qvel`, and where its columns start in a Jacobian."""
+        return self._dims(state)[1]
+
     _body_id_cache: int = PrivateAttr(default=-1)
     """Cached ID of the body this joint's DOFs belong to, resolved against the compiled MuJoCo model."""
 

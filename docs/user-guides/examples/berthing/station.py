@@ -6,6 +6,7 @@ from typing import Self
 
 import numpy as np
 from fixture import GrappleFixture
+from shapes import CylinderInput, lying_along
 
 import mujoco_mojo as mojo
 
@@ -15,7 +16,7 @@ OPACITY = 0.3  # 0 is invisible, 1 is solid
 
 
 # --8<-- [start:inputs]
-class StationInput(mojo.UserData):
+class StationInput(CylinderInput):
     """Dimensions of the station."""
 
     RADIUS: float = 0.8 * US.m
@@ -23,6 +24,9 @@ class StationInput(mojo.UserData):
 
     LENGTH: float = 6.0 * US.m
     """Length of the station's cylinder, which lies along Y and is centered on the origin."""
+
+    MASS: float = 400_000 * US.kg
+    """Mass of the station's cylinder. It has no effect, since the station is fixed in the world."""
 
     BERTH_POSITION: tuple[float, float, float] = (3.0 * US.m, 0.0 * US.m, 1.5 * US.m)
     """Where the visitor's grapple site is brought to, as X, Y and Z in the world. It must be far enough out for the end effector, which lies behind the site, to clear the station."""
@@ -39,7 +43,7 @@ class Station(mojo.UserData):
     body: mojo.Body
     """The station's body, fixed in the world."""
 
-    cylinder: mojo.GeomCylinder
+    cylinder: mojo.GeomMesh
     """The station's cylinder."""
 
     fixture: GrappleFixture
@@ -52,10 +56,16 @@ class Station(mojo.UserData):
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
         assert mojo_model.mjcf.worldbody  # for type hinting
 
-        cylinder = mojo.GeomCylinder(
+        mojo_model.mjcf.assets.append(
+            mojo.Asset(meshes=[mesh := STATION.mesh("station_mesh")])
+        )
+        assert mesh.name
+
+        cylinder = mojo.GeomMesh(
             name=mojo.GeomName("station_geom"),
-            size=STATION.RADIUS,
-            fromto=np.array((0, -STATION.LENGTH / 2, 0, 0, STATION.LENGTH / 2, 0)),
+            mesh=mesh.name,
+            pose=lying_along("y"),
+            mass=STATION.MASS,
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
         )
 
