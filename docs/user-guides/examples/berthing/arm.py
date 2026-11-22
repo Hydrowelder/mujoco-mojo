@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Self
+from typing import Literal, Self
 
 import numpy as np
 from end_effector import END_EFFECTOR, EndEffector
 from fixture import GrappleFixture
 from shapes import CylinderInput, cylinder_mesh, lying_along
+from visitor import VISITOR
 
 import mujoco_mojo as mojo
 
@@ -33,6 +34,47 @@ class CameraInput(mojo.UserData):
 
     SETBACK: float = 0.1 * US.m
     """How far the camera sits behind the end effector's tip."""
+
+
+class ServoInput(mojo.UserData):
+    """The position servo on every joint, which are all the same."""
+
+    KP: float = 2e5 * US["N*m/rad"]
+    """Position gain: the torque for each radian between a joint's angle and the angle commanded."""
+
+    KV: float = 1e5 * US["N*m*s/rad"]
+    """Velocity gain: the torque for each radian per second of a joint's motion, which damps it."""
+
+    ARMATURE: float = 10 * US["kg*m**2"]
+    """Armature of every joint, the inertia of its motor, which keeps the lightest joints well behaved under high gains."""
+
+    RANGE_DEG: float = 180
+    """Largest angle a servo can be commanded to, in degrees either way. It is also the range of a viewer's control sliders."""
+
+
+class HomeInput(mojo.UserData):
+    """The angle of each joint when the model is built, in degrees: the home pose. The arm is built bent like this, so every joint's angle is measured from home, a joint at zero is at home, and a servo with a control value of zero holds the arm there. The defaults fold the arm into a V that points at the visitor: the shoulder turns toward it, the first boom tilts up and out, the second comes back down toward it, and the end effector points at its grapple fixture."""
+
+    SHOULDER_ROLL: float = VISITOR.AZIMUTH_DEG
+    """Shoulder roll, which turns the plane the arm bends in. It is the visitor's direction from the station, so the arm bends toward the visitor."""
+
+    SHOULDER_YAW: float = 0
+    """Shoulder yaw."""
+
+    SHOULDER_PITCH: float = 20
+    """Shoulder pitch, which tilts the first boom away from straight out of the station."""
+
+    ELBOW_PITCH: float = 130
+    """Elbow pitch, which folds the second boom back toward the first. The bigger it is, the narrower the V."""
+
+    WRIST_PITCH: float = -35
+    """Wrist pitch, which turns the end effector, here back up from the second boom so it points at the visitor."""
+
+    WRIST_YAW: float = 0
+    """Wrist yaw."""
+
+    WRIST_ROLL: float = 0
+    """Wrist roll."""
 
 
 class ArmInput(mojo.UserData):
@@ -70,6 +112,12 @@ class ArmInput(mojo.UserData):
 
     camera: CameraInput = CameraInput()
     """The camera on the free end effector. The base end effector has none."""
+
+    servo: ServoInput = ServoInput()
+    """The servo on each of the seven joints."""
+
+    home: HomeInput = HomeInput()
+    """The pose the arm starts in."""
 
     @property
     def LENGTH(self) -> float:
@@ -120,14 +168,33 @@ def pitch_housing(name: str) -> mojo.GeomCylinder:
     )
 
 
+def hinge(name: str, axis: tuple[float, float, float]) -> mojo.Joint:
+    """A hinge joint about `axis`, with the armature every joint of the arm has."""
+    return mojo.Joint(
+        name=mojo.JointName(name),
+        type=mojo.JointType.HINGE,
+        axis=np.array(axis),
+        armature=ARM.servo.ARMATURE,
+    )
+
+
 def out_of_station(pos: mojo.Vec3) -> mojo.PoseEuler:
     """A pose at `pos`, in the frame of the station's grapple fixture, whose X axis points out of the station. The fixture's own X axis points into the station, so this is half a revolution about Y."""
     return mojo.PoseEuler(euler=np.array((0, 180, 0)), angle=mojo.Angle.DEGREE, pos=pos)
 
 
+def turned(
+    pos: mojo.Vec3, axis: Literal["x", "y", "z"], degrees: float
+) -> mojo.PoseEuler:
+    """The pose of a joint's body, at `pos`, when the joint is at its home angle: turned `degrees` about its own `axis`. The joint turns about that same axis, so the axis in the body's parent is unchanged, and everything after the joint is carried round with it."""
+    euler = np.zeros(3)
+    euler["xyz".index(axis)] = degrees
+    return mojo.PoseEuler(euler=euler, angle=mojo.Angle.DEGREE, pos=pos)
+
+
 # --8<-- [start:arm]
 class Arm(mojo.UserData):
-    """The robotic arm. In its own frame the arm points along +X, which is out of the station, and the roll joints turn about X, the yaw joints about Z and the pitch joints about Y."""
+    """The robotic arm. In its own frame the arm points along +X, which is out of the station, and the roll joints turn about X, the yaw joints about Z and the pitch joints about Y. It is built in its home pose (`HomeInput`), a V that points at the visitor, so every joint's angle is measured from home."""
 
     body: mojo.Body
     """The arm's first body, the shoulder roll's, which sits at the root of the base end effector."""
@@ -170,6 +237,22 @@ class Arm(mojo.UserData):
 
     camera: mojo.Camera
     """The camera on the free end effector, looking along it. Its `name` is what a video recorder needs."""
+
+    servos: list[mojo.ActuatorPosition]
+    """The position servo of each joint, in the same order as `joints`. A servo's control value is the angle its joint is commanded to, in radians from home, so zero holds the arm in its home pose."""
+
+    @property
+    def joints(self) -> list[mojo.Joint]:
+        """The seven joints, from the station out: shoulder roll, yaw and pitch, elbow pitch, then wrist pitch, yaw and roll."""
+        return [
+            self.shoulder_roll,
+            self.shoulder_yaw,
+            self.shoulder_pitch,
+            self.elbow_pitch,
+            self.wrist_pitch,
+            self.wrist_yaw,
+            self.wrist_roll,
+        ]
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, base: GrappleFixture) -> Self:
@@ -236,47 +319,38 @@ class Arm(mojo.UserData):
         # one body per joint, from the station out, so each joint turns everything after it: roll, then yaw, then pitch, starting at the root of the base end effector's far end
         roll_body = mojo.Body(
             name=mojo.BodyName("shoulder_roll"),
-            pose=out_of_station(root),
+            # turned out of the station first, then rolled about its own X axis, which is how two poses chain with `*`
+            pose=out_of_station(root)
+            * turned(np.zeros(3), "x", ARM.home.SHOULDER_ROLL),
             geoms=[roll_housing("shoulder_roll_geom")],
         )
-        shoulder_roll = mojo.Joint(
-            name=mojo.JointName("shoulder_roll"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((1, 0, 0)),
-        )
+        shoulder_roll = hinge("shoulder_roll", (1, 0, 0))
         roll_body.joints.append(shoulder_roll)
 
         # the yaw and pitch bodies sit at the shoulder, the far end of the roll housing, so all three axes meet there
         yaw_body = mojo.Body(
             name=mojo.BodyName("shoulder_yaw"),
-            pose=mojo.PoseQuat(pos=np.array((ARM.roll.LENGTH, 0, 0))),
+            pose=turned(np.array((ARM.roll.LENGTH, 0, 0)), "z", ARM.home.SHOULDER_YAW),
             geoms=[yaw_housing("shoulder_yaw_geom")],
         )
-        shoulder_yaw = mojo.Joint(
-            name=mojo.JointName("shoulder_yaw"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((0, 0, 1)),
-        )
+        shoulder_yaw = hinge("shoulder_yaw", (0, 0, 1))
         yaw_body.joints.append(shoulder_yaw)
         roll_body.bodies.append(yaw_body)
 
         # the pitch body carries the first boom
         pitch_body = mojo.Body(
             name=mojo.BodyName("shoulder_pitch"),
+            pose=turned(np.zeros(3), "y", ARM.home.SHOULDER_PITCH),
             geoms=[pitch_housing("shoulder_pitch_geom"), boom_1],
         )
-        shoulder_pitch = mojo.Joint(
-            name=mojo.JointName("shoulder_pitch"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((0, 1, 0)),
-        )
+        shoulder_pitch = hinge("shoulder_pitch", (0, 1, 0))
         pitch_body.joints.append(shoulder_pitch)
         yaw_body.bodies.append(pitch_body)
 
         # the elbow body sits at the end of the first boom, and carries the second boom and the elbow's housing, a cylinder along its pitch axis
         elbow_body = mojo.Body(
             name=mojo.BodyName("elbow_pitch"),
-            pose=mojo.PoseQuat(pos=np.array((ARM.boom_1.LENGTH, 0, 0))),
+            pose=turned(np.array((ARM.boom_1.LENGTH, 0, 0)), "y", ARM.home.ELBOW_PITCH),
             geoms=[
                 mojo.GeomCylinder(
                     name=mojo.GeomName("elbow_geom"),
@@ -290,43 +364,33 @@ class Arm(mojo.UserData):
                 boom_2,
             ],
         )
-        elbow_pitch = mojo.Joint(
-            name=mojo.JointName("elbow_pitch"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((0, 1, 0)),
-        )
+        elbow_pitch = hinge("elbow_pitch", (0, 1, 0))
         elbow_body.joints.append(elbow_pitch)
         pitch_body.bodies.append(elbow_body)
 
         # the wrist's three axes meet at the end of the second boom, so its bodies sit there: pitch, then yaw, then roll, with the same housings as the shoulder
         wrist_pitch_body = mojo.Body(
             name=mojo.BodyName("wrist_pitch"),
-            pose=mojo.PoseQuat(pos=np.array((ARM.boom_2.LENGTH, 0, 0))),
+            pose=turned(np.array((ARM.boom_2.LENGTH, 0, 0)), "y", ARM.home.WRIST_PITCH),
             geoms=[pitch_housing("wrist_pitch_geom")],
         )
-        wrist_pitch = mojo.Joint(
-            name=mojo.JointName("wrist_pitch"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((0, 1, 0)),
-        )
+        wrist_pitch = hinge("wrist_pitch", (0, 1, 0))
         wrist_pitch_body.joints.append(wrist_pitch)
         elbow_body.bodies.append(wrist_pitch_body)
 
         wrist_yaw_body = mojo.Body(
             name=mojo.BodyName("wrist_yaw"),
+            pose=turned(np.zeros(3), "z", ARM.home.WRIST_YAW),
             geoms=[yaw_housing("wrist_yaw_geom")],
         )
-        wrist_yaw = mojo.Joint(
-            name=mojo.JointName("wrist_yaw"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((0, 0, 1)),
-        )
+        wrist_yaw = hinge("wrist_yaw", (0, 0, 1))
         wrist_yaw_body.joints.append(wrist_yaw)
         wrist_pitch_body.bodies.append(wrist_yaw_body)
 
         # the roll body holds the roll housing, a drum from the wrist out along the arm like the shoulder's, and the free end effector is mounted at its far end, so the roll turns both
         wrist_roll_body = mojo.Body(
             name=mojo.BodyName("wrist_roll"),
+            pose=turned(np.zeros(3), "x", ARM.home.WRIST_ROLL),
             geoms=[roll_housing("wrist_roll_geom")],
         )
         free_effector = EndEffector.new(
@@ -344,18 +408,14 @@ class Arm(mojo.UserData):
             ),
         )
         free_effector.frame.cameras.append(camera)
-        wrist_roll = mojo.Joint(
-            name=mojo.JointName("wrist_roll"),
-            type=mojo.JointType.HINGE,
-            axis=np.array((1, 0, 0)),
-        )
+        wrist_roll = hinge("wrist_roll", (1, 0, 0))
         wrist_roll_body.joints.append(wrist_roll)
         wrist_yaw_body.bodies.append(wrist_roll_body)
 
         # the shoulder hangs off the fixture, which is in the station's body, so it is fixed to the station
         base.frame.bodies.append(roll_body)
 
-        return cls(
+        arm = cls(
             body=roll_body,
             shoulder_roll=shoulder_roll,
             shoulder_yaw=shoulder_yaw,
@@ -370,7 +430,24 @@ class Arm(mojo.UserData):
             free_effector=free_effector,
             reach=reach,
             camera=camera,
+            servos=[],
         )
+
+        # one position servo per joint, in the order of `joints`, each referring to its joint by its name: the control value is the angle to hold, in radians, and the servo pulls the joint toward it with a spring (`KP`) and a damper (`KV`)
+        limit = np.deg2rad(ARM.servo.RANGE_DEG)
+        arm.servos.extend(
+            mojo.ActuatorPosition(
+                name=mojo.ActuatorName(f"{joint.name}_servo"),
+                joint=joint.name,
+                kp=ARM.servo.KP,
+                kv=ARM.servo.KV,
+                ctrlrange=np.array((-limit, limit)),
+            )
+            for joint in arm.joints
+        )
+        mojo_model.mjcf.actuators.append(mojo.Actuator(positions=arm.servos))
+
+        return arm
 
 
 # --8<-- [end:arm]

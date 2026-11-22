@@ -27,10 +27,12 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     visitor = Visitor.new(mojo_model)
     Overview.new(mojo_model, visitor.body)
 
+    # the arm's servos are stiff and heavily damped, so the integrator treats that damping implicitly
     mojo_model.mjcf.options.append(
         mojo.Option(
             timestep=0.002 * US.s,
             gravity=np.array((0, 0, 0)) * US["m/s**2"],
+            integrator=mojo.Integrator.IMPLICITFAST,
         )
     )
 
