@@ -12,6 +12,8 @@
 - Setting an attribute MuJoCo has deprecated (`Light.directional`, `Size.njmax`, `Size.nconmax`, `Size.nstack`, `Statistic.meaninertia`, `Compiler.settotalmass`) now gives a `DeprecationWarning`, and logs it
 - Fixed Reloaded's log pane not showing what the first model generation logged
 - Added `reloaded.studio` settings for which panels Studio shows when it opens
+- Fixed a `VideoRecorder` with a `recording_trigger` that turns on late starting with a burst of near-identical frames
+- Added `Proximity.active`, which switches a pair off so it is no longer measured, drawn or logged
 
 ## Version 2.8.3 (2026-11-17)
 

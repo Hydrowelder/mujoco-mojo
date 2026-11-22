@@ -176,6 +176,25 @@ class TestIsDueAndCaptureFrame:
             recorder.capture_frame(state, [], [], [])
         assert recorder._frame_count == 1
 
+    def test_trigger_turning_on_late_does_not_burst_frames(
+        self, state, tmp_path
+    ) -> None:
+        rec = VideoRecorder(
+            path=tmp_path / "out.gif",
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            fps=10,
+            recording_trigger=lambda s: s.data.time >= 1.0,
+        ).setup(state)
+        for i in range(151):  # 1.5 s in steps of 0.01 s
+            state.data.time = i * 0.01
+            rec.capture_frame(state, [], [], [])
+        rec.close()
+        # 1.0 s to 1.5 s at 10 fps is about 6 frames; the time before the trigger must
+        # not be owed back as a burst of frames on consecutive steps
+        assert rec._frame_count <= 7
+
     def test_capture_frame_warns_once_at_max_frames(
         self, recorder, state, caplog
     ) -> None:
