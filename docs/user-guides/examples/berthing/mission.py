@@ -34,10 +34,10 @@ class MissionInput(mojo.UserData):
     RECORD_RANGE: float = 2.0 * US.m
     """The arm camera films only while the gap is below this."""
 
-    ARM_CAMERA_FPS: float = 20
+    ARM_CAMERA_FRAME_RATE: float = 20
     """Frames per second of simulation time of the arm camera's video."""
 
-    OVERVIEW_FPS: float = 10
+    OVERVIEW_FRAME_RATE: float = 10
     """Frames per second of simulation time of the overview camera's video."""
 
     APPROACH_SPEED: float = 0.15 * US["m/s"]

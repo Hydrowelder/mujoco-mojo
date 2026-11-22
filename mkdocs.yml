@@ -45,6 +45,7 @@ nav:
           - Pose Context: user-guides/features/pose-context.md
           - Requirements: user-guides/features/requirements.md
           - Proximity: user-guides/features/proximity.md
+          - Video Recording: user-guides/features/video-recording.md
       - Examples:
           - user-guides/examples/examples.md
           - Vertically Landed Rocket:

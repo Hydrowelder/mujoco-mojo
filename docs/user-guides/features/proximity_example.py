@@ -118,7 +118,7 @@ def record_clip(path: Path) -> None:
                 pose=mojo.PoseQuat.look_at(
                     target=np.array((0.75, 0, 0)),
                     eye=np.array((0.75, -2.8, 1.5)),
-                    roll=90,
+                    roll=-90,
                 ),
             )
         )
@@ -149,7 +149,7 @@ def record_clip(path: Path) -> None:
             rt.VideoRecorder(
                 path=path,
                 camera_name=mojo.CameraName("side"),
-                fps=60,
+                frame_rate=60,
                 playback_speed=0.5,
                 show_proximities=True,
                 frame_label=label,

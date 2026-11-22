@@ -123,6 +123,24 @@ def test_video_capture_with_arrows(mj_setup) -> None:
     assert len(kwargs["custom_arrows"]) == 1
 
 
+def test_remove_video_recorder_removes_that_recorder_by_identity() -> None:
+    """Two recorders that compare equal are still two recorders, so removing one must leave the other."""
+    first, second = MagicMock(), MagicMock()
+    first.__eq__.return_value = True
+    second.__eq__.return_value = True
+    mgr = RuntimeManager(video_recorders=[first, second])
+
+    mgr.remove_video_recorder(second)
+
+    assert len(mgr.video_recorders) == 1
+    assert mgr.video_recorders[0] is first
+
+
+def test_remove_video_recorder_raises_when_not_registered() -> None:
+    with pytest.raises(ValueError, match="not registered"):
+        RuntimeManager().remove_video_recorder(MagicMock())
+
+
 def test_video_capture_skipped_when_recording_disabled(mj_setup) -> None:
     """`_skip_recording` must gate video frame capture the same way it gates telemetry."""
     model, data = mj_setup

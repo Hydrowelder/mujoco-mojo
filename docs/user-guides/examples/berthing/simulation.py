@@ -132,7 +132,7 @@ class Berthing(mojo.UserData):
         rt.VideoRecorder(
             path=mojo_model.trial_dir / "arm_camera.mp4",
             camera_name=arm_camera,
-            fps=MISSION.ARM_CAMERA_FPS,
+            frame_rate=MISSION.ARM_CAMERA_FRAME_RATE,
             show_proximities=True,
             recording_trigger=arm_camera_trigger,
             frame_label=label,
@@ -141,7 +141,7 @@ class Berthing(mojo.UserData):
         rt.VideoRecorder(
             path=mojo_model.trial_dir / "overview.mp4",
             camera_name=overview_camera,
-            fps=MISSION.OVERVIEW_FPS,
+            frame_rate=MISSION.OVERVIEW_FRAME_RATE,
             show_proximities=True,
             frame_label=label,
         ).setup(state).register_to_rm()
