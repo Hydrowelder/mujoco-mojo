@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import mujoco
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.settings import ReloadedStudioSettings
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import (
@@ -138,6 +139,8 @@ class StudioBackend:
     gfx: StudioGraphics = StudioGraphics.DEFAULT
     """How the native window is drawn. The browser viewer ignores it."""
     title: str = "MuJoCo Mojo Reloaded"
+    studio: ReloadedStudioSettings = field(default_factory=ReloadedStudioSettings)
+    """Which parts of Studio are showing when it opens."""
 
     _controls: ViewerControls | None = field(default=None, init=False, repr=False)
     _handle: viewer_handle.ViewerHandle | None = field(
@@ -175,7 +178,21 @@ class StudioBackend:
 
         from .studio_plugins import MojoOverlay, MojoStepControl
 
-        plugins = [studio_app.App(), MojoStepControl(self._controls), MojoOverlay()]
+        app_config = studio_app.Config(
+            show_info=self.studio.show_info,
+            show_profiler=self.studio.show_profiler,
+            show_console=self.studio.show_console,
+            show_options=self.studio.show_options,
+            show_toolbar=self.studio.show_toolbar,
+            show_status_bar=self.studio.show_status_bar,
+            show_inspector=self.studio.show_inspector,
+        )
+
+        plugins = [
+            studio_app.App(app_config),
+            MojoStepControl(self._controls),
+            MojoOverlay(),
+        ]
         banner = io.StringIO()
         # the web viewer prints its own box of addresses from its thread a moment after it starts, and
         # Reloaded shows the address itself, so what it prints is held back here and dropped

@@ -490,7 +490,7 @@ def runtime(
                 rt.VideoRecorder(
                     path=Path(__file__).parent / "video.gif",
                     camera_name=vlr_model.camera,
-                    fps=10,
+                    frame_rate=10,
                 )
                 .setup(state)
                 .register_to_rm()

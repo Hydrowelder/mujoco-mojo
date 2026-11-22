@@ -10,7 +10,7 @@
 
 When building a kinematic tree, every body and site stores its pose relative to its immediate parent. If you want to place a site on `gripper` at the same world location as `target_site` on `base` (two separate branches) there is no direct MJCF mechanism for it. You would have to compose the full transform chain by hand.
 
-```python
+``` python
 # `base` and `gripper` are separate bodies, both direct children of worldbody.
 # Neither is a parent of the other (they are on different branches of the tree).
 base = mojo.Body(
@@ -43,7 +43,7 @@ mojo_model.mjcf.worldbody.bodies.extend([base, gripper])
 
 For a single pose, `Mujoco.local_pose(frame, relative_to)` resolves the pose in one call. The result is a concrete `PoseQuat` you can assign directly to any MJCF element.
 
-```python
+``` python
 # local_pose takes the objects themselves (not their pose values) because it
 # needs to walk each object's parent chain up to worldbody to compose the
 # full world-space transform. A bare PoseQuat contains no tree context.
@@ -70,7 +70,7 @@ gripper.sites.append(mirror)
 
 `PoseRef` stores the `frame` and `relative_to` pair and resolves lazily by passing `mojo_model.mjcf` to `.to_quat()`. This is useful when you want to define references early and resolve them later, or apply the same reference in multiple places.
 
-```python
+``` python
 # PoseRef stores the reference and resolves it on demand via the mjcf model
 contact_site = mojo.SiteSphere(
     name=mojo.SiteName("contact"),
@@ -87,7 +87,7 @@ origin_in_gripper = mojo.PoseRef(frame=base, relative_to=gripper).to_quat(
 
 MJCF `Frame` elements are coordinate transforms that disappear at compile time, accumulating into their children. They are fully supported as `frame` or `relative_to` arguments.
 
-```python
+``` python
 # Frame elements are also valid references
 alignment_frame = mojo.Frame(pose=mojo.PoseQuat(pos=np.array([0.0, 0.5, 0.0])))
 base.frames.append(alignment_frame)

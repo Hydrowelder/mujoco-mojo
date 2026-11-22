@@ -20,11 +20,11 @@ The Monitor acts as a nexus for overseeing your [`mujoco-mojo run`](../../../ref
 
 Every finished trial lands in exactly one of three outcomes, and the Monitor keeps them apart:
 
-| Outcome     | Color  | Meaning                                                                                                                       |
-| :---------- | :----- | :---------------------------------------------------------------------------------------------------------------------------- |
-| **Success** | Green  | The trial ran to the end and passed every [requirement](../requirements.md) (or had none).                                    |
-| **Failure** | Red    | The trial ran, but missed one or more requirements. This includes a trial that a failing requirement ended early.             |
-| **Error**   | Amber  | The trial raised an unhandled exception. It broke, so it was never judged against its requirements.                           |
+| Outcome     | Color | Meaning                                                                                                           |
+| :---------- | :---- | :---------------------------------------------------------------------------------------------------------------- |
+| **Success** | Green | The trial ran to the end and passed every [requirement](../requirements.md) (or had none).                        |
+| **Failure** | Red   | The trial ran, but missed one or more requirements. This includes a trial that a failing requirement ended early. |
+| **Error**   | Amber | The trial raised an unhandled exception. It broke, so it was never judged against its requirements.               |
 
 A trial that has not finished is either **running** (it has started generating or solving) or **pending** (it is waiting for a worker).
 
@@ -39,14 +39,14 @@ The primary progress bar provides a high-level view of your job's timeline.
 
 The stat cards at the top of the page provide an instantaneous look at your run's integrity. Each card has an info icon that explains it.
 
-| Metric                          | Description                                                                 | Sub-Value                                                                                              |
-| :------------------------------ | :-------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
-| **Successes**                   | Trials which passed every requirement, with their share of all trials.      | The most recently completed successful trial.                                                          |
-| **Failures**                    | Trials which ran but failed a requirement.                                  | The most recently completed failed trial.                                                              |
-| **Errors**                      | Trials which raised an unhandled runtime error.                             | The most recently errored trial.                                                                       |
-| **Time Elapsed**                | **Total runtime** since starting the job.                                   | What time the job was started at.                                                                      |
-| **Remaining**                   | How many trials **have yet** to finish, with their share of all trials.     | How many trials per minute are being completed, and how many trials the job has in total.              |
-| **Est. Remaining**/**Finished** | Prediction on how much time until job completion.                           | The projected local time of completion (**ETA**), or the time the job finished.                        |
+| Metric                          | Description                                                             | Sub-Value                                                                                 |
+| :------------------------------ | :---------------------------------------------------------------------- | :---------------------------------------------------------------------------------------- |
+| **Successes**                   | Trials which passed every requirement, with their share of all trials.  | The most recently completed successful trial.                                             |
+| **Failures**                    | Trials which ran but failed a requirement.                              | The most recently completed failed trial.                                                 |
+| **Errors**                      | Trials which raised an unhandled runtime error.                         | The most recently errored trial.                                                          |
+| **Time Elapsed**                | **Total runtime** since starting the job.                               | What time the job was started at.                                                         |
+| **Remaining**                   | How many trials **have yet** to finish, with their share of all trials. | How many trials per minute are being completed, and how many trials the job has in total. |
+| **Est. Remaining**/**Finished** | Prediction on how much time until job completion.                       | The projected local time of completion (**ETA**), or the time the job finished.           |
 
 ---
 

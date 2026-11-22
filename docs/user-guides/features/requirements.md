@@ -16,7 +16,7 @@ A **requirement** is a function you register on the [`RuntimeManager`][mujoco_mo
 
 The function signature is:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:signature"
 ```
 
@@ -24,9 +24,9 @@ The function signature is:
 - `state`: the last [`MjState`][mujoco_mojo.mj_state.MjState] seen before the trial ended (access `state.data.qpos`, `state.data.time`, etc.)
 - `df`: the full trial telemetry as a `MojoDataFrame` (a Polars DataFrame with Mojo's signal-aware namespace). `None` when the function is called during a live step check (see [Live checks](#live-checks)).
 - **Return value:** `(passed, message)`: the verdict and a human-readable description. `passed` is tri-state:
-  - `True`: the requirement is satisfied
-  - `False`: the requirement is violated
-  - `None`: no verdict yet. During live checks this is a no-op (nothing is recorded); a check that is still `None` at end of trial is recorded as failed
+- `True`: the requirement is satisfied
+- `False`: the requirement is violated
+- `None`: no verdict yet. During live checks this is a no-op (nothing is recorded); a check that is still `None` at end of trial is recorded as failed
 
 ---
 
@@ -72,7 +72,7 @@ Both styles accept the same keyword arguments:
 
 ### Decorator style
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:decorator"
 ```
 
@@ -82,13 +82,13 @@ The decorator returns the original function unchanged, so the function remains c
 
 Given an end-of-trial check:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:end_of_trial_check"
 ```
 
 register it with `add_requirement`:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:direct"
 ```
 
@@ -98,17 +98,17 @@ register it with `add_requirement`:
 
 By default (`every=None`), requirements are evaluated once at end of trial. Set `every=N` to also run the check inside `step()` every N steps:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:live"
 ```
 
 - `every=N`: evaluate every N steps. Useful for expensive checks or when only coarse monitoring is needed
 - `df` is always `None` during live calls; use `state` for real-time values or cache key values in your `mojo_model.user_data` object
 - Returning `None` means no verdict yet, for example "reached the goal" before the goal is reachable, so an unfinished objective is not mistaken for a violation.
-  - It never posts telemetry, fails the requirement (see the note below), or triggers `terminate_on_fail`/`terminate_on_pass`.
-  - It is still recorded for that sim time, so `last_passed()` can tell "evaluated, no verdict yet" from "not evaluated at this step".
+- It never posts telemetry, fails the requirement (see the note below), or triggers `terminate_on_fail`/`terminate_on_pass`.
+- It is still recorded for that sim time, so `last_passed()` can tell "evaluated, no verdict yet" from "not evaluated at this step".
 - Unless `post_result=False`, each `True`/`False` verdict is recorded in the telemetry parquet as `Requirements/{name}:result` (`1.0` passed, `0.0` failed), so you can plot it in the Dojo beside other signals, where the two values are labeled `PASS` and `FAIL`.
-  - The last known verdict is re-posted on steps with no evaluation or no verdict, so the signal is continuous.
+- The last known verdict is re-posted on steps with no evaluation or no verdict, so the signal is continuous.
 
 ???+ note "Note: Failed Live Requirement"
 
@@ -120,7 +120,7 @@ By default (`every=None`), requirements are evaluated once at end of trial. Set 
 
 Live results are cached by simulation time, so your control code can read the outcome of the most recent evaluation at no additional cost:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:last_passed"
 ```
 
@@ -130,7 +130,7 @@ Live results are cached by simulation time, so your control code can read the ou
 
 Add `terminate_on_fail=True` to stop the simulation as soon as a live check fails:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:terminate_on_fail"
 ```
 
@@ -144,7 +144,7 @@ When the check fails, [`RuntimeManager.step()`][mujoco_mojo.runtime.runtime_mana
 
 The mirror image: add `terminate_on_pass=True` to stop the simulation as soon as a live check passes, without spending the rest of the simulation budget. Combine it with `None` verdicts so the waiting period is not counted as a failure:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:terminate_on_pass"
 ```
 
@@ -167,7 +167,7 @@ They are not symmetric, though:
 
 Latching logs one debug line when it locks in ("requirement 'x' latched pass/fail at t=..."), not on every step that replays the verdict.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:latching"
 ```
 
@@ -179,7 +179,7 @@ Latching logs one debug line when it locks in ("requirement 'x' latched pass/fai
 
 After the `with runtime_manager` block exits, the results are available directly on the manager:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:in_process"
 ```
 
@@ -187,7 +187,7 @@ After the `with runtime_manager` block exits, the results are available directly
 
 After each trial, Mojo writes a `requirements.json` to the trial directory:
 
-```json
+``` json
 [
   { "name": "max_height_ok", "passed": true, "message": "max z = 1.73 m" },
   {
@@ -215,13 +215,13 @@ The Dojo monitor separates successes, requirement failures, and errors in its ch
 
 Because the `model` argument is the full [`MojoModel`][mujoco_mojo.mojo_model.MojoModel], you can access your handoff data to make requirements parametric per-trial. Define your handoff model:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:user_data_model"
 ```
 
 then read it back with `get_user_data` inside the check:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:user_data"
 ```
 
@@ -233,7 +233,7 @@ This makes the same check automatically adapt to each trial's generated configur
 
 End-of-trial requirements receive the last state the simulation reached, which is useful for checking where things ended up without needing the full telemetry:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/requirements_doc_examples.py:final_state"
 ```
 

@@ -78,6 +78,7 @@ dev = [
     "coacd>=1.0.7",
     "ipykernel>=7.2.0",
     "joblib>=1.5.3",
+    "mink>=1.4.0",
     "mujoco-mojo[docs]",
     "optuna-dashboard>=0.20.0",
     "optuna>=4.8.0",
@@ -164,7 +165,14 @@ ignore = ["typings", "scripts/templating/sensor_template.py"]
 
 [tool.ty.environment]
 python = ".venv"
-extra-paths = ["typings"]
+# the examples folder is a search path so `berthing` resolves as a package (`user-guides` has a
+# hyphen, which ty can't turn into a package path on its own), and the berthing folder is one
+# so its modules find each other the way they do when Reloaded runs from inside it
+extra-paths = [
+    "typings",
+    "docs/user-guides/examples",
+    "docs/user-guides/examples/berthing",
+]
 
 [tool.ty.src]
 exclude = ["typings", "scripts/templating/sensor_template.py"]
@@ -188,6 +196,14 @@ filterwarnings = [
     # google-genai, which the SensAI package imports, still uses a typing alias that
     # Python 3.14 deprecates, as soon as it is imported
     "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning",
+    # writing a model to XML and bundling its assets read every attribute, deprecated ones
+    # included, and pydantic warns on each read. The library hides those with a filter of
+    # its own (in mjcf/xml_model.py), which the "error" above overrides because it is added
+    # later. Only warnings attributed to the modules that walk attributes are ignored: the
+    # ones a test triggers itself, by passing a deprecated field, are still errors
+    "ignore::DeprecationWarning:mujoco_mojo.mjcf.xml_model",
+    "ignore::DeprecationWarning:mujoco_mojo.mjcf.dependency_path",
+    "ignore::DeprecationWarning:mujoco_mojo.mjcf.mujoco",
 ]
 
 [project.urls]

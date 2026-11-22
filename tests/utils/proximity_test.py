@@ -795,6 +795,57 @@ def _cube_proximity(dist_max: float = 10.0) -> Proximity:
     )
 
 
+# --- the cap on the convex hull distance ---
+
+
+def test_convex_hull_past_dist_max_keeps_the_bounding_sphere_points() -> None:
+    """The cubes are 0.8 m apart, further than `dist_max`, but their bounding spheres are not. MuJoCo then reports `dist_max` and zeroed points, so the points of the spheres are kept for the line."""
+    state = _separated_state()
+    proximity = _cube_proximity(dist_max=0.7)
+
+    dist, p1, p2, prox_type = proximity.get_proximity(state)
+
+    radius = 0.1 * np.sqrt(3)
+    assert prox_type == mojo.ProximityType.CONVEX_HULL
+    assert dist == pytest.approx(0.7)
+    assert p1 == pytest.approx((radius, 0, 0))
+    assert p2 == pytest.approx((1 - radius, 0, 0))
+
+
+# --- switching a pair off ---
+
+
+def test_inactive_proximity_is_not_logged_drawn_or_measured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An inactive pair posts nothing, draws no line and skips the calculation, and measures again when switched back on."""
+    state = _separated_state()
+    proximity = _cube_proximity()
+    sm = SignalManager(export_path=tmp_path / "tel.parquet")
+    posted: list[float] = []
+    monkeypatch.setattr(sm, "post", lambda value, column: posted.append(value))
+    proximity.request(sm, channels=["dist"])
+
+    sm.record(state)
+    assert len(posted) == 1
+    assert proximity.get_visuals(state) is not None
+    measured_at = proximity._last_t
+
+    proximity.active = False
+    posted.clear()
+    state.data.time += 0.1
+    sm.record(state)
+    assert posted == []
+    assert proximity.get_visuals(state) is None
+    # nothing was calculated for the new timestep
+    assert proximity._last_t == measured_at
+
+    proximity.active = True
+    sm.record(state)
+    assert len(posted) == 1
+    assert proximity._last_t == state.data.time
+
+
 # --- telemetry metadata ---
 
 

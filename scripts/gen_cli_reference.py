@@ -171,33 +171,56 @@ def _summary(command: Any) -> str:
     return markdown_text(command.help or "").split("\n\n")[0]
 
 
+def _table(headers: list[str], rows: list[list[str]]) -> str:
+    """A markdown table with every column padded to its widest cell, so the source lines up."""
+    widths = [max(len(cell) for cell in column) for column in zip(headers, *rows)]
+
+    def line(cells: list[str]) -> str:
+        return "| " + " | ".join(c.ljust(w) for c, w in zip(cells, widths)) + " |"
+
+    rule = ["-" * w for w in widths]
+    return "\n".join(
+        [line(headers), line([":" + r[1:] for r in rule]), *(line(r) for r in rows)]
+    )
+
+
 def _commands_table(rows: list[tuple[list[str], Any]]) -> str:
-    lines = ["| Command | What it does |", "| :--- | :--- |"]
-    for path, command in rows:
-        link = f"[`{' '.join(path)}`](#{anchor(path)})"
-        lines.append(f"| {link} | {_cell(_summary(command))} |")
-    return "\n".join(lines)
+    return _table(
+        ["Command", "What it does"],
+        [
+            [f"[`{' '.join(path)}`](#{anchor(path)})", _cell(_summary(command))]
+            for path, command in rows
+        ],
+    )
 
 
 def _options_table(params: list[Any]) -> str:
-    lines = [
-        "| Option | Type | Default | Description |",
-        "| :--- | :--- | :--- | :--- |",
-    ]
-    lines += [
-        f"| {option_names(p)} | {_cell(type_text(p))} | {default_text(p)} | {_cell(getattr(p, 'help', None) or '')} |"
-        for p in params
-    ]
-    return "\n".join(lines)
+    return _table(
+        ["Option", "Type", "Default", "Description"],
+        [
+            [
+                option_names(p),
+                _cell(type_text(p)),
+                default_text(p),
+                _cell(getattr(p, "help", None) or ""),
+            ]
+            for p in params
+        ],
+    )
 
 
 def _arguments_table(params: list[Any]) -> str:
-    lines = ["| Argument | Type | Description |", "| :--- | :--- | :--- |"]
-    lines += [
-        f"| `{str(p.name).upper()}` | {_cell(type_text(p))} | {_cell(getattr(p, 'help', None) or '')} |"
-        for p in params
-    ]
-    return "\n".join(lines)
+    return _table(
+        ["Argument", "Type", "Description"],
+        [
+            [
+                f"`{str(p.name).upper()}`",
+                _cell(type_text(p)),
+                _cell(getattr(p, "help", None) or ""),
+            ]
+            for p in params
+        ],
+    )
 
 
 def _section(path: list[str], command: Any) -> str:
@@ -206,7 +229,7 @@ def _section(path: list[str], command: Any) -> str:
     blocks = [f"{level} `{' '.join(path)}`"]
     if command.help:
         blocks.append(markdown_text(command.help))
-    blocks.append(f'```bash linenums="0"\n{usage_line(path, command)}\n```')
+    blocks.append(f'``` bash linenums="0"\n{usage_line(path, command)}\n```')
     arguments = _visible_params(command, "argument")
     if arguments:
         blocks.append("**Arguments**\n\n" + _arguments_table(arguments))

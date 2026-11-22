@@ -23,7 +23,7 @@ Mojo supports two primary types of design variables within your generate script:
 
 ???+ example "Example: Defining Design Variables"
 
-    ```python
+    ``` python
     # stiffness = mojo_model.sample_dist(mojo.NormalDistribution(...))
     stiffness = mojo_model.design_float(
         name="spring_stiffness",
@@ -54,7 +54,7 @@ The **Objective Function** is the "grade" you give to a simulation. It is a stan
 
 ???+ example "Example: MojoObjective Handle"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/optimization_example.py:score-handle"
     ```
 
@@ -62,7 +62,7 @@ A valid objective function must accept the [`MojoModel`][mujoco_mojo.mojo_model.
 
 ???+ example "Example: Scoring Performance"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/optimization_example.py:score"
     ```
 
@@ -82,7 +82,7 @@ Optimization jobs are launched via the [`mujoco-mojo run optimization`](../../re
 | `--evals-per-trial`      | _N/A_    | Runs the sim _N_ times with different seeds and averages the score.            |
 | `--refine-search-factor` | _N/A_    | **Aggressive Refinement**. On resume, shrinks bounds around the current best.  |
 
-```bash linenums="0"
+``` bash linenums="0"
 # Launch a 400-trial study with 10 parallel workers
 mujoco-mojo run optimization \
     -g sim.generate \
@@ -127,6 +127,6 @@ Morph reads the study's storage database, which an optimization job writes to it
 
 ??? example "Example: Full Optimization Script"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/optimization_example.py"
     ```

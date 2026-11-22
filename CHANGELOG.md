@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased Version
+## Version 2.8.4 (2026-11-22)
 
 - Added a `description` to `ColumnMetadata`, which the built-in signals fill in, to tell apart columns with similar names
 - The Dojo's signal selectors show a signal's description when you hover it, and the Signal Lab's Signal In node shows it
@@ -9,6 +9,18 @@
 - Fixed SensAI chats going out of step between browser tabs: a question asked in one tab is now in the others, and what you ask in a second tab knows what you asked in the first
 - SensAI can now look up a job's input distributions and what each trial drew, and compare the trials that drew an input far from its mean
 - The signal lists' search box can now switch between a regular expression and plain text, and search signal descriptions too
+- Setting an attribute MuJoCo has deprecated (`Light.directional`, `Size.njmax`, `Size.nconmax`, `Size.nstack`, `Statistic.meaninertia`, `Compiler.settotalmass`) now gives a `DeprecationWarning`, and logs it
+- Fixed Reloaded's log pane not showing what the first model generation logged
+- Added `reloaded.studio` settings for which panels Studio shows when it opens
+- Fixed a `VideoRecorder` with a `recording_trigger` that turns on late starting with a burst of near-identical frames
+- Added `Proximity.active`, which switches a pair off so it is no longer measured, drawn or logged
+- Fixed a `CONVEX_HULL` `Proximity` logging and drawing nearest points of zero when the two volumes are further apart than `dist_max`
+- Added `VideoRecorder.unregister_from_rm`, which takes a recorder back out of the runtime manager
+- Added `Joint.qpos_address` and `Joint.dof_address`, which say where a joint is in `qpos` and `qvel`
+- Added Proximity, Video Recording and Equality Constraints guides, and a berthing example guide with its model to open in MuJoCo Live
+
+> [!WARNING]
+> - **Breaking:** `VideoRecorder`'s `fps` is now `frame_rate`, which is frames per unit of simulation time, since a unit of time is not always a second
 
 ## Version 2.8.3 (2026-11-17)
 

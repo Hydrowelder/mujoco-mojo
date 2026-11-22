@@ -1,6 +1,7 @@
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, Never
 
 import mujoco
 import numpy as np
@@ -8,11 +9,11 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from mujoco_mojo.mj_state import MjState
+from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 from mujoco_mojo.runtime.video_recorder import VideoRecorder
 from mujoco_mojo.typing import CameraName
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
-from typing import Any, Never
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None
 CAM1 = CameraName("cam1")
@@ -65,7 +66,7 @@ def recorder(tmp_path, state) -> Iterator[VideoRecorder]:
         camera_name=CAM1,
         width=64,
         height=48,
-        fps=10,
+        frame_rate=10,
     ).setup(state)
     yield rec
     rec.close()
@@ -167,14 +168,34 @@ class TestIsDueAndCaptureFrame:
     def test_is_due_respects_max_frames(self, recorder, state) -> None:
         recorder.max_frames = 1
         recorder.capture_frame(state, [], [], [])
-        state.data.time = 10.0  # past the fps gate too, so only max_frames can block it
+        state.data.time = (
+            10.0  # past the frame rate gate too, so only max_frames can block it
+        )
         assert recorder.is_due(state) is False
 
     def test_capture_frame_decimates_by_fps(self, recorder, state) -> None:
         for i in range(5):
-            state.data.time = i * 0.01  # fps=10 -> only t=0 is due among these
+            state.data.time = i * 0.01  # frame_rate=10 -> only t=0 is due among these
             recorder.capture_frame(state, [], [], [])
         assert recorder._frame_count == 1
+
+    def test_trigger_turning_on_late_does_not_burst_frames(
+        self, state, tmp_path
+    ) -> None:
+        rec = VideoRecorder(
+            path=tmp_path / "out.gif",
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            frame_rate=10,
+            recording_trigger=lambda s: s.data.time >= 1.0,
+        ).setup(state)
+        for i in range(151):  # 1.5 s in steps of 0.01 s
+            state.data.time = i * 0.01
+            rec.capture_frame(state, [], [], [])
+        rec.close()
+        # about 6 frames fit in 1.0 s to 1.5 s at a frame rate of 10; the time before the trigger must not come back as a burst
+        assert rec._frame_count <= 7
 
     def test_capture_frame_warns_once_at_max_frames(
         self, recorder, state, caplog
@@ -189,6 +210,32 @@ class TestIsDueAndCaptureFrame:
         warnings = [r for r in caplog.records if "max_frames" in r.message]
         assert len(warnings) == 1
         assert recorder._frame_count == 1
+
+
+class TestUnregister:
+    def test_unregistered_recorder_captures_and_saves_nothing(
+        self, state, tmp_path
+    ) -> None:
+        mgr = RuntimeManager()
+        rec = (
+            VideoRecorder(
+                path=tmp_path / "out.gif",
+                camera_name=CAM1,
+                width=64,
+                height=48,
+                frame_rate=10,
+            )
+            .setup(state)
+            .register_to_rm(mgr)
+        )
+
+        rec.unregister_from_rm(mgr)
+        mgr.step(state)
+        mgr.save_recordings()
+
+        assert mgr.video_recorders == []
+        assert rec.frame_count == 0
+        assert not (tmp_path / "out.gif").exists()
 
 
 class TestRenderFrameOverlayGating:
@@ -316,7 +363,7 @@ class TestSaveEncodesRealVideo:
             camera_name=CAM1,
             width=64,
             height=48,
-            fps=10,
+            frame_rate=10,
             # burn the frame index into each frame so they're pixel-distinct --
             # the scene itself is static, and PIL's GIF encoder collapses
             # consecutive identical frames into a single frame
@@ -324,7 +371,7 @@ class TestSaveEncodesRealVideo:
         ).setup(state)
         try:
             for i in range(3):
-                state.data.time = i / rec.fps
+                state.data.time = i / rec.frame_rate
                 rec.capture_frame(state, [], [], [])
             rec.save()
 
@@ -357,7 +404,11 @@ class TestSaveEncodesRealVideo:
     def test_close_kills_unfinished_encoder(self, tmp_path, state) -> None:
         """If `save` is never called, `close` must not leave a hung ffmpeg process behind."""
         rec = VideoRecorder(
-            path=tmp_path / "out.mp4", camera_name=CAM1, width=64, height=48, fps=10
+            path=tmp_path / "out.mp4",
+            camera_name=CAM1,
+            width=64,
+            height=48,
+            frame_rate=10,
         ).setup(state)
         rec.capture_frame(state, [], [], [])
         proc = rec._encoder_proc

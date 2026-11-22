@@ -3,7 +3,7 @@ A page of the docs source as plain markdown, for a reader that is not the docs s
 
 The pages in `DOCS_SOURCE_DIR` are written for the docs site, and read as plain text a few lines would mislead: the pictures are image files that do not ship, and some lines are site markup. This removes it:
 
-- a `<figure>` keeps its caption, as a line starting `Figure:`, and loses the image; any other image line is removed
+- a `<figure>` keeps its caption, as a line starting `Figure:`, and loses the image; any other image line, and any `<video>` block, is removed
 - HTML comments (notes for the people who maintain the docs) are removed
 - a page's front matter (the `---` block of site settings at its top) and its `<style>` and `<script>` blocks are removed
 - a row of linked images (the badges at the top of the home page) is removed
@@ -22,6 +22,7 @@ __all__ = ["clean", "plain_text"]
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _FRONT_MATTER = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 _STYLE_OR_SCRIPT = re.compile(r"<(style|script)\b.*?</\1>", re.DOTALL)
+_VIDEO = re.compile(r"<video\b.*?</video>", re.DOTALL)
 _BADGE_ROW = re.compile(
     r"<p\b[^>]*>\s*(?:<a\b[^>]*>\s*<img\b[^>]*>\s*</a>\s*)+</p>", re.DOTALL
 )
@@ -51,6 +52,7 @@ def _clean_prose(lines: list[str]) -> list[str]:
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     text = _STYLE_OR_SCRIPT.sub("", text)
     text = _BADGE_ROW.sub("", text)
+    text = _VIDEO.sub("", text)
     out: list[str] = []
     in_figure: list[str] | None = None
     indent = ""

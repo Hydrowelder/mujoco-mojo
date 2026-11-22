@@ -20,7 +20,7 @@ from rich.markup import escape
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.settings import ReloadedKeySettings
+from mujoco_mojo.settings import ReloadedKeySettings, ReloadedStudioSettings
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.defaults import (
@@ -29,7 +29,7 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
 )
-from mujoco_mojo.utils.log import get_logger, get_trial_log_handler
+from mujoco_mojo.utils.log import TerminalFilter, get_logger, get_trial_log_handler
 from mujoco_mojo.utils.runner import (
     GENERATOR_FIXED_ARGS,
     RUNTIME_FIXED_ARGS,
@@ -63,7 +63,7 @@ from .backends import (
     check_studio_available,
 )
 from .controller import ReloadedController
-from .tui import ReloadedApp
+from .tui import LogBuffer, ReloadedApp, TuiLogHandler
 
 logger = get_logger(__name__)
 console = Console()
@@ -197,6 +197,9 @@ class MojoReloaded:
 
     keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
     """The keys that trigger the terminal UI's actions, from the `reloaded.keys` settings."""
+
+    studio: ReloadedStudioSettings = field(default_factory=ReloadedStudioSettings)
+    """Which parts of Studio are showing when it opens, from the `reloaded.studio` settings."""
 
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     """Called by the runtime manager after every step with the state and the arrows and lines to draw, so the viewer follows the run. Set from the viewer backend while the session runs."""
@@ -617,6 +620,11 @@ class MojoReloaded:
             console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
             raise typer.Exit(1)
 
+        # the log pane does not exist yet during the first generation, so what that logs (a deprecated attribute, a color out of range) is collected here and handed to the pane, which shows it before anything else
+        early_logs = LogBuffer()
+        early_handler = TuiLogHandler(early_logs)
+        early_handler.addFilter(TerminalFilter())
+        logging.getLogger().addHandler(early_handler)
         try:
             start = time.time()
             with console.status(
@@ -631,9 +639,11 @@ class MojoReloaded:
         except Exception as e:
             console.print(f"[bold red]Initial Generation Failed:[/bold red] {e}")
             raise typer.Exit(1)
+        finally:
+            logging.getLogger().removeHandler(early_handler)
 
         try:
-            self._run_tui(backend, initial_state)
+            self._run_tui(backend, initial_state, early_logs)
         except ViewerUnavailableError as e:
             console.print(f"[bold red]Error:[/bold red] {escape(str(e))}")
             raise typer.Exit(1)
@@ -655,6 +665,7 @@ class MojoReloaded:
                     web=self.ui is UserInterface.WEB,
                     port=self.port,
                     gfx=self.gfx,
+                    studio=self.studio,
                 )
             case _ as unreachable:
                 assert_never(unreachable)
@@ -664,8 +675,13 @@ class MojoReloaded:
         assert self._current_trial_dir is not None
         return self._current_trial_dir / self.xml_name
 
-    def _run_tui(self, backend: ViewerBackend, state: MjState) -> None:
-        """Opens the viewer on `state` and runs the terminal UI over it until the user quits or the viewer is closed."""
+    def _run_tui(
+        self,
+        backend: ViewerBackend,
+        state: MjState,
+        logs: LogBuffer | None = None,
+    ) -> None:
+        """Opens the viewer on `state` and runs the terminal UI over it until the user quits or the viewer is closed. `logs` holds what was logged before the UI started, which its log pane shows first."""
         controller = ReloadedController(self, backend)
         backend.attach(controller)
         # if native code in the viewer crashes the process, this saves where, and puts the terminal right
@@ -680,6 +696,7 @@ class MojoReloaded:
                     backend,
                     keys=self.keys,
                     subtitle=f"{self.ui.value} | {self.workdir}",
+                    logs=logs,
                 ).run()
             finally:
                 self._sync_hook = None

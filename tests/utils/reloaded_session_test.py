@@ -5,7 +5,7 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -23,7 +23,11 @@ import mujoco_mojo.utils.layers.reloaded as reloaded_package
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
 import mujoco_mojo.utils.layers.reloaded.session as session_module
 from mujoco_mojo.runtime import RunTarget, TargetKind
-from mujoco_mojo.settings import ReloadedKeySettings, ReloadedSettings
+from mujoco_mojo.settings import (
+    ReloadedKeySettings,
+    ReloadedSettings,
+    ReloadedStudioSettings,
+)
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.layers.cli import cli_app
 from mujoco_mojo.utils.layers.reloaded import MojoReloaded
@@ -32,6 +36,7 @@ from mujoco_mojo.utils.layers.reloaded.backends import (
     StudioBackend,
     ViewerUnavailableError,
 )
+from mujoco_mojo.utils.layers.reloaded.tui import LogBuffer
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
@@ -145,6 +150,52 @@ def test_a_settings_file_can_choose_the_studio_graphics() -> None:
     assert settings.gfx is StudioGraphics.OPENGL_SOFTWARE
     with pytest.raises(ValueError):
         ReloadedSettings.model_validate({"gfx": "hologram"})
+
+
+def test_the_studio_settings_default_to_the_options_studio_opens_with() -> None:
+    """The defaults are Studio's own, so nothing changes until someone sets one."""
+    studio_config = pytest.importorskip("mujoco.studio.app").Config
+    studios = {f.name: f.default for f in fields(studio_config)}
+
+    mine = ReloadedStudioSettings().model_dump()
+
+    assert {name: mine[name] for name in studios if name in mine} == {
+        name: studios[name] for name in studios if name in mine
+    }
+
+
+def test_every_option_studio_can_open_with_has_a_setting() -> None:
+    """A Studio that adds an option fails this, which is the cue to add the setting."""
+    studio_config = pytest.importorskip("mujoco.studio.app").Config
+
+    assert {f.name for f in fields(studio_config)} <= set(
+        ReloadedStudioSettings.model_fields
+    )
+
+
+def test_a_settings_file_can_choose_what_studio_opens_with() -> None:
+    settings = ReloadedSettings.model_validate(
+        {"studio": {"show_console": True, "show_inspector": False}}
+    )
+
+    assert settings.studio.show_console is True
+    assert settings.studio.show_inspector is False
+    assert settings.studio.show_options is True
+    with pytest.raises(ValueError):
+        ReloadedSettings.model_validate({"studio": {"show_nothing": True}})
+
+
+def test_the_studio_settings_go_to_the_studio_viewer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(studio_module, "studio_available", lambda: True)
+    session = make_session(tmp_path, UserInterface.STUDIO)
+    session.studio = ReloadedStudioSettings(show_console=True)
+
+    backend = session._create_backend()
+
+    assert isinstance(backend, StudioBackend)
+    assert backend.studio is session.studio
 
 
 def test_the_command_line_rejects_an_unknown_graphics_mode() -> None:
@@ -281,6 +332,7 @@ class AppProbe:
     backend: FakeBackend | None = None
     keys: ReloadedKeySettings | None = None
     subtitle: str = ""
+    logs: LogBuffer | None = None
     fail_with: Exception | None = None
     seen: dict[str, object] = field(default_factory=dict)
 
@@ -290,10 +342,12 @@ class AppProbe:
         backend: FakeBackend,
         keys: ReloadedKeySettings | None = None,
         subtitle: str = "",
+        logs: LogBuffer | None = None,
     ) -> "AppProbe":
         self.backend = backend
         self.keys = keys
         self.subtitle = subtitle
+        self.logs = logs
         return self
 
     def run(self) -> None:
@@ -372,6 +426,55 @@ def test_a_viewer_that_stopped_on_its_own_says_why_after_the_app_exits(
     session.run()
 
     assert "the viewer thread died" in _ANSI_ESCAPE.sub("", capsys.readouterr().out)
+
+
+def test_what_the_first_generation_logs_is_handed_to_the_app(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The log pane does not exist while the model is first generated, so a warning from the generator would otherwise be lost to the terminal the app then covers."""
+    session = probe.session
+    monkeypatch.setattr(session, "_create_backend", lambda: FakeBackend())
+
+    def generate(**_: Any) -> Any:
+        log = logging.getLogger("early.generation")
+        log.warning("Light.directional is deprecated.")
+        log.warning("only for the file", extra={"file_only": True})
+        return make_state()
+
+    monkeypatch.setattr(session, "generate_construct", generate)
+
+    session.run()
+
+    assert probe.logs is not None
+    items, dropped = probe.logs.take(10)
+    assert dropped == 0
+    assert [i.getMessage() for i in items if isinstance(i, logging.LogRecord)] == [
+        "Light.directional is deprecated."
+    ]
+
+
+@pytest.mark.parametrize("fails", [False, True], ids=["generated", "failed"])
+def test_the_collector_for_the_first_generation_is_removed_afterwards(
+    probe: AppProbe, monkeypatch: pytest.MonkeyPatch, fails: bool
+) -> None:
+    session = probe.session
+    monkeypatch.setattr(session, "_create_backend", lambda: FakeBackend())
+
+    def generate(**_: Any) -> Any:
+        if fails:
+            raise RuntimeError("the generator broke")
+        return make_state()
+
+    monkeypatch.setattr(session, "generate_construct", generate)
+    before = list(logging.getLogger().handlers)
+
+    if fails:
+        with pytest.raises(typer.Exit):
+            session.run()
+    else:
+        session.run()
+
+    assert logging.getLogger().handlers == before
 
 
 def test_the_keys_from_settings_reach_the_app(probe: AppProbe) -> None:

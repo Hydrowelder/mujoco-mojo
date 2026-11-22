@@ -12,13 +12,13 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 === "`uv` (recommended)"
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     uv add mujoco-mojo
     ```
 
 === "`pip`"
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     pip install mujoco-mojo
     ```
 
@@ -39,7 +39,7 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
 This documentation ships with the package, so you can read the version that matches what you have installed without leaving your machine:
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo docs serve
 ```
 
@@ -61,12 +61,12 @@ The package carries the pages, the search, and the API reference. Two things nee
 Before writing code, it is helpful to understand the three pillars of a Mojo project:
 
 - **The MojoModel:** This is your "Source of Truth." It contains the `mjcf` object (your model) and the `stochas` object (distributions and random variables).
-  - This class relies upon `pydantic` V2 to statically type and validate entries.
+- This class relies upon `pydantic` V2 to statically type and validate entries.
 - **The Generate-Runtime Pattern:** Mojo separates Generation (building the XML and sampling random values) from **Runtime** (the physics loop where forces and logic are applied).
 
 ???+ example "Example: Generate and Runtime Functions"
 
-    ```python
+    ``` python
     import mujoco_mojo as mojo
     import mujoco_mojo.runtime as rt
 
@@ -102,7 +102,7 @@ The `mojo.mjcf` object is designed to be isomorphic to the MuJoCo XML schema.
 
 - `<worldbody>` becomes `mojo.WorldBody()`.
 - `<body name="box">` becomes `mojo.Body(name=mojo.BodyName("box"))`.
-  - Names such as [`mojo.BodyName`][mujoco_mojo.typing.BodyName] are really strings, typed this way so your type checker catches mix-ups, such as a `BodyName` where a `SiteName` is needed.
+- Names such as [`mojo.BodyName`][mujoco_mojo.typing.BodyName] are really strings, typed this way so your type checker catches mix-ups, such as a `BodyName` where a `SiteName` is needed.
 - Attributes like `pos` and `rgba` are strictly typed using NumPy arrays and Pydantic validation.
 
 This design ensures that there is "no magic". You are simply building a MuJoCo model using a strongly-typed Python API instead of a fragile string-based XML file.
@@ -127,7 +127,7 @@ Mojo treats stochasticity as a first-class citizen. Instead of using `np.random`
 
 ???+ example "Example: Sampling a Distribution with `MojoModel`"
 
-    ```python
+    ``` python
     stiffness = mojo_model.sample_dist(
         mojo.TruncatedNormalDistribution(
             name=mojo.DistName("spring_stiffness"),
@@ -143,7 +143,7 @@ Mojo treats stochasticity as a first-class citizen. Instead of using `np.random`
 
 - **Reproducibility:** Every draw is anchored to a global seed.
 - **Named Values:** Every random draw is saved as a `NamedValue`. This means your results database automatically knows exactly what "spring_stiffness" was used for Trial #42.
-  - It also helps to ensure you do not accidentally overwrite or modify a value.
+- It also helps to ensure you do not accidentally overwrite or modify a value.
 - **Global Overrides:** You can run a job and tell Mojo to ignore the distribution and force a specific `NamedValue` for testing.
 
 ---
@@ -162,16 +162,17 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
    pybind11-stubgen mujoco.studio -o typings/ --numpy-array-wrap-with-annotated
    ```
 
-2. Then point your type checker at them in `pyproject.toml`. Pylance in VSCode picks up `typings/` on its own, but a checker run from the command line or a pre-commit hook needs to be told. For Pyright:
+1. Then point your type checker at them in `pyproject.toml`. Pylance in VSCode picks up `typings/` on its own, but a checker run from the command line or a pre-commit hook needs to be told. For Pyright:
 
    ```toml title="pyproject.toml"
    [tool.pyright]
    stubPath = "typings"
    venvPath = "."
    venv = ".venv"
+
    ```
 
-   For ty, which finds a `.venv` in the project root on its own:
+For ty, which finds a `.venv` in the project root on its own:
 
    ```toml title="pyproject.toml"
    [tool.ty.environment]
@@ -184,7 +185,7 @@ MuJoCo does not currently ship first-party Python typing stubs. To enable proper
 
     Before diving into the generate script, run [`mujoco-mojo init`](../../reference/cli.md#mujoco-mojo-init) in a new directory to get a working project skeleton (`simulation.py`, `run.sh`, and `reloaded.sh`) pre-wired and ready to edit.
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     mujoco-mojo init
     ```
 

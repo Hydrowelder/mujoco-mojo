@@ -19,7 +19,7 @@ This [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] is cre
 
 Finally, we register this force to our [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] (`rm`). You will notice we do not provide one directly since we will use the `RuntimeManager` as a context manager.
 
-```python
+``` python
 def add_spring(self, side_id: Side) -> None:
     """Attach a linear spring-damper between this leg and the rocket body, acting as its shock absorber."""
     rt.PointToPointForce.ideal_spring(
@@ -44,14 +44,14 @@ It also provides a [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.Runtim
 
 Once in the context block, we do a few things:
 
-1. Extract our `VLRModel` from the user data
-2. Loop over the landing gear to add the springs using our `add_spring` method
-3. Use the camera we defined to record video and take screenshots during the simulation
+1.  Extract our `VLRModel` from the user data
+2.  Loop over the landing gear to add the springs using our `add_spring` method
+3.  Use the camera we defined to record video and take screenshots during the simulation
     - We only do this for the nominal trial, not every randomized Monte Carlo trial, since video files can increase runtime, memory/storage space, and are generally not needed.
-4. Run the solver by looping using `rm.step(state)` (this is where [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] will automatically be computed and applied for each timestep)
-5. Take one last screenshot when the rocket has landed
+4.  Run the solver by looping using `rm.step(state)` (this is where [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] will automatically be computed and applied for each timestep)
+5.  Take one last screenshot when the rocket has landed
 
-```python
+``` python
 def runtime(
     mojo_model: mojo.MojoModel,
     runtime_manager: rt.RuntimeManager,
@@ -84,7 +84,7 @@ def runtime(
                 rt.VideoRecorder(
                     path=Path(__file__).parent / "video.gif",
                     camera_name=vlr_model.camera,
-                    fps=10,
+                    frame_rate=10,
                 )
                 .setup(state)
                 .register_to_rm()
@@ -108,7 +108,7 @@ def runtime(
 
 Running the model can be done using [`mojo.utils.MojoRunner`][mujoco_mojo.utils.runner.MojoRunner], providing the generator, runtime, a workdir, and configuration for how many [Monte Carlo trials](../../workflow/running-jobs/running-jobs.md#running-a-monte-carlo) should be run. It then tells it to run with a clean working directory.
 
-```python
+``` python
 if __name__ == "__main__":
     mojo.utils.setup_logger()
     workdir = Path(__file__).parent / "monte_carlo_study"
@@ -126,7 +126,7 @@ if __name__ == "__main__":
 
 ??? example "All Code"
 
-    ```python
+    ``` python
     """
     Example: a vertically landed rocket (VLR) with spring-damped landing gear.
 
@@ -597,7 +597,7 @@ if __name__ == "__main__":
                     rt.VideoRecorder(
                         path=Path(__file__).parent / "video.gif",
                         camera_name=vlr_model.camera,
-                        fps=10,
+                        frame_rate=10,
                     )
                     .setup(state)
                     .register_to_rm()

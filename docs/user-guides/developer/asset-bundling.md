@@ -19,7 +19,7 @@ Doing that naively runs into two problems:
 
 Mojo never decides file-by-file as it goes. Instead it works in clear phases: it scans the _entire_ model first, decides a destination for every dependency file up front (this is where any collisions get resolved), and only then starts copying. Deciding everything before touching disk is what lets it correctly spot a collision even when three or more files share a filename, not just two.
 
-```mermaid
+``` mermaid
 flowchart TD
     A[Scan the whole model for DepPath files] --> B[Group all sources by basename]
     B --> C{Basename used by only one source?}
@@ -40,7 +40,7 @@ flowchart TD
 
 If two different source files share a filename but have different content, such as `textures/wood/texture.png` and `textures/steel/texture.png`, Mojo does not let one silently overwrite the other. Because every destination is decided before any copying starts, it can see the whole picture and nest the conflicting files under subfolders named after their original source directories, for example:
 
-```text linenums="0" title=""
+``` text linenums="0" title=""
 assets/
 ├── wood/
 │   └── texture.png
@@ -63,7 +63,7 @@ The `compiler` element can set `meshdir`, `texturedir`, `assetdir`, and `strippa
 - An absolute file name is used as it is, and a relative compiler directory is relative to your working directory, like every `DepPath`.
 - Sub-model files are not affected by these settings, in MuJoCo or in Mojo.
 
-```python
+``` python
 compiler = Compiler(meshdir=Path("meshes"))
 mesh = Mesh(name=MeshName("part"), file=DepPath("part.stl"))  # found at ./meshes/part.stl
 ```

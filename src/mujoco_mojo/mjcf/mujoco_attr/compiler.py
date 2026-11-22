@@ -62,7 +62,10 @@ class Compiler(XMLModel):
     boundinertia: float = 0
     """This attribute imposes a lower bound on the diagonal inertia components of each body except for the world body. Its use is similar to boundmass above."""
 
-    settotalmass: float = -1
+    settotalmass: float = Field(
+        -1,
+        deprecated="Compiler.settotalmass is deprecated and MuJoCo will remove it in a future release. Scale the compiled model with `mujoco.mj_setTotalmass` and `mujoco.mj_setConst` instead.",
+    )
     """This attribute is deprecated and will be removed in a future release; compiling a model which sets it gives a warning. If this value is positive, the compiler will scale the masses and inertias of all bodies in the model, so that the total mass equals the value specified here. The world body has mass 0 and does not participate in any mass-related computations. This scaling is performed last, after all other operations affecting the body mass and inertia. The same scaling operation can be applied at runtime to the compiled mjModel with the function mj_setTotalmass, followed by mj_setConst."""
 
     balanceinertia: bool = False

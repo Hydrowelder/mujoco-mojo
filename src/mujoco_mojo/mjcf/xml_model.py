@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from abc import ABC
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -29,6 +30,13 @@ from mujoco_mojo.typing import Angle, EulerSeq
 from mujoco_mojo.utils.log import get_logger
 
 logger = get_logger(__name__)
+
+# a deprecated field warns each time it is read, and writing a model to XML or bundling its assets reads every attribute it has, so without this every run of a model with a `Light` or a `Compiler` would warn about fields nobody set. Only warnings attributed to the modules that walk attributes this way are hidden: a user reading a deprecated field in their own code still warns, and so does passing one (see `XMLModel.warn_deprecated`). A module that starts walking attributes has to be added here and to the pytest `filterwarnings` in `pyproject.toml`
+warnings.filterwarnings(
+    "ignore",
+    category=DeprecationWarning,
+    module=r"mujoco_mojo\.mjcf\.(xml_model|dependency_path|mujoco)\Z",
+)
 
 __all__ = ["XMLModel"]
 
@@ -101,6 +109,9 @@ class XMLModel(MojoBaseModel):
     _id_cache: int = PrivateAttr(-1)
     """MuJoCo runtime ID."""
 
+    _deprecation_warned: bool = PrivateAttr(False)
+    """Whether `warn_deprecated` has already warned about this object. Pydantic runs `after` validators again on an object that is passed into another model, which would otherwise warn again at every model that holds it."""
+
     @model_validator(mode="after")
     def warn_rgba(self) -> Self:
         rgba = getattr(self, "rgba", None)
@@ -120,6 +131,32 @@ class XMLModel(MojoBaseModel):
                 msg = f"Invalid name for {name}. Characters ':' and '/' are reserved for database output organization."
                 logger.error(msg)
                 raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def warn_deprecated(self) -> Self:
+        """Warns, at the line that built the model, for each deprecated field the caller set to something other than its default. Pydantic only warns when a deprecated field is read, which `to_xml` does for every attribute, so the warning for those reads is hidden above and this one takes its place. A value equal to the default is skipped because a saved model config holds every field, defaults included, and reloading one should not warn about fields nobody set."""
+        if self._deprecation_warned:
+            return self
+        for name in self.model_fields_set:
+            info = type(self).model_fields.get(name)
+            if info is None or not info.deprecated:
+                continue
+            # read from `__dict__` so this check does not trigger pydantic's own warning for the read
+            if np.array_equal(
+                self.__dict__[name], info.get_default(call_default_factory=True)
+            ):
+                continue
+            message = info.deprecated
+            if not isinstance(message, str):
+                message = getattr(message, "message", "") or (
+                    f"{type(self).__name__}.{name} is deprecated."
+                )
+            # one frame for this method and one for pydantic's `__init__`, which puts both of these on the caller's line
+            warnings.warn(message, DeprecationWarning, stacklevel=3)
+            # Python hides a `DeprecationWarning` unless it comes from `__main__`, which a model built in an imported module (the usual case, and always Reloaded's) never does, so it is logged as well, where Reloaded, `mojo.log` and the Dojo show it
+            logger.warning(message, stacklevel=3)
+            self._deprecation_warned = True
         return self
 
     def to_xml(

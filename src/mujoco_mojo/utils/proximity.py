@@ -76,6 +76,9 @@ class Proximity(MojoBaseModel):
     visualize: bool = True
     """Wheter or not to visualize this proximity in the MuJoCo viewer."""
 
+    active: bool = True
+    """Whether this pair is being measured. An inactive pair is not drawn, logged or calculated, so a pair that no longer matters costs nothing. A direct call to `get_proximity` still works."""
+
     _last_t: float = PrivateAttr(default=np.nan)
     _last_p1: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
     _last_p2: Vec3 = PrivateAttr(default_factory=lambda: np.full(3, np.nan))
@@ -220,6 +223,10 @@ class Proximity(MojoBaseModel):
         )
 
         min_dist = max(0.0, min_dist)  # clip from below to zero
+
+        # past `distmax` MuJoCo returns `distmax` with the points zeroed, so keep the broadphase's points, which the broadphase already stored
+        if min_dist >= self.dist_max:
+            return min_dist, p1, p2, ProximityType.CONVEX_HULL
 
         p1 = mj_fromto[:3].copy()
         p2 = mj_fromto[3:6].copy()
@@ -452,7 +459,7 @@ class Proximity(MojoBaseModel):
             self._vis = MujocoMojoSettings().visualization
             self._vis_loaded = True
 
-        if not self.visualize or not self._vis.clearance_line:
+        if not self.active or not self.visualize or not self._vis.clearance_line:
             return None
 
         if (
@@ -589,6 +596,9 @@ class Proximity(MojoBaseModel):
             return cols
 
         def sample(state: MjState) -> None:
+            if not self.active:
+                return
+
             dist: float = np.nan
             p1: Vec3 = np.zeros(3)
             p2: Vec3 = np.zeros(3)

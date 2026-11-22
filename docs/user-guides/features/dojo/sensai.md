@@ -14,13 +14,13 @@ SensAI needs the `sensai` extra, and a model.
 
 **1. Install the extra.**
 
-```bash linenums="0"
+``` bash linenums="0"
 uv add "mujoco-mojo[sensai]"      # or: pip install "mujoco-mojo[sensai]"
 ```
 
 **2. Turn it on and name a model.** The easiest way is the [settings panel](dojo.md#settings) (the gear in the Dojo's toolbar): open **Dojo > SensAI**, switch **Enabled** on and add an entry under **Models**. You can also set it in `~/.mujoco-mojo/settings.toml`:
 
-```toml
+``` toml
 [dojo.sensai]
 enabled = true
 models = [
@@ -30,14 +30,14 @@ models = [
 
 **3. Give the provider your key** in the environment variable that provider reads. The best place for it is a `.env` file in your project, which Mojo reads for you every time it starts:
 
-```bash linenums="0"
+``` bash linenums="0"
 # .env
 GOOGLE_API_KEY="..."
 ```
 
 Then start the Dojo as usual:
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo dojo ./mojo-models
 ```
 
@@ -45,7 +45,7 @@ Mojo looks for the `.env` from where it is installed and upward, not from the fo
 
 To use a key for one session only, set it in your shell before you start the Dojo. A variable set in the shell takes priority over the `.env`:
 
-```bash linenums="0"
+``` bash linenums="0"
 export GOOGLE_API_KEY="..."
 mujoco-mojo dojo ./mojo-models
 ```
@@ -56,10 +56,10 @@ SensAI reads the key from the environment and never stores it in the settings fi
 
 `models` is a list, and the order matters: SensAI tries the first entry, and **falls back** to the next when a model cannot answer, for example when you hit a free tier's rate limit. Each entry has:
 
-| Field        | Meaning                                                                                                                                   |
-| :----------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`   | Who serves the model. One of the providers below.                                                                                         |
-| `model_name` | That provider's own name for the model, such as `gemini-3.5-flash-lite`.                                                                  |
+| Field        | Meaning                                                                                                                                       |
+| :----------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`   | Who serves the model. One of the providers below.                                                                                             |
+| `model_name` | That provider's own name for the model, such as `gemini-3.5-flash-lite`.                                                                      |
 | `base_url`   | Optional. Send this entry's requests to this address instead of the provider's usual one, for example a gateway or a proxy. Ollama needs one. |
 
 The Provider menu in the settings panel shows the variable for each choice.
@@ -68,7 +68,7 @@ The Provider menu in the settings panel shows the variable for each choice.
 
     Ollama has no default address, so give each Ollama entry its own `base_url`:
 
-    ```toml
+    ``` toml
     [dojo.sensai]
     enabled = true
     models = [
@@ -87,10 +87,10 @@ A provider whose client does not accept a `base_url` (not every one does) refuse
 
 Two settings keep a message from running away:
 
-| Setting                       | Default | What it limits                                                                                                                        |
-| :---------------------------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------ |
-| `dojo.sensai.max_requests`    | 12      | The most model requests one message may make. A message that goes over is stopped with an error that names this setting, and your plot is left as it was. |
-| `dojo.sensai.max_versus_trials` | 50    | The most trials one message may add to [versus mode](mosaic.md#versus-mode), since each one loads its data. Ask again to add the next batch. |
+| Setting                         | Default | What it limits                                                                                                                                            |
+| :------------------------------ | :------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dojo.sensai.max_requests`      | 12      | The most model requests one message may make. A message that goes over is stopped with an error that names this setting, and your plot is left as it was. |
+| `dojo.sensai.max_versus_trials` | 50      | The most trials one message may add to [versus mode](mosaic.md#versus-mode), since each one loads its data. Ask again to add the next batch.              |
 
 ---
 

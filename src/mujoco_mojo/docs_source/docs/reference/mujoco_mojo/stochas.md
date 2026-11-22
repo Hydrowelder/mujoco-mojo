@@ -7,7 +7,7 @@ The `mujoco_mojo.stochas` subpackage re-exports the distributions, named values,
 All of these types are re-exported from the top-level `mujoco_mojo` namespace,
 so you rarely need to import directly from `mujoco_mojo.stochas` or `stochas`.
 
-```python
+``` python
 import mujoco_mojo as mojo
 
 mass = mojo.NormalDistribution(name=mojo.DistName("link_mass"), mu=1.5, sigma=0.15)

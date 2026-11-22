@@ -63,9 +63,12 @@ OFFLINE_SHIM = "javascripts/iframe-worker-shim.js"
 _SITE_URL_SETTING = re.compile(r"^site_url:.*$", re.MULTILINE)
 _LOCAL_SITE_URL = "http://localhost/"
 
-# an image in markdown (`![alt](url "title")`) and in HTML (`<img src="url">`)
+# an image in markdown (`![alt](url "title")`), and the files an HTML tag names: an image's `src`, a video's `src` and `poster`, and a source's `src`
 _MD_IMAGE = re.compile(r"(?P<head>!\[[^\]]*\]\()(?P<url>[^)\s]+)")
-_HTML_IMAGE = re.compile(r"""(?P<head><img\b[^>]*?\bsrc=["'])(?P<url>[^"']+)""")
+_HTML_MEDIA_TAG = re.compile(r"<(?:img|video|source)\b[^>]*>")
+_HTML_MEDIA_URL = re.compile(
+    r"""(?P<head>(?<![-\w])(?:src|poster)=["'])(?P<url>[^"']+)"""
+)
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
 
@@ -146,9 +149,9 @@ def _github_url(page: Path, url: str, docs_dir: Path, ref: str) -> str | None:
 
 def link_missing_assets(docs_dir: Path, ref: str) -> int:
     """
-    Points each image in the pages of `docs_dir` that is not there at the same file on GitHub at `ref`, keeping the part after the file name (`#only-dark`). Anything inside a code block is left alone. Returns how many links it changed.
+    Points each image, video, video poster and video source in the pages of `docs_dir` that is not there at the same file on GitHub at `ref`, keeping the part after the file name (`#only-dark`). Anything inside a code block is left alone. A tag's attributes have to be on the line it opens on. Returns how many links it changed.
 
-    This rule, a link to a file that is missing, is the whole of it: a build from a checkout that has the images changes nothing, and nothing has to list what the bundle leaves out.
+    This rule, a link to a file that is missing, is the whole of it: a build from a checkout that has the files changes nothing, and nothing has to list what the bundle leaves out.
     """
     changed = 0
 
@@ -173,7 +176,10 @@ def link_missing_assets(docs_dir: Path, ref: str) -> int:
             if _FENCE.match(line):
                 in_fence = not in_fence
             elif not in_fence:
-                line = _HTML_IMAGE.sub(swap, _MD_IMAGE.sub(swap, line))
+                line = _HTML_MEDIA_TAG.sub(
+                    lambda tag: _HTML_MEDIA_URL.sub(swap, tag.group(0)),
+                    _MD_IMAGE.sub(swap, line),
+                )
             lines.append(line)
         text = "".join(lines)
         if text != original:

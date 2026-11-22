@@ -194,6 +194,37 @@ def test_the_log_opens_with_how_to_connect_right_after_the_start_message_and_the
     run(scenario())
 
 
+def test_what_was_logged_before_the_app_started_is_shown_first(tmp_path: Path) -> None:
+    """The first generation runs before the app does, so its log records are handed over in the buffer the app starts with."""
+    early = LogBuffer()
+    early.put(
+        logging.LogRecord(
+            name="mujoco_mojo",
+            level=logging.WARNING,
+            pathname="/project/environment.py",
+            lineno=40,
+            msg="Light.directional is deprecated.",
+            args=(),
+            exc_info=None,
+        )
+    )
+
+    async def scenario() -> None:
+        backend = FakeBackend()
+        controller = ReloadedController(FakeSession(), backend, watch_path=tmp_path)
+        app = ReloadedApp(
+            controller, backend, subtitle="test", rain_seconds=0.0, logs=early
+        )
+        async with app.run_test(size=(140, 30)) as pilot:
+            await wait_until(pilot, lambda: "is live" in log_text(app))
+            lines = log_text(app).splitlines()
+
+            assert "Light.directional is deprecated." in lines[0]
+            assert "environment.py:40" in lines[0]
+
+    run(scenario())
+
+
 def a_record_line() -> Strip:
     """A log line as it is drawn: the message, the padding that pushes the location to the right edge, and the location."""
     location = Style(meta={LOCATION_KEY: "/project/robot.py:12"})

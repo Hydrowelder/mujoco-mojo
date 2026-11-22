@@ -83,14 +83,14 @@ class VideoRecorder:
     """
     Records a MuJoCo simulation to a video file.
 
-    Frames are captured at a fixed rate (`fps`) relative to simulation time, not wall-clock time, so the output plays back at the exact rate specified regardless of how fast the simulation runs. The recorder skips `capture_frame` calls that fall between the interval boundaries, which prevents duplicate frames when the physics step is finer than 1/fps.
+    Frames are captured at a fixed rate (`frame_rate`) relative to simulation time, not wall-clock time, so the output plays back at the exact rate specified regardless of how fast the simulation runs. The recorder skips `capture_frame` calls that fall between the interval boundaries, which prevents duplicate frames when the physics step is finer than 1/frame_rate.
 
     Typical usage inside a runtime function, within a `with runtime_manager as rm:` block::
 
         recorder = VideoRecorder(
             path=model.trial_dir / "camera.mp4",
             camera_name="top_view",
-            fps=30,
+            frame_rate=30,
             width=1280,
             height=720,
         ).setup(mj_model).register_to_rm()
@@ -107,7 +107,7 @@ class VideoRecorder:
 
     Visual overlays (contact forces, net forces, custom arrows/lines) are controlled by the `show_*` flags and the `show_loads` flag passed to `capture_frame`.
 
-    `playback_speed` scales the frame rate of the saved video relative to `fps`: 0.5 plays back in slow motion, 1 is real time, and 2 plays back at double speed. It does not change how many frames are captured per second of simulation time, only how quickly they are played back.
+    `playback_speed` scales the frame rate of the saved video relative to `frame_rate`: 0.5 plays back in slow motion, 1 is real time, and 2 plays back at double speed. It does not change how many frames are captured per unit of simulation time, only how quickly they are played back. The saved video plays at `frame_rate * playback_speed` frames per second, so it reads one unit of simulation time as one second.
 
     `recording_trigger` is a function of the current `MjState` that gates whether a due frame is actually captured, e.g. `lambda state: 5.0 <= state.data.time <= 10.0` to only record a window of the simulation.
 
@@ -139,8 +139,8 @@ class VideoRecorder:
     show_traces: bool = False
     """Whether to render `Tracer` trails (passed via `custom_traces` in `capture_frame`)."""
 
-    fps: float = 30
-    """Target frame rate of the output video. Frames are sampled every `1/fps` seconds of simulation time."""
+    frame_rate: float = 30
+    """Frames to capture per unit of simulation time, in whatever time unit the model uses. Frames are sampled every `1/frame_rate` units of simulation time."""
 
     playback_speed: float = 1.0
     """Target for playback speed. If using 0.5 the video will record in "slow motion", 2 will record as occurring twice as fast."""
@@ -184,8 +184,8 @@ class VideoRecorder:
 
     @property
     def _output_fps(self) -> float:
-        """Frame rate of the saved video, after applying `playback_speed` to `fps`."""
-        return self.fps * self.playback_speed
+        """Frame rate of the saved video, after applying `playback_speed` to `frame_rate`."""
+        return self.frame_rate * self.playback_speed
 
     def _validate(self, state: MjState) -> None:
         """Checks settings against the model before allocating any GL resources, so failures are raised here rather than as a confusing error deep in the simulation loop."""
@@ -366,6 +366,8 @@ class VideoRecorder:
             return
 
         if not self.recording_trigger(state):
+            # while not recording, keep the schedule up with the clock, so the frames the trigger skipped are not owed back as a burst
+            self._next_record_time = state.data.time
             return
 
         if self.max_frames is not None and self._frame_count >= self.max_frames:
@@ -392,7 +394,7 @@ class VideoRecorder:
 
         # increment the clock for the next frame
         self._frame_count += 1
-        self._next_record_time += 1 / self.fps
+        self._next_record_time += 1 / self.frame_rate
 
     def snapshot(
         self,
@@ -402,7 +404,7 @@ class VideoRecorder:
         custom_lines: list[LineConfig] | None = None,
         custom_traces: list[LineConfig] | None = None,
     ) -> None:
-        """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `fps` timing."""
+        """Renders the current state and saves it as a single image to `path`, regardless of `recording_trigger` or `frame_rate` timing."""
         from PIL import Image
 
         frame = self._render_frame(
@@ -562,4 +564,12 @@ class VideoRecorder:
         from mujoco_mojo.runtime.runtime_manager import RuntimeManager
 
         (runtime_manager or RuntimeManager.current()).add_video_recorder(self)
+        return self
+
+    def unregister_from_rm(self, runtime_manager: RuntimeManager | None = None) -> Self:
+        """Takes this recorder back out of the `RuntimeManager` (the active one if none is passed), so it captures nothing and saves no file, and releases its renderer. Call it after `setup`, on the thread that called `setup`. The recorder cannot be used again."""
+        from mujoco_mojo.runtime.runtime_manager import RuntimeManager
+
+        (runtime_manager or RuntimeManager.current()).remove_video_recorder(self)
+        self.close()
         return self

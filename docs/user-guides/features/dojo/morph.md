@@ -22,13 +22,13 @@ The **Morph** tab only exists for a job started with [`mujoco-mojo run optimizat
 
 Morph is Optuna Dashboard itself, so its own [documentation](https://optuna-dashboard.readthedocs.io/) covers every view. The ones you will use most with a Mojo job are:
 
-| View                      | Use it to                                                                                                                              |
-| :------------------------ | :------------------------------------------------------------------------------------------------------------------------------------- |
-| **Optimization history**  | Watch the objective score of each trial, and the best so far. A curve that has stopped improving says the search has converged.        |
-| **Parameter importance**  | See which of your design variables (`spring_stiffness`, `structure_material`, and so on) moved the score the most.                      |
-| **Parallel coordinate**   | Follow how the best trials combine their parameter values, one line per trial.                                                         |
-| **Slice and contour**     | Look at the score against one parameter, or two, to find where the good region is and whether it is narrow.                            |
-| **Trials**                | A table of every trial with its parameters, its score and its state, which you can sort to find the best.                              |
+| View                     | Use it to                                                                                                                       |
+| :----------------------- | :------------------------------------------------------------------------------------------------------------------------------ |
+| **Optimization history** | Watch the objective score of each trial, and the best so far. A curve that has stopped improving says the search has converged. |
+| **Parameter importance** | See which of your design variables (`spring_stiffness`, `structure_material`, and so on) moved the score the most.              |
+| **Parallel coordinate**  | Follow how the best trials combine their parameter values, one line per trial.                                                  |
+| **Slice and contour**    | Look at the score against one parameter, or two, to find where the good region is and whether it is narrow.                     |
+| **Trials**               | A table of every trial with its parameters, its score and its state, which you can sort to find the best.                       |
 
 The parameter names are the ones you gave your [design variables](../optimization.md#defining-the-search-space) ([`DesignFloat`][stochas.DesignFloat] and [`DesignCategorical`][stochas.DesignCategorical]) in the generate script, and the score is what your [objective function](../optimization.md#the-objective-function-contract) returned.
 

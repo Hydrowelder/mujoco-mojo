@@ -8,7 +8,7 @@
 
 ## Usage
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo init [--optimizer]
 ```
 
@@ -20,12 +20,12 @@ With no flags, the command generates a standard Monte Carlo project. Pass `--opt
 
 Running [`mujoco-mojo init`](../../reference/cli.md#mujoco-mojo-init) produces these files in the current directory:
 
-| File            | Purpose                                                       |
-| --------------- | ------------------------------------------------------------- |
-| `simulation.py` | Simulation stubs: [`UserData`][mujoco_mojo.mojo_model.UserData], `generate`, and `runtime`       |
-| `run.sh`        | Pre-configured shell script to launch the campaign            |
-| `reloaded.sh`   | Shell script to open the interactive viewer                   |
-| `AGENTS.md`     | Tells coding assistants where the Mojo guides are (see below) |
+| File            | Purpose                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------ |
+| `simulation.py` | Simulation stubs: [`UserData`][mujoco_mojo.mojo_model.UserData], `generate`, and `runtime` |
+| `run.sh`        | Pre-configured shell script to launch the campaign                                         |
+| `reloaded.sh`   | Shell script to open the interactive viewer                                                |
+| `AGENTS.md`     | Tells coding assistants where the Mojo guides are (see below)                              |
 
 Both shell scripts are made executable and resolve their paths relative to their own location, so they can be invoked from any working directory.
 
@@ -41,10 +41,10 @@ If the project already has an `AGENTS.md`, `init` leaves it alone and prints the
 
 `reloaded.sh` does not name a viewer. Reloaded takes it from the `reloaded.ui` setting, which defaults to the right one for the machine you run it on:
 
-| Your MuJoCo build                                | Default viewer                  |
-| ------------------------------------------------ | ------------------------------- |
-| Can serve the browser viewer                     | `web` (in a browser)            |
-| Cannot (for example the 4.0.0 Windows wheel)     | `opengl` (the classic window)   |
+| Your MuJoCo build                            | Default viewer                |
+| -------------------------------------------- | ----------------------------- |
+| Can serve the browser viewer                 | `web` (in a browser)          |
+| Cannot (for example the 4.0.0 Windows wheel) | `opengl` (the classic window) |
 
 A machine reached over SSH gets the browser viewer when it is available, which is the better experience over a network link. Because nothing is written into the script, the same project works on your desktop and on a remote machine. To pin a viewer, set `reloaded.ui` in your settings, or add `-ui studio`, `-ui web`, or `-ui opengl` to the command in `reloaded.sh`.
 
@@ -52,7 +52,7 @@ A machine reached over SSH gets the browser viewer when it is available, which i
 
 ## Monte Carlo (default)
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo init
 ```
 
@@ -62,7 +62,7 @@ mujoco-mojo init
 
 ## Optimization
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo init --optimizer
 ```
 
@@ -74,7 +74,7 @@ mujoco-mojo init --optimizer
 
 After running `init`, fill in your `generate` and `runtime` functions, then launch your campaign:
 
-```bash linenums="0"
+``` bash linenums="0"
 bash run.sh
 ```
 
@@ -82,6 +82,6 @@ bash run.sh
 
     Use `reloaded.sh` during development to get rapid visual feedback on your model without running a full campaign.
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     bash reloaded.sh
     ```

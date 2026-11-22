@@ -181,6 +181,38 @@ def test_an_html_image_is_linked_too(docs: Path) -> None:
     )
 
 
+def test_a_video_its_poster_and_its_sources_are_linked_too(docs: Path) -> None:
+    page = docs / "index.md"
+    page.write_text(
+        '<video controls poster="assets/poster.jpg" src="assets/clip.mp4"></video>\n'
+        "<video controls>\n"
+        '    <source src="./assets/clip.webm" type="video/webm">\n'
+        "</video>\n"
+    )
+
+    changed = link_missing_assets(docs, "v1.0.0")
+
+    assert changed == 3
+    assert page.read_text() == (
+        f'<video controls poster="{RAW}/v1.0.0/docs/assets/poster.jpg" src="{RAW}/v1.0.0/docs/assets/clip.mp4"></video>\n'
+        "<video controls>\n"
+        f'    <source src="{RAW}/v1.0.0/docs/assets/clip.webm" type="video/webm">\n'
+        "</video>\n"
+    )
+
+
+def test_a_video_that_is_there_and_an_attribute_that_only_ends_in_src_are_left_alone(
+    docs: Path,
+) -> None:
+    (docs / "assets" / "clip.mp4").write_bytes(b"")
+    page = docs / "index.md"
+    text = '<source src="assets/clip.mp4" type="video/mp4">\n<img data-src="assets/lazy.png">\n'
+    page.write_text(text)
+
+    assert link_missing_assets(docs, "v1.0.0") == 0
+    assert page.read_text() == text
+
+
 def test_a_link_is_worked_out_from_the_folder_of_its_page(docs: Path) -> None:
     page = docs / "sub" / "page.md"
     page.write_text("![A](./landed.jpg) ![B](../assets/wide.jpg)\n")

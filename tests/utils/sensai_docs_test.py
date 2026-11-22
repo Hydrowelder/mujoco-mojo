@@ -1,5 +1,6 @@
 """Tests for how SensAI's docs agent finds things in the docs of the docs source bundled with the package: splitting them into sections, ranking sections against a question, and reading a page or a part of one."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -612,7 +613,8 @@ class TestTheBundledDocs:
 
         assert text.startswith("Command Line Reference > `mujoco-mojo dojo` (")
         assert "mujoco-mojo dojo [OPTIONS] WORKDIR" in text
-        assert "| `--port`, `-p` | integer | `8000` |" in text
+        # the page pads each table's columns to their widest cell, so match a row by its cells
+        assert "| `--port`, `-p` | integer | `8000` |" in re.sub(" +", " ", text)
         assert "mujoco-mojo init" not in text
 
     def test_the_code_of_a_page_that_was_an_include_can_be_read(self) -> None:

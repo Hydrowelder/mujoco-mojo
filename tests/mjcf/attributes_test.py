@@ -256,8 +256,9 @@ def test_embed_true_overrides_passthrough(png: Path) -> None:
 
 
 def test_the_deprecated_meaninertia_is_still_written_and_compiles() -> None:
-    """MuJoCo 3.17.0 deprecates it with a compile warning, which is not an error."""
-    statistic = Statistic(meaninertia=2.0)
+    """MuJoCo 3.17.0 deprecates it with a compile warning, which is not an error, and Mojo warns when it is set."""
+    with pytest.warns(DeprecationWarning, match="Statistic.meaninertia"):
+        statistic = Statistic(meaninertia=2.0)
 
     assert _xml(statistic).attrib["meaninertia"] == "2.0"
     Mujoco(statistics=[statistic], worldbody=WorldBody()).to_mj_model()

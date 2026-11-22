@@ -9,7 +9,7 @@ the best reference is the upstream documentation:
 All `mjcf` types are re-exported from the top-level `mujoco_mojo` namespace,
 so you rarely need to import directly from `mujoco_mojo.mjcf`.
 
-```python
+``` python
 import mujoco_mojo as mojo
 
 body = mojo.Body(name=mojo.BodyName("my_body"))

@@ -88,11 +88,17 @@ def small_app() -> typer.Typer:
     return app
 
 
+def flat(text: str) -> str:
+    """The text with each table's padding taken out (runs of spaces become one, and a separator row becomes `:---`), so a row can be matched by its cells whatever the width of its columns."""
+    text = re.sub(r" {2,}", " ", text)
+    return re.sub(r"\| :-+", "| :---", text)
+
+
 @pytest.fixture
 def page(generator: ModuleType) -> str:
     text = generator.render(small_app(), program="demo")
     assert isinstance(text, str)
-    return text
+    return flat(text)
 
 
 def section(page: str, heading: str) -> str:
@@ -139,7 +145,7 @@ class TestTheRealCommandLine:
         assert page == generator.OUTPUT.read_text(encoding="utf-8")
         assert (
             "| `--user-interface`, `-ui` | one of `opengl`, `studio`, `web` | `web` |"
-            in page
+            in flat(page)
         )
 
     def test_the_clean_environment_has_none_of_the_machines_settings(
@@ -218,7 +224,7 @@ class TestTheRealCommandLine:
     def test_a_real_default_and_a_real_choice_are_on_the_page(
         self, generator: ModuleType
     ) -> None:
-        page = generator.OUTPUT.read_text(encoding="utf-8")
+        page = flat(generator.OUTPUT.read_text(encoding="utf-8"))
         text = section(page, "### `mujoco-mojo run monte-carlo`")
 
         assert (
@@ -359,6 +365,19 @@ class TestRules:
 
     def test_a_pipe_in_a_help_text_does_not_break_the_table(self, page: str) -> None:
         assert "A name \\| with a pipe." in page
+
+    def test_every_row_of_a_table_is_as_wide_as_its_header(
+        self, generator: ModuleType
+    ) -> None:
+        """The columns are padded to their widest cell, so the source of a table lines up."""
+        text = generator.render(small_app(), program="demo")
+        tables = re.findall(r"(?:^\|.*\n?)+", text, flags=re.MULTILINE)
+
+        assert len(tables) >= 4
+        for table in tables:
+            lines = table.splitlines()
+            assert len({len(line) for line in lines}) == 1, table
+            assert re.fullmatch(r"\| :-+( \| :-+)* \|", lines[1]), table
 
     def test_a_command_with_nothing_to_set_has_no_empty_tables(self, page: str) -> None:
         text = section(page, "### `demo ops deploy`")

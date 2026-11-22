@@ -214,6 +214,34 @@ def test_rt_dims_for_free_joint() -> None:
     assert joint.rt_qvel(state).shape == (6,)
 
 
+def test_addresses_match_the_model_and_differ_after_a_free_joint() -> None:
+    """A free joint takes 7 positions but 6 velocities, so the joint after it starts at 7 in `qpos` and at 6 in `qvel`."""
+    xml = """
+    <mujoco>
+        <worldbody>
+            <body name="box">
+                <freejoint name="root"/>
+                <geom type="box" size="0.1 0.1 0.1"/>
+            </body>
+            <body name="arm" pos="1 0 0">
+                <joint name="elbow" type="hinge"/>
+                <geom type="capsule" size="0.05" fromto="0 0 0 0.3 0 0"/>
+            </body>
+        </worldbody>
+    </mujoco>
+    """
+    model = mujoco.MjModel.from_xml_string(xml)
+    data = mujoco.MjData(model)
+    mujoco.mj_forward(model, data)
+    state = MjState(model, data)
+    root, elbow = Joint(name=JointName("root")), Joint(name=JointName("elbow"))
+    root.get_id(model)
+    elbow.get_id(model)
+
+    assert (root.qpos_address(state), root.dof_address(state)) == (0, 0)
+    assert (elbow.qpos_address(state), elbow.dof_address(state)) == (7, 6)
+
+
 def _joint_state(xml: str, joint_name: str) -> tuple[MjState, Joint]:
     model = mujoco.MjModel.from_xml_string(xml)
     data = mujoco.MjData(model)

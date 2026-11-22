@@ -200,6 +200,17 @@ class RuntimeManager:
     def add_video_recorder(self, video_recorder: VideoRecorder) -> None:
         self.video_recorders.append(video_recorder)
 
+    def remove_video_recorder(self, video_recorder: VideoRecorder) -> None:
+        """Takes a registered recorder out, so it no longer captures frames or saves a file. Raises `ValueError` if it was not registered here."""
+        # by identity, since two recorders that are equal field for field are still two recorders
+        for index, registered in enumerate(self.video_recorders):
+            if registered is video_recorder:
+                del self.video_recorders[index]
+                return
+        raise ValueError(
+            "This video recorder is not registered to this runtime manager."
+        )
+
     def add_tracer(self, tracer: Tracer) -> None:
         self.tracers.append(tracer)
 

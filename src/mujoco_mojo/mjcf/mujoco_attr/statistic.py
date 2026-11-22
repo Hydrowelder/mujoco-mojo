@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.typing import Vec3
 
@@ -22,7 +24,10 @@ class Statistic(XMLModel):
     meanmass: float | None = None
     """If this attribute is specified, it replaces the value of mjModel.stat.meanmass computed by the compiler. The computed value is the average body mass, not counting the massless world body. At runtime this value scales the perturbation force."""
 
-    meaninertia: float | None = None
+    meaninertia: float | None = Field(
+        None,
+        deprecated="Statistic.meaninertia is deprecated and MuJoCo will remove it in a future release. It does not affect simulation.",
+    )
     """This attribute is deprecated and will be removed in a future release; compiling a model which sets it gives a warning. If it is specified, it replaces the value of mjModel.stat.meaninertia computed by the compiler. The computed value is the average diagonal element of the joint-space inertia matrix when the model is in qpos0. It does not affect simulation: the solvers scale their termination criteria by the trace of the current inertia matrix, see tolerance."""
 
     meansize: float | None = None
