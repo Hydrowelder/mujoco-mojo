@@ -5,12 +5,14 @@
   </option>
   <statistic meansize="1.0"/>
   <asset>
+    <mesh name="station_mesh" builtin="cylinder" params="9 9 9 0.2 0.2 0.75 3"/>
+  </asset>
+  <asset>
     <mesh name="station_fixture_mesh" builtin="cylinder" params="9 9 9 0.0375 0.0375 0.05625 3"/>
   </asset>
   <asset>
     <mesh name="boom_1_mesh" builtin="cylinder" params="9 9 9 0.03 0.03 0.375 3"/>
     <mesh name="boom_2_mesh" builtin="cylinder" params="9 9 9 0.03 0.03 0.375 3"/>
-    <mesh name="reach_mesh" scale="8.6 8.6 8.6" builtin="hemisphere" params="8"/>
   </asset>
   <asset>
     <mesh name="base_effector_mesh" builtin="cylinder" params="9 9 9 0.035 0.035 0.1125 3"/>
@@ -28,41 +30,40 @@
     <mesh name="visitor_fixture_mesh" builtin="cylinder" params="9 9 9 0.0375 0.0375 0.05625 3"/>
   </asset>
   <worldbody>
-    <camera name="overview" fovy="30.0" pos="2.0 -16.0 7.0" quat="1 0 0 0" mode="targetbodycom" target="visitor"/>
+    <camera name="overview" fovy="20.0" pos="2.0 -16.0 7.0" quat="1 0 0 0" mode="targetbodycom" target="wrist_roll"/>
     <light name="sun" type="directional" pos="0 0 0" dir="-0.4 0.4 -0.8"/>
     <body name="station" pos="0 0 0" quat="1 0 0 0">
-      <geom name="station_geom" type="cylinder" condim="3" fromto="0.0 -3.0 0.0 0.0 3.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.39215686274509803 0.4549019607843137 0.5450980392156862 0.3" size="0.8"/>
+      <geom name="station_geom" type="mesh" condim="3" mass="400000.0" pos="0.0 0.0 0.0" euler="-90 0 0" rgba="0.39215686274509803 0.4549019607843137 0.5450980392156862 0.3" mesh="station_mesh"/>
       <site name="berth_site" type="sphere" pos="3.0 0.0 1.5" quat="1 0 0 0" rgba="0.6392156862745098 0.9019607843137255 0.20784313725490197 1.0" size="0.1"/>
       <frame name="station_fixture" pos="0.0 0.0 0.8" euler="0 90 0">
         <geom name="station_fixture_geom" type="mesh" condim="3" mass="20.0" pos="-0.17500000000000002 0.0 0.0" euler="0 90 0" rgba="0.9764705882352941 0.45098039215686275 0.08627450980392157 1.0" mesh="station_fixture_mesh"/>
-        <geom name="reach_geom" type="mesh" contype="0" conaffinity="0" condim="3" density="0.0" pos="-0.4 0.0 0.0" euler="0 -90 0" rgba="0.0784313725490196 0.7215686274509804 0.6509803921568628 0.02" mesh="reach_mesh"/>
         <site name="station_grapple_site" type="sphere" pos="-0.4 0.0 0.0" quat="1 0 0 0" rgba="0.9764705882352941 0.45098039215686275 0.08627450980392157 1.0" size="0.05"/>
         <frame name="base_effector" pos="-1.3 0.0 0.0" quat="1 0 0 0">
           <geom name="base_effector_geom" type="mesh" condim="3" mass="40.0" pos="0.45 0.0 0.0" euler="0 90 0" rgba="0.796078431372549 0.8352941176470589 0.8823529411764706 1.0" mesh="base_effector_mesh"/>
           <site name="base_tip_site" type="sphere" pos="0.9 0.0 0.0" quat="1 0 0 0" rgba="0.9607843137254902 0.6196078431372549 0.043137254901960784 1.0" size="0.04"/>
         </frame>
         <body name="shoulder_roll" pos="-1.3 0.0 0.0" quat="5.549534652183772e-17 -2.5877905075098294e-17 0.9063077870366499 0.42261826174069944">
-          <joint name="shoulder_roll" pos="0 0 0" axis="1 0 0" armature="10.0"/>
+          <joint name="shoulder_roll" pos="0 0 0" axis="1 0 0" range="-180 180" limited="true" armature="10.0"/>
           <geom name="shoulder_roll_geom" type="cylinder" condim="3" mass="100.0" fromto="0.0 0.0 0.0 0.4 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9372549019607843 0.26666666666666666 0.26666666666666666 1.0" size="0.3"/>
           <body name="shoulder_yaw" pos="0.4 0.0 0.0" euler="0.0 0.0 0.0">
-            <joint name="shoulder_yaw" pos="0 0 0" armature="10.0"/>
+            <joint name="shoulder_yaw" pos="0 0 0" range="-180 180" limited="true" armature="10.0"/>
             <geom name="shoulder_yaw_geom" type="cylinder" condim="3" mass="60.0" fromto="0.0 0.0 -0.25 0.0 0.0 0.25" pos="0 0 0" quat="1 0 0 0" rgba="0.23137254901960785 0.5098039215686274 0.9647058823529412 1.0" size="0.22"/>
             <body name="shoulder_pitch" pos="0.0 0.0 0.0" euler="0.0 20.0 0.0">
-              <joint name="shoulder_pitch" pos="0 0 0" axis="0 1 0" armature="10.0"/>
+              <joint name="shoulder_pitch" pos="0 0 0" axis="0 1 0" range="-180 180" limited="true" armature="10.0"/>
               <geom name="shoulder_pitch_geom" type="cylinder" condim="3" mass="60.0" fromto="0.0 -0.25 0.0 0.0 0.25 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.13333333333333333 0.7725490196078432 0.3686274509803922 1.0" size="0.22"/>
               <geom name="boom_1_geom" type="mesh" condim="3" mass="150.0" pos="1.5 0.0 0.0" euler="0 90 0" rgba="0.8862745098039215 0.9098039215686274 0.9411764705882353 1.0" mesh="boom_1_mesh"/>
               <body name="elbow_pitch" pos="3.0 0.0 0.0" euler="0.0 130.0 0.0">
-                <joint name="elbow_pitch" pos="0 0 0" axis="0 1 0" armature="10.0"/>
+                <joint name="elbow_pitch" pos="0 0 0" axis="0 1 0" range="-180 180" limited="true" armature="10.0"/>
                 <geom name="elbow_geom" type="cylinder" condim="3" mass="40.0" fromto="0.0 -0.2 0.0 0.0 0.2 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.13333333333333333 0.7725490196078432 0.3686274509803922 1.0" size="0.2"/>
                 <geom name="boom_2_geom" type="mesh" condim="3" mass="120.0" pos="1.5 0.0 0.0" euler="0 90 0" rgba="0.5803921568627451 0.6392156862745098 0.7215686274509804 1.0" mesh="boom_2_mesh"/>
                 <body name="wrist_pitch" pos="3.0 0.0 0.0" euler="0.0 -35.0 0.0">
-                  <joint name="wrist_pitch" pos="0 0 0" axis="0 1 0" armature="10.0"/>
+                  <joint name="wrist_pitch" pos="0 0 0" axis="0 1 0" range="-180 180" limited="true" armature="10.0"/>
                   <geom name="wrist_pitch_geom" type="cylinder" condim="3" mass="60.0" fromto="0.0 -0.25 0.0 0.0 0.25 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.13333333333333333 0.7725490196078432 0.3686274509803922 1.0" size="0.22"/>
                   <body name="wrist_yaw" pos="0.0 0.0 0.0" euler="0.0 0.0 0.0">
-                    <joint name="wrist_yaw" pos="0 0 0" armature="10.0"/>
+                    <joint name="wrist_yaw" pos="0 0 0" range="-180 180" limited="true" armature="10.0"/>
                     <geom name="wrist_yaw_geom" type="cylinder" condim="3" mass="60.0" fromto="0.0 0.0 -0.25 0.0 0.0 0.25" pos="0 0 0" quat="1 0 0 0" rgba="0.23137254901960785 0.5098039215686274 0.9647058823529412 1.0" size="0.22"/>
                     <body name="wrist_roll" pos="0.0 0.0 0.0" euler="0.0 0.0 0.0">
-                      <joint name="wrist_roll" pos="0 0 0" axis="1 0 0" armature="10.0"/>
+                      <joint name="wrist_roll" pos="0 0 0" axis="1 0 0" range="-180 180" limited="true" armature="10.0"/>
                       <geom name="wrist_roll_geom" type="cylinder" condim="3" mass="100.0" fromto="0.0 0.0 0.0 0.4 0.0 0.0" pos="0 0 0" quat="1 0 0 0" rgba="0.9372549019607843 0.26666666666666666 0.26666666666666666 1.0" size="0.3"/>
                       <frame name="free_effector" pos="0.4 0.0 0.0" quat="1 0 0 0">
                         <geom name="free_effector_geom" type="mesh" condim="3" mass="40.0" pos="0.45 0.0 0.0" euler="0 90 0" rgba="0.796078431372549 0.8352941176470589 0.8823529411764706 1.0" mesh="free_effector_mesh"/>
