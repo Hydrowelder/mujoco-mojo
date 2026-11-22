@@ -589,6 +589,7 @@ class Arm(mojo.UserData):
         )
         wrist_roll_body.frames.append(free_effector.frame)
 
+        # --8<-- [start:camera]
         # only the free end has a camera: in the end effector's frame, so the roll turns it, and off the axis, so the end effector stays out of the picture
         eye = np.array((END_EFFECTOR.LENGTH - ARM.camera.SETBACK, 0, ARM.camera.HEIGHT))
         camera = mojo.Camera(
@@ -599,6 +600,7 @@ class Arm(mojo.UserData):
             ),
         )
         free_effector.frame.cameras.append(camera)
+        # --8<-- [end:camera]
         wrist_roll = hinge("wrist_roll", (1, 0, 0))
         wrist_roll_body.joints.append(wrist_roll)
         wrist_yaw_body.bodies.append(wrist_roll_body)

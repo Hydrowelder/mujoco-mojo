@@ -30,6 +30,12 @@ TRIAL_NUM = 0
 # the docs examples with a model to open in MuJoCo Live: each one's folder name under `docs/assets/models`, and the example script whose `generate` builds it
 EXAMPLES: dict[str, Path] = {
     "vlr": ROOT / "docs" / "user-guides" / "examples" / "vlr" / "vlr_example.py",
+    "berthing": ROOT
+    / "docs"
+    / "user-guides"
+    / "examples"
+    / "berthing"
+    / "simulation.py",
 }
 
 
@@ -39,14 +45,19 @@ def output_path(name: str) -> Path:
 
 
 def load_example(name: str) -> ModuleType:
-    """Imports the example script, which sits outside any package. It is registered under its own name first because pydantic looks a class's module up there to resolve its annotations."""
+    """Imports the example script, which sits outside any package. It is registered under its own name first because pydantic looks a class's module up there to resolve its annotations. An example made of several modules imports them by plain name, so the script's folder is on the path while it loads."""
     module_name = f"docs_example_{name}"
     spec = importlib.util.spec_from_file_location(module_name, EXAMPLES[name])
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load the example script {EXAMPLES[name]}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    folder = str(EXAMPLES[name].parent)
+    sys.path.insert(0, folder)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.remove(folder)
     return module
 
 

@@ -49,6 +49,21 @@ class TestCleaning:
 
         assert clean(text) == "See the icon here.\n"
 
+    def test_a_video_block_is_removed(self) -> None:
+        text = 'a\n<video controls>\n    <source src="clip.mp4" type="video/mp4">\n</video>\nb\n'
+
+        assert clean(text) == "a\n\nb\n"
+
+    def test_a_figure_around_a_video_keeps_its_caption(self) -> None:
+        text = (
+            '<figure markdown="span">\n'
+            '    <video controls><source src="clip.mp4"></video>\n'
+            "    <figcaption>The whole run.</figcaption>\n"
+            "</figure>\n"
+        )
+
+        assert clean(text) == "Figure: The whole run.\n"
+
     def test_link_attributes_and_icon_codes_are_removed(self) -> None:
         text = "[Open :material-open-in-new:](https://x.test/a){ .md-button target=_blank }\n"
 

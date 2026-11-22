@@ -40,6 +40,7 @@ class Berthing(mojo.UserData):
     capture: Capture
     """The weld that joins the arm to the visitor."""
 
+    # --8<-- [start:proximities]
     _clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
     """Distances from each boom and the free end effector to the hull."""
 
@@ -86,6 +87,8 @@ class Berthing(mojo.UserData):
         for proximity in (*self._clearances, self._gap):
             proximity.active = False
 
+    # --8<-- [end:proximities]
+
     def lined_up(self, state: mojo.MjState) -> bool:
         """Whether the free end effector is on the fixture's axis and pointing along it, within the mission's tolerances."""
         off_axis, angle = self.arm.misalignment(state, self.visitor.fixture.site)
@@ -94,6 +97,7 @@ class Berthing(mojo.UserData):
             and angle < np.deg2rad(MISSION.COLINEAR_ANGLE_DEG)
         )
 
+    # --8<-- [start:videos]
     def register_videos(self, mojo_model: mojo.MojoModel, state: mojo.MjState) -> None:
         """Films both cameras into the trial's folder, with a label on every frame. Only the nominal trial films. Call it inside the runtime manager's `with` block, after `register_proximities`."""
         if not mojo_model.is_nominal:
@@ -141,6 +145,8 @@ class Berthing(mojo.UserData):
             show_proximities=True,
             frame_label=label,
         ).setup(state).register_to_rm()
+
+    # --8<-- [end:videos]
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel) -> Self:
@@ -238,6 +244,7 @@ def runtime(
                         )
                         phase = Phase.CAPTURE
 
+                # --8<-- [start:capture-phase]
                 case Phase.CAPTURE:
                     # creep in only while lined up, aiming a little past the fixture so the servos' lag cannot stall the end effector short of the capture gap
                     if lined_up:
@@ -258,6 +265,9 @@ def runtime(
                         berthing.stop_proximities()
                         phase = Phase.BERTH
 
+                # --8<-- [end:capture-phase]
+
+                # --8<-- [start:berth-phase]
                 case Phase.BERTH:
                     # the weld ties the tip to the visitor's grapple site, so putting the tip on the berthing point puts the visitor there
                     remaining = arm.carry_to(
@@ -283,6 +293,7 @@ def runtime(
                     assert released_at is not None
                     if state.data.time - released_at > MISSION.SETTLE_TIME:
                         break
+                # --8<-- [end:berth-phase]
 
             rm.step(state)
 
