@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Self
 
 import numpy as np
-from shapes import CylinderInput, cylinder_mesh, lying_along
+from shapes import CylinderInput, lying_along
 
 import mujoco_mojo as mojo
 
@@ -50,15 +50,7 @@ class EndEffector(mojo.UserData):
     def new(cls, mojo_model: mojo.MojoModel, name: str, mount: mojo.AnyPose) -> Self:
         """Makes an end effector with its root at `mount`, a pose whose X axis is the direction it points. `name` prefixes the names of everything it makes."""
         mojo_model.mjcf.assets.append(
-            mojo.Asset(
-                meshes=[
-                    mesh := cylinder_mesh(
-                        f"{name}_effector_mesh",
-                        END_EFFECTOR.RADIUS,
-                        END_EFFECTOR.LENGTH,
-                    )
-                ]
-            )
+            mojo.Asset(meshes=[mesh := END_EFFECTOR.mesh(f"{name}_effector_mesh")])
         )
         assert mesh.name
 
@@ -70,7 +62,7 @@ class EndEffector(mojo.UserData):
             rgba=mojo.utils.Color.SLATE_300.rgba,
         )
 
-        # no rotation of its own, so the site's X axis points along the end effector, the same way a fixture's site points into its structure
+        # no rotation of its own, so the site's X axis points along the end effector, and a fixture's site points the same way when the two are joined
         tip = mojo.SiteSphere(
             name=mojo.SiteName(f"{name}_tip_site"),
             size=END_EFFECTOR.TIP_SITE_SIZE,

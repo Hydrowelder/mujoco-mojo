@@ -23,7 +23,7 @@ It also **must** return a `mojo.MojoModel`.
 
 ???+ example "Example: MojoGenerate Handle"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-handle"
     ```
 
@@ -43,7 +43,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
 ??? example "Example: Handoff Class"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:handoff"
     ```
 
@@ -67,7 +67,7 @@ Notice in the following code how enumerations such as [`mojo.TextureType.D2`][mu
 
 ???+ example "Example: Assets Definition"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:assets"
     ```
 
@@ -87,7 +87,7 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 
 ???+ example "Example: Worldbody Definition"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:worldbody"
     ```
 
@@ -113,7 +113,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ example "Example: Sampling"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:sampling"
     ```
 
@@ -123,7 +123,7 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 ???+ example "Example: End of Function"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate-finalizing"
     ```
 
@@ -137,12 +137,12 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 !!! success
 
-    *Okay. That was kind of a lot.*
+    _Okay. That was kind of a lot._
 
     Now that we have completed building the kinematic tree, defining a user data to handoff, and an introduction to using distribution sampling, we now move on to defining the [runtime behavior](runtime-script.md) of the physics engine.
 
 ??? example "Example: Full Generate Script"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/workflow/monte_carlo_example.py:generate"
     ```

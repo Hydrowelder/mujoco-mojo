@@ -16,7 +16,7 @@ A **requirement** is a function you register on the [`RuntimeManager`][mujoco_mo
 
 The function signature is:
 
-```python
+``` python
 def my_check(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
 ) -> tuple[bool | None, str]:
@@ -31,9 +31,9 @@ def my_check(
 - `state`: the last [`MjState`][mujoco_mojo.mj_state.MjState] seen before the trial ended (access `state.data.qpos`, `state.data.time`, etc.)
 - `df`: the full trial telemetry as a `MojoDataFrame` (a Polars DataFrame with Mojo's signal-aware namespace). `None` when the function is called during a live step check (see [Live checks](#live-checks)).
 - **Return value:** `(passed, message)`: the verdict and a human-readable description. `passed` is tri-state:
-  - `True`: the requirement is satisfied
-  - `False`: the requirement is violated
-  - `None`: no verdict yet. During live checks this is a no-op (nothing is recorded); a check that is still `None` at end of trial is recorded as failed
+- `True`: the requirement is satisfied
+- `False`: the requirement is violated
+- `None`: no verdict yet. During live checks this is a no-op (nothing is recorded); a check that is still `None` at end of trial is recorded as failed
 
 ---
 
@@ -79,7 +79,7 @@ Both styles accept the same keyword arguments:
 
 ### Decorator style
 
-```python
+``` python
 @rm.requirement()  # name inferred: "check_settle_time"
 def check_settle_time(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
@@ -106,7 +106,7 @@ The decorator returns the original function unchanged, so the function remains c
 
 Given an end-of-trial check:
 
-```python
+``` python
 def check_max_height(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
 ) -> tuple[bool, str]:
@@ -121,7 +121,7 @@ def check_max_height(
 
 register it with `add_requirement`:
 
-```python
+``` python
 runtime_manager: RuntimeManager
 
 runtime_manager.add_requirement(
@@ -144,7 +144,7 @@ with runtime_manager as rm:
 
 By default (`every=None`), requirements are evaluated once at end of trial. Set `every=N` to also run the check inside `step()` every N steps:
 
-```python
+``` python
 @rm.requirement(every=100)
 def upright(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
@@ -159,10 +159,10 @@ def upright(
 - `every=N`: evaluate every N steps. Useful for expensive checks or when only coarse monitoring is needed
 - `df` is always `None` during live calls; use `state` for real-time values or cache key values in your `mojo_model.user_data` object
 - Returning `None` means no verdict yet, for example "reached the goal" before the goal is reachable, so an unfinished objective is not mistaken for a violation.
-  - It never posts telemetry, fails the requirement (see the note below), or triggers `terminate_on_fail`/`terminate_on_pass`.
-  - It is still recorded for that sim time, so `last_passed()` can tell "evaluated, no verdict yet" from "not evaluated at this step".
+- It never posts telemetry, fails the requirement (see the note below), or triggers `terminate_on_fail`/`terminate_on_pass`.
+- It is still recorded for that sim time, so `last_passed()` can tell "evaluated, no verdict yet" from "not evaluated at this step".
 - Unless `post_result=False`, each `True`/`False` verdict is recorded in the telemetry parquet as `Requirements/{name}:result` (`1.0` passed, `0.0` failed), so you can plot it in the Dojo beside other signals, where the two values are labeled `PASS` and `FAIL`.
-  - The last known verdict is re-posted on steps with no evaluation or no verdict, so the signal is continuous.
+- The last known verdict is re-posted on steps with no evaluation or no verdict, so the signal is continuous.
 
 ???+ note "Note: Failed Live Requirement"
 
@@ -174,7 +174,7 @@ def upright(
 
 Live results are cached by simulation time, so your control code can read the outcome of the most recent evaluation at no additional cost:
 
-```python
+``` python
 for _ in range(10_000):
     rm.step(state)
     # returns the cached live result at the current sim time, or None if
@@ -190,7 +190,7 @@ for _ in range(10_000):
 
 Add `terminate_on_fail=True` to stop the simulation as soon as a live check fails:
 
-```python
+``` python
 @rm.requirement(every=50, terminate_on_fail=True)
 def upright(
     mojo_model: MojoModel,
@@ -217,7 +217,7 @@ When the check fails, [`RuntimeManager.step()`][mujoco_mojo.runtime.runtime_mana
 
 The mirror image: add `terminate_on_pass=True` to stop the simulation as soon as a live check passes, without spending the rest of the simulation budget. Combine it with `None` verdicts so the waiting period is not counted as a failure:
 
-```python
+``` python
 @rm.requirement(every=25, terminate_on_pass=True)
 def reached_goal(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
@@ -260,7 +260,7 @@ They are not symmetric, though:
 
 Latching logs one debug line when it locks in ("requirement 'x' latched pass/fail at t=..."), not on every step that replays the verdict.
 
-```python
+``` python
 # latch_on_fail=True is the default; spelled out here for symmetry with
 # latch_on_pass, which must be opted into explicitly
 @rm.requirement(every=23, latch_on_pass=True, latch_on_fail=True)
@@ -290,7 +290,7 @@ def check_expensive_requirement(
 
 After the `with runtime_manager` block exits, the results are available directly on the manager:
 
-```python
+``` python
 for result in rm.requirement_results:
     print(result.name, result.passed, result.message)
 ```
@@ -299,7 +299,7 @@ for result in rm.requirement_results:
 
 After each trial, Mojo writes a `requirements.json` to the trial directory:
 
-```json
+``` json
 [
   { "name": "max_height_ok", "passed": true, "message": "max z = 1.73 m" },
   {
@@ -327,7 +327,7 @@ The Dojo monitor separates successes, requirement failures, and errors in its ch
 
 Because the `model` argument is the full [`MojoModel`][mujoco_mojo.mojo_model.MojoModel], you can access your handoff data to make requirements parametric per-trial. Define your handoff model:
 
-```python
+``` python
 class BumperData(UserData):
     """Handoff data written during `generate()` and read back inside requirement checks."""
 
@@ -341,7 +341,7 @@ class BumperData(UserData):
 
 then read it back with `get_user_data` inside the check:
 
-```python
+``` python
 @rm.requirement("clearance_ok")
 def check_clearance(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None
@@ -366,7 +366,7 @@ This makes the same check automatically adapt to each trial's generated configur
 
 End-of-trial requirements receive the last state the simulation reached, which is useful for checking where things ended up without needing the full telemetry:
 
-```python
+``` python
 @rm.requirement("reached_goal")
 def check_goal(
     mojo_model: MojoModel, state: MjState, df: MojoDataFrame | None

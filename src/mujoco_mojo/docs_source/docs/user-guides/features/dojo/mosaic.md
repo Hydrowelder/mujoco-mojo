@@ -75,15 +75,15 @@ Your tabs are remembered by your browser, so a reload brings them back. [Profile
 
 ### Signal Selection (X and Y Axes)
 
-- **X-Axis:** Usually set to time, but you can map any telemetry signal to the X-axis to create phase-space plots (e.g., `velocity` vs. `position`). **X-Axis Filters** transform the x signal as well (one filter per stack here; use the Lab to chain more).
-- **Reference Frame:** Re-expresses vector signals (those ending in `:(x|y|z)`) relative to a frame instead of `world`. A frame is an orientation (a signal ending in `quat:(w|x|y|z)`), an origin (a position signal ending in `:(x|y|z)`), or both. An orientation alone only rotates, and an origin alone only translates.
+-   **X-Axis:** Usually set to time, but you can map any telemetry signal to the X-axis to create phase-space plots (e.g., `velocity` vs. `position`). **X-Axis Filters** transform the x signal as well (one filter per stack here; use the Lab to chain more).
+-   **Reference Frame:** Re-expresses vector signals (those ending in `:(x|y|z)`) relative to a frame instead of `world`. A frame is an orientation (a signal ending in `quat:(w|x|y|z)`), an origin (a position signal ending in `:(x|y|z)`), or both. An orientation alone only rotates, and an origin alone only translates.
     - Positions are translated and rotated. Other vectors, such as velocities and forces, are only rotated, and so is any signal not tagged as a position, such as custom signals and Signal Lab outputs.
     - Saved profiles and shared links that use the older single-signal frame reset to `world`.
-- **Y-Axes (Multi-Select):** You can overlay as many signals as you want. The button shows how many are selected, and opens a folder-style tree of the signals with a search box. Opening a folder that holds only one folder or signal opens straight down to it. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
-- **Labeled Signals (Enums):** A signal that carries labels for its integer codes (an `enumeration_map`) is drawn as a step line on its own axis on the right, with the labels as the tick marks. Signals that share the same labels share one axis, and hovering shows the label next to the code. Filters and reference frames do not apply to these signals.
-- **Descriptions:** Hover a signal in the X-Axis, Y-Axes or Reference Frame list to see its full name and, if it has one, its description. The built-in signals describe themselves, and you can [describe your own](../mojo-dataframe.md#metadata-units-tags-and-labels) to tell apart signals with similar names. Turn on the tag button in a signal list's search box to search by description.
-- **Metadata:** The info button on a signal shows what Mojo recorded about it (its unit, dimension and tags). Where a unit is known, the Dojo offers the matching unit conversion as a quick filter.
-- **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them (hold ++shift++ to send one straight to the start or the end). The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button, or clear them all with **Deselect All**.
+-   **Y-Axes (Multi-Select):** You can overlay as many signals as you want. The button shows how many are selected, and opens a folder-style tree of the signals with a search box. Opening a folder that holds only one folder or signal opens straight down to it. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
+-   **Labeled Signals (Enums):** A signal that carries labels for its integer codes (an `enumeration_map`) is drawn as a step line on its own axis on the right, with the labels as the tick marks. Signals that share the same labels share one axis, and hovering shows the label next to the code. Filters and reference frames do not apply to these signals.
+-   **Descriptions:** Hover a signal in the X-Axis, Y-Axes or Reference Frame list to see its full name and, if it has one, its description. The built-in signals describe themselves, and you can [describe your own](../mojo-dataframe.md#metadata-units-tags-and-labels) to tell apart signals with similar names. Turn on the tag button in a signal list's search box to search by description.
+-   **Metadata:** The info button on a signal shows what Mojo recorded about it (its unit, dimension and tags). Where a unit is known, the Dojo offers the matching unit conversion as a quick filter.
+-   **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them (hold ++shift++ to send one straight to the start or the end). The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button, or clear them all with **Deselect All**.
 
 !!! tip "Pro Tip: Regex Filtering"
 
@@ -153,20 +153,20 @@ This button opens a panel to share your plot. **Copy link to this tab** compacts
 
 Adjust the visual style of the plot. Hover the question mark beside any field for what it does, and use the small reset button that appears when a field differs from its default.
 
-| Field                  | Options                                                                                                          |
-| :--------------------- | :--------------------------------------------------------------------------------------------------------------- |
-| **Gridlines**          | None, major or all.                                                                                              |
-| **Mode**               | Lines, markers, or both.                                                                                         |
-| **Interpolation**      | Linear, spline, or one of the step shapes (`hv`, `vh`, `hvh`, `vhv`).                                            |
-| **Hover**              | How the tooltip groups values: unified on x or y, the closest point, the x or y value, or off.                   |
-| **Legend**             | Below the plot, to its right, or hidden.                                                                         |
-| **Show Spikes**        | Draws guide lines from the pointer to the axes.                                                                  |
-| **Plot Type**          | Cartesian or polar.                                                                                              |
-| **Max Points**         | Downsamples a long signal to at most this many points, so a plot of millions of samples stays smooth.            |
-| **Display Units**      | Converts every signal with a known unit to a system: as logged, SI, CGS, FPS or IPS.                             |
-| **X-Scale / Y-Scale**  | Linear or logarithmic, with the base of the logarithm.                                                           |
-| **X-Range / Y-Range**  | The limits of each axis. Leave a limit empty for automatic. Arithmetic works here too, such as `-pi` or `sqrt(2)`. |
-| **Titles**             | The plot's title and the label of each axis.                                                                     |
+| Field                 | Options                                                                                                            |
+| :-------------------- | :----------------------------------------------------------------------------------------------------------------- |
+| **Gridlines**         | None, major or all.                                                                                                |
+| **Mode**              | Lines, markers, or both.                                                                                           |
+| **Interpolation**     | Linear, spline, or one of the step shapes (`hv`, `vh`, `hvh`, `vhv`).                                              |
+| **Hover**             | How the tooltip groups values: unified on x or y, the closest point, the x or y value, or off.                     |
+| **Legend**            | Below the plot, to its right, or hidden.                                                                           |
+| **Show Spikes**       | Draws guide lines from the pointer to the axes.                                                                    |
+| **Plot Type**         | Cartesian or polar.                                                                                                |
+| **Max Points**        | Downsamples a long signal to at most this many points, so a plot of millions of samples stays smooth.              |
+| **Display Units**     | Converts every signal with a known unit to a system: as logged, SI, CGS, FPS or IPS.                               |
+| **X-Scale / Y-Scale** | Linear or logarithmic, with the base of the logarithm.                                                             |
+| **X-Range / Y-Range** | The limits of each axis. Leave a limit empty for automatic. Arithmetic works here too, such as `-pi` or `sqrt(2)`. |
+| **Titles**            | The plot's title and the label of each axis.                                                                       |
 
 **Reset to Defaults** at the bottom returns the plot to its starting appearance.
 

@@ -3,6 +3,7 @@ hide:
   - navigation
 #   - toc
 ---
+
 <style>
   .md-typeset h1,
   .md-content__button {
@@ -74,13 +75,13 @@ Install `mujoco-mojo` in your project using the following:
 
 === "`uv` (recommended)"
 
-    ```bash  linenums="0"
+    ``` bash  linenums="0"
     uv add mujoco-mojo[all]
     ```
 
 === "`pip`"
 
-    ```bash  linenums="0"
+    ``` bash  linenums="0"
     pip install mujoco-mojo[all]
     ```
 
@@ -130,7 +131,7 @@ Install `mujoco-mojo` in your project using the following:
 
 ??? example
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     mujoco-mojo run monte-carlo \
         --generator monte_carlo_test.Experiment.generate \
         --runtime monte_carlo_test.runtime \
@@ -151,7 +152,7 @@ Install `mujoco-mojo` in your project using the following:
 
 ??? example
 
-    ```bash linenums="0"
+    ``` bash linenums="0"
     mujoco-mojo run optimization \
         -g sim.generate \
         -r sim.runtime \
@@ -203,7 +204,7 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 
 ??? example
 
-    ```bash  linenums="0"
+    ``` bash  linenums="0"
     mujoco-mojo reloaded \
         --generator monte_carlo_test.Experiment.generate \
         --runtime monte_carlo_test.runtime \

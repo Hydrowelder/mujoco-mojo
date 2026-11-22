@@ -23,7 +23,7 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 
 ???+ example "Example: MojoRuntime Handle"
 
-    ```python
+    ``` python
     def runtime(
         mojo_model: mojo.MojoModel,
         runtime_manager: rt.RuntimeManager,
@@ -52,7 +52,7 @@ Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mo
 
 ???+ example "Example: Applying Custom Forces"
 
-    ```python
+    ``` python
     spring_force = rt.PointToPointForce.stroke_compression_spring(
         name=f"{loc}_spring",
         action_site=base,
@@ -79,7 +79,7 @@ Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mo
 
         > Think of it as a [`VectorForce`][mujoco_mojo.runtime.load.VectorForce] and [`VectorTorque`][mujoco_mojo.runtime.load.VectorTorque] combined into one robust plugin.
 
-    - `PointToPointForce`
+    - [`PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce]
 
         ---
 
@@ -103,7 +103,7 @@ Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mo
 
         > Great for modeling a torsional spring, friction brakes, or revolute joint motor torques.
 
-    - `VectorForce`
+    - [`VectorForce`][mujoco_mojo.runtime.load.VectorForce]
 
         ---
 
@@ -111,13 +111,29 @@ Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mo
 
         > Can be used to model buoyancy (acting at CG) or simplified magnetic attraction between two bodies.
 
-    - `VectorTorque`
+    - [`VectorTorque`][mujoco_mojo.runtime.load.VectorTorque]
 
         ---
 
         A **3-DOF** torque vector. Similar to the VectorForce, it allows for complex rotational moments defined relative to a site or the global world frame.
 
         > Use it to model a reaction wheel or 3D magnetic dipole moments.
+
+    - [`JointFriction`][mujoco_mojo.runtime.load.JointFriction]
+
+        ---
+
+        **Friction in a hinge, slide or ball joint**, with the formulation you pick: dry, viscous, both together, Stribeck or Karnopp.
+
+        > Good for brake pads, grease-lubricated joints, cable friction and clutch stick-slip. `JointFriction.karnopp` uses the joint's actual bearing load as its normal force.
+
+    - [`ActuatorControl`][mujoco_mojo.runtime.load.ActuatorControl]
+
+        ---
+
+        **Drives an actuator's control input** every timestep. Give it a `control_func` for any control law, or use `ActuatorControl.constant` for a set point you can change during the run.
+
+        > Use it to hold a servo at a commanded angle or to run a motor from a controller. The [berthing example](../examples/berthing/introduction.md) drives each joint of its arm this way.
 
     </div>
 
@@ -142,7 +158,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     Custom requests can also be made using the [`SignalManager.post()`][mujoco_mojo.runtime.signal_manager.SignalManager.post] method! It takes a value and a [`Column`][mujoco_mojo.utils.column.Column], which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
 
-    ```python
+    ``` python
     nutation = mojo.utils.Column(
         category=mojo.SignalCategory.BODIES,
         subgroups=("racket",),
@@ -158,7 +174,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     A signal that holds integer codes, like the state of a controller, can carry labels for them. [`ColumnMetadata.from_enum()`][mujoco_mojo.utils.signal_metadata.ColumnMetadata.from_enum] builds the labels from an enum class, and the Dojo plots the signal on its own axis named by them:
 
-    ```python
+    ``` python
     class Mode(IntEnum):
         IDLE = 0
         RUNNING = 1
@@ -176,7 +192,7 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
 ???+ example "Example: Telemetry Requests"
 
-    ```python
+    ``` python
     # Request telemetry for bodies and sites
     if rm.signal_manager:
         rm.signal_manager.record_decimation = 10  # Only record every 10 steps
@@ -199,7 +215,7 @@ If you need visual proof of your simulation (or you just need something for a sl
 
 ???+ example "Example: Video Setup"
 
-    ```python
+    ``` python
     if mojo_model.is_nominal:  # Only record the first trial
         rt.VideoRecorder(
             path=Path("runtime-anim.gif"),
@@ -218,7 +234,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
 ???+ example "Example: Stepping"
 
-    ```python
+    ``` python
     # Step until 2.0 seconds
     while state.data.time < 2.0:
         rm.step(state)
@@ -234,7 +250,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 
 ??? example "Example: Full Runtime Script"
 
-    ```python
+    ``` python
     def runtime(
         mojo_model: mojo.MojoModel,
         runtime_manager: rt.RuntimeManager,

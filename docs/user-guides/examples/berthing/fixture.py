@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Self
 
 import numpy as np
-from shapes import cylinder_mesh, lying_along
+from shapes import CylinderInput, lying_along
 
 import mujoco_mojo as mojo
 
@@ -16,7 +16,7 @@ SEAT = 0.05 * US.m
 
 
 # --8<-- [start:inputs]
-class FixtureInput(mojo.UserData):
+class FixtureInput(CylinderInput):
     """Dimensions and mass of a grapple fixture."""
 
     LENGTH: float = 0.4 * US.m
@@ -47,19 +47,15 @@ class GrappleFixture(mojo.UserData):
     """The post's volume."""
 
     site: mojo.SiteSphere
-    """The site at the post's tip. Its X axis points into the structure, which is the way an end effector comes in."""
+    """The site at the post's tip. Its X axis points into the structure. An end effector that grabs the fixture lines its own site up with this one, X axis to X axis."""
 
     @classmethod
     def new(cls, mojo_model: mojo.MojoModel, name: str, mount: mojo.AnyPose) -> Self:
         """Makes a fixture at `mount`, a pose whose X axis points into the structure. `name` prefixes the names of everything it makes."""
+        # longer than the part that shows, by the seat
+        post = FIXTURE.model_copy(update={"LENGTH": FIXTURE.LENGTH + SEAT})
         mojo_model.mjcf.assets.append(
-            mojo.Asset(
-                meshes=[
-                    mesh := cylinder_mesh(
-                        f"{name}_fixture_mesh", FIXTURE.RADIUS, FIXTURE.LENGTH + SEAT
-                    )
-                ]
-            )
+            mojo.Asset(meshes=[mesh := post.mesh(f"{name}_fixture_mesh")])
         )
         assert mesh.name
 

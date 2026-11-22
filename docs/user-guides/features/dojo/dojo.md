@@ -16,25 +16,25 @@ Dojo is launched via the CLI and points directly at your specified workdir. It r
 
 To start the dashboard, simply provide the path to your work directory:
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo dojo ./mojo-models
 ```
 
-| Argument     | Shortcut | Default         | Description                                                |
-| :----------- | :------- | :-------------- | :--------------------------------------------------------- |
-| `workdir`    | _N/A_    | **Required**    | The workspace directory containing the simulation results. |
-| `--host`     | `-h`     | `127.0.0.1`[^1] | The IP address to serve the dashboard on.                  |
+| Argument     | Shortcut | Default         | Description                                                                                               |
+| :----------- | :------- | :-------------- | :-------------------------------------------------------------------------------------------------------- |
+| `workdir`    | _N/A_    | **Required**    | The workspace directory containing the simulation results.                                                |
+| `--host`     | `-h`     | `127.0.0.1`[^1] | The IP address to serve the dashboard on.                                                                 |
 | `--port`     | `-p`     | `8000`[^1]      | The port number for the web server. If it's already in use, the next free port is selected automatically. |
-| `--password` | `-pw`    | _None_[^1]      | Enables Basic Auth protection.                             |
-| `--n-proc`   | `-np`    | `1`[^1]         | Processes used for background status file processing.      |
-
-[^1]: Reads from your settings ([`mujoco-mojo settings show`](../../../reference/cli.md#mujoco-mojo-settings-show)) if you've set one; the value shown is the out-of-the-box default.
+| `--password` | `-pw`    | _None_[^1]      | Enables Basic Auth protection.                                                                            |
+| `--n-proc`   | `-np`    | `1`[^1]         | Processes used for background status file processing.                                                     |
 
 ---
 
 ## The Page Frame
 
 Every page of the Dojo shares the same frame, so you always know where you are and how the job is doing.
+
+[^1]: Reads from your settings ([`mujoco-mojo settings show`](../../../reference/cli.md#mujoco-mojo-settings-show)) if you've set one; the value shown is the out-of-the-box default.
 
 <figure markdown="span">
     ![Dojo toolbar](../../../assets/user-guides/light-page-frame.jpg#only-light){ width="85%" height="auto" }
@@ -44,14 +44,14 @@ Every page of the Dojo shares the same frame, so you always know where you are a
 
 **Toolbar:** From left to right:
 
-| Control                | What it does                                                                                                                                             |
-| :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Auto** / **Off**     | Turns the live updates on or off. With them on, the page follows the job as trials finish.                                                               |
-| Speaker                | Mutes or unmutes the completion chime. The Dojo starts muted, and your browser remembers the choice.                                                     |
-| Theme buttons          | Light theme, follow the system, or dark theme.                                                                                                           |
-| Bell                   | The notification history, with a badge for messages you have not read.                                                                                   |
-| Gear                   | The [settings panel](#settings).                                                                                                                         |
-| Arrows                 | Fullscreen, which gives the page the whole window. ++esc++ leaves it. `dojo.default_to_fullscreen` starts every page that way.                           |
+| Control            | What it does                                                                                                                   |
+| :----------------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| **Auto** / **Off** | Turns the live updates on or off. With them on, the page follows the job as trials finish.                                     |
+| Speaker            | Mutes or unmutes the completion chime. The Dojo starts muted, and your browser remembers the choice.                           |
+| Theme buttons      | Light theme, follow the system, or dark theme.                                                                                 |
+| Bell               | The notification history, with a badge for messages you have not read.                                                         |
+| Gear               | The [settings panel](#settings).                                                                                               |
+| Arrows             | Fullscreen, which gives the page the whole window. ++esc++ leaves it. `dojo.default_to_fullscreen` starts every page that way. |
 
 **Job card:** Under the toolbar, the **Owner** who started the job and the **Workdir** it ran in. Click either to copy it. The workdir copies as the path of `job_status.json`, which an editor such as VS Code can jump straight to.
 

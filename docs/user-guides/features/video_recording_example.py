@@ -178,7 +178,7 @@ def runtime(
             )
             # --8<-- [end:gif]
 
-            # only the mp4 should record, so the others come out again
+            # only the mp4 should record, so the others are unregistered
             print(f"mp4 has renderer: {mp4._renderer is not None}")
             webm.unregister_from_rm()
             gif.unregister_from_rm()

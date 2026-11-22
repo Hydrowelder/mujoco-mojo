@@ -22,6 +22,7 @@ US = mojo.UnitSystem.si()
 
 
 # --8<-- [start:model]
+# --8<-- [start:new]
 class Berthing(mojo.UserData):
     """Root user data: the parts the runtime needs. `generate` stores it on `mojo_model.user_data`, and the runtime reads it back with `get_user_data`."""
 
@@ -39,6 +40,29 @@ class Berthing(mojo.UserData):
 
     capture: Capture
     """The weld that joins the arm to the visitor."""
+
+    @classmethod
+    def new(cls, mojo_model: mojo.MojoModel) -> Self:
+        """Builds every part and puts it in the model."""
+        mojo_model.mjcf.model = mojo.ModelName("Berthing")
+        mojo_model.mjcf.worldbody = mojo.WorldBody()
+
+        station = Station.new(mojo_model)
+        arm = Arm.new(mojo_model, station.fixture)
+        Environment.new(mojo_model)
+        visitor = Visitor.new(mojo_model)
+        overview = Overview.new(mojo_model, visitor.body)
+        capture = Capture.new(mojo_model, arm, visitor)
+
+        return cls(
+            station=station,
+            arm=arm,
+            visitor=visitor,
+            overview=overview,
+            capture=capture,
+        )
+
+    # --8<-- [end:new]
 
     # --8<-- [start:proximities]
     _clearances: list[mojo.utils.Proximity] = PrivateAttr(default_factory=list)
@@ -148,27 +172,6 @@ class Berthing(mojo.UserData):
 
     # --8<-- [end:videos]
 
-    @classmethod
-    def new(cls, mojo_model: mojo.MojoModel) -> Self:
-        """Builds every part and puts it in the model."""
-        mojo_model.mjcf.model = mojo.ModelName("Berthing")
-        mojo_model.mjcf.worldbody = mojo.WorldBody()
-
-        station = Station.new(mojo_model)
-        arm = Arm.new(mojo_model, station.fixture)
-        Environment.new(mojo_model)
-        visitor = Visitor.new(mojo_model)
-        overview = Overview.new(mojo_model, visitor.body)
-        capture = Capture.new(mojo_model, arm, visitor)
-
-        return cls(
-            station=station,
-            arm=arm,
-            visitor=visitor,
-            overview=overview,
-            capture=capture,
-        )
-
 
 # --8<-- [end:model]
 
@@ -211,6 +214,7 @@ def runtime(
 ) -> mojo.MojoModel:
     """Runs the berthing through its phases: approach, capture, berth and release. Each part that needs a control has a method for it, and this only calls them."""
     with runtime_manager as rm:
+        # --8<-- [start:setup]
         if rm.signal_manager:
             rm.signal_manager.record_decimation = 10
         berthing = mojo_model.get_user_data(Berthing)
@@ -226,6 +230,7 @@ def runtime(
         standoff = MISSION.PRE_STANDOFF
         arrived_at: float | None = None
         released_at: float | None = None
+        # --8<-- [end:setup]
 
         while state.data.time < MISSION.END_TIME:
             # the end effector must be on the fixture's axis and pointing along it before it goes in
@@ -233,6 +238,7 @@ def runtime(
             lined_up = berthing.lined_up(state)
 
             match phase:
+                # --8<-- [start:approach-phase]
                 case Phase.APPROACH:
                     # the goal follows the fixture, so the arm keeps up if the visitor drifts
                     remaining = arm.approach(state, site, standoff)
@@ -243,10 +249,11 @@ def runtime(
                             f"out of line, {berthing.clearance(state):.2f} m clear of the hull"
                         )
                         phase = Phase.CAPTURE
+                # --8<-- [end:approach-phase]
 
                 # --8<-- [start:capture-phase]
                 case Phase.CAPTURE:
-                    # creep in only while lined up, aiming a little past the fixture so the servos' lag cannot stall the end effector short of the capture gap
+                    # move in only while lined up, aiming a little past the fixture so the servos' lag cannot stall the end effector short of the capture gap
                     if lined_up:
                         standoff = max(
                             standoff - MISSION.APPROACH_SPEED * dt, -MISSION.OVERSHOOT

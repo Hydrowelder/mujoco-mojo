@@ -26,19 +26,19 @@ class MissionInput(mojo.UserData):
     """How far, in degrees, the tip's axis may turn from the fixture's and still count as lined up."""
 
     CLEARANCE_RANGE: float = 3.0 * US.m
-    """Beyond this distance the clearance between the arm and the hull just reads this value."""
+    """Range of the clearance measurement: when the arm and the hull are further apart than this, the distance is only estimated."""
 
     GAP_RANGE: float = 10.0 * US.m
-    """Beyond this distance the gap to the grapple fixture just reads this value."""
+    """Range of the gap measurement: when the end effector and the grapple fixture are further apart than this, the distance is only estimated."""
 
     RECORD_RANGE: float = 2.0 * US.m
     """The arm camera films only while the gap is below this."""
 
     ARM_CAMERA_FRAME_RATE: float = 20
-    """Frames per second of simulation time of the arm camera's video."""
+    """Frame rate of the arm camera's video, in frames per unit of simulation time."""
 
     OVERVIEW_FRAME_RATE: float = 10
-    """Frames per second of simulation time of the overview camera's video."""
+    """Frame rate of the overview camera's video, in frames per unit of simulation time."""
 
     APPROACH_SPEED: float = 0.15 * US["m/s"]
     """Speed the end effector closes in on the fixture at."""
@@ -71,16 +71,16 @@ class Phase(StrEnum):
     """The phases of the berthing."""
 
     APPROACH = "approach"
-    """Fly to a spot in front of the grapple fixture and line up with it."""
+    """Move to a spot in front of the grapple fixture and line up with it."""
 
     CAPTURE = "capture"
-    """Creep in while lined up, and switch the weld on."""
+    """Move in slowly while lined up, and switch the weld on."""
 
     BERTH = "berth"
     """Carry the visitor to the berthing point and hold it there."""
 
     RELEASE = "release"
-    """Switch the weld off."""
+    """Wait for the visitor to settle once the weld is off."""
 
 
 # --8<-- [end:phase]

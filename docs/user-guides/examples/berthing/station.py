@@ -70,7 +70,7 @@ class Station(mojo.UserData):
             ),
         )
 
-        # no rotation of its own, so its X axis points away from the station and the visitor lies along it
+        # no rotation of its own, so its X axis points away from the station, and so does the visitor's once it is berthed
         berth = mojo.SiteSphere(
             name=mojo.SiteName("berth_site"),
             size=0.1 * US.m,

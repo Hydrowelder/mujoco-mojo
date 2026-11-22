@@ -10,7 +10,7 @@
 
 When building a kinematic tree, every body and site stores its pose relative to its immediate parent. If you want to place a site on `gripper` at the same world location as `target_site` on `base` (two separate branches) there is no direct MJCF mechanism for it. You would have to compose the full transform chain by hand.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/pose_context_example.py:build-tree"
 ```
 
@@ -20,7 +20,7 @@ When building a kinematic tree, every body and site stores its pose relative to 
 
 For a single pose, `Mujoco.local_pose(frame, relative_to)` resolves the pose in one call. The result is a concrete `PoseQuat` you can assign directly to any MJCF element.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/pose_context_example.py:one-shot"
 ```
 
@@ -40,7 +40,7 @@ For a single pose, `Mujoco.local_pose(frame, relative_to)` resolves the pose in 
 
 `PoseRef` stores the `frame` and `relative_to` pair and resolves lazily by passing `mojo_model.mjcf` to `.to_quat()`. This is useful when you want to define references early and resolve them later, or apply the same reference in multiple places.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/pose_context_example.py:batch"
 ```
 
@@ -50,7 +50,7 @@ For a single pose, `Mujoco.local_pose(frame, relative_to)` resolves the pose in 
 
 MJCF `Frame` elements are coordinate transforms that disappear at compile time, accumulating into their children. They are fully supported as `frame` or `relative_to` arguments.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/pose_context_example.py:frame-ref"
 ```
 

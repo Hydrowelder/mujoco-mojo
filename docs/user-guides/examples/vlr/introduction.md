@@ -21,7 +21,7 @@ We recommend building this model line by line, limiting direct copying of code. 
 
 To begin, make a new project directory and run the following code to have Mojo build scaffolding for you:
 
-```bash linenums="0"
+``` bash linenums="0"
 mujoco-mojo init
 ```
 
@@ -33,7 +33,7 @@ This will initialize your project with a mock Python file, some helpful bash scr
 
 After declaring this project's imports, we define a logger and global unit system (for easier conversions, MuJoCo tends to only play nice with SI units).
 
-```python
+``` python
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:imports"
 ```
 
@@ -47,7 +47,7 @@ This is also the first place where you see the use of our unit system (`US`). Si
 
 ??? example "All Inputs Used"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/examples/vlr/vlr_example.py:inputs"
     ```
 

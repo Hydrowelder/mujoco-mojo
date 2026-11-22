@@ -16,13 +16,13 @@ When a trial recorded a video (a [`VideoRecorder`][mujoco_mojo.runtime.video_rec
     <figcaption>The <b>Animation</b> panel playing a trial's recording, with its playback line and frame markers drawn on the plot above.</figcaption>
 </figure>
 
-| Control        | What it does                                                                                                                                |
-| :------------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Mode: Play** | Plays the video. Use the speed presets or type a speed from 0.1× to 8×.                                                                     |
-| **Mode: Scrub**| Ties the video to your pointer: hover over the plot and the video shows the moment under it. This is the fastest way to see _what happened at the spike_. |
-| **Plot line**  | Draws a vertical line on the plot that moves with the video, so you can see where in the data the picture is. Needs the x-axis to be `time`. |
-| **Frames**     | Marks every video frame on the plot. Needs the x-axis to be `time`.                                                                         |
-| Miniplayer     | The button in the panel's title floats the video over the plot, so you can keep it in view while you work. Drag it to move it and drag its corner to resize it. |
+| Control         | What it does                                                                                                                                                    |
+| :-------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Mode: Play**  | Plays the video. Use the speed presets or type a speed from 0.1x to 8x.                                                                                         |
+| **Mode: Scrub** | Ties the video to your pointer: hover over the plot and the video shows the moment under it. This is the fastest way to see _what happened at the spike_.       |
+| **Plot line**   | Draws a vertical line on the plot that moves with the video, so you can see where in the data the picture is. Needs the x-axis to be `time`.                    |
+| **Frames**      | Marks every video frame on the plot. Needs the x-axis to be `time`.                                                                                             |
+| Miniplayer      | The button in the panel's title floats the video over the plot, so you can keep it in view while you work. Drag it to move it and drag its corner to resize it. |
 
 !!! note "GIFs and scrubbing"
 
@@ -40,15 +40,15 @@ A trial's inputs are drawn from the [distributions](../../workflow/generate-scri
     <figcaption>The <b>Distributions</b> table. Hovering a row shows the shape of its distribution and where this trial's draw fell.</figcaption>
 </figure>
 
-| Column       | Meaning                                                                                                                                     |
-| :----------- | :------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Name**     | The name you gave the distribution.                                                                                                         |
-| **Category** | The group it belongs to.                                                                                                                    |
-| **Type**     | The kind of distribution (normal, truncated normal, uniform, categorical and so on).                                                        |
-| **Units**    | The unit of the values, or a dash when none was declared.                                                                                   |
-| **Nominal**  | The value the nominal trial uses.                                                                                                           |
-| **Sampled**  | The value this trial drew.                                                                                                                  |
-| **Stat**     | How far out the draw is: its z-score in standard deviations (`+1.25σ`), or its percentile where a z-score does not apply.                   |
+| Column       | Meaning                                                                                                                   |
+| :----------- | :------------------------------------------------------------------------------------------------------------------------ |
+| **Name**     | The name you gave the distribution.                                                                                       |
+| **Category** | The group it belongs to.                                                                                                  |
+| **Type**     | The kind of distribution (normal, truncated normal, uniform, categorical and so on).                                      |
+| **Units**    | The unit of the values, or a dash when none was declared.                                                                 |
+| **Nominal**  | The value the nominal trial uses.                                                                                         |
+| **Sampled**  | The value this trial drew.                                                                                                |
+| **Stat**     | How far out the draw is: its z-score in standard deviations (`+1.25σ`), or its percentile where a z-score does not apply. |
 
 - **Hover** a row to see the distribution drawn as its probability density (or its probability mass, as bars, for a discrete or categorical one), with markers for the sampled and the nominal values.
 - **Sort** by clicking a column title. **Resize** a column by dragging the edge of its title, and **double-click** the edge to fit it to its contents.
@@ -88,12 +88,12 @@ Every trial writes its own log, `mojo.log`, in its folder: what it did, any warn
     <figcaption>The <b>Logs</b> of a trial that raised an error, including the entry with the error.</figcaption>
 </figure>
 
-| Column      | Meaning                                                                                                                           |
-| :---------- | :-------------------------------------------------------------------------------------------------------------------------------- |
-| **Time**    | When the entry was written, shown as how long ago. Hover for the exact time.                                                      |
-| **Level**   | `INFO`, `WARNING`, `ERROR` and so on. Click the title to sort, and use the menu to show only the levels you want.                 |
-| **Source**  | The file and line that wrote it. Click it to copy the full path and line, which an editor can jump to.                            |
-| **Message** | What it said. The filter box matches entries containing your text, or a regular expression when you turn the regex button on.     |
+| Column      | Meaning                                                                                                                       |
+| :---------- | :---------------------------------------------------------------------------------------------------------------------------- |
+| **Time**    | When the entry was written, shown as how long ago. Hover for the exact time.                                                  |
+| **Level**   | `INFO`, `WARNING`, `ERROR` and so on. Click the title to sort, and use the menu to show only the levels you want.             |
+| **Source**  | The file and line that wrote it. Click it to copy the full path and line, which an editor can jump to.                        |
+| **Message** | What it said. The filter box matches entries containing your text, or a regular expression when you turn the regex button on. |
 
 The panel's title counts the entries (`mojo.log · 12/40` while a filter shows 12 of 40). As in the other tables, you can resize a column by dragging its edge and fit it with a double-click.
 

@@ -6,7 +6,7 @@ from typing import Self
 
 import numpy as np
 from fixture import GrappleFixture
-from shapes import cylinder_mesh, lying_along
+from shapes import CylinderInput, lying_along
 
 import mujoco_mojo as mojo
 
@@ -19,14 +19,10 @@ OPACITY = 0.6  # 0 is invisible, 1 is solid
 class VisitorInput(mojo.UserData):
     """Dimensions, mass and starting place of the visitor."""
 
-    HULL_LENGTH: float = 3.0 * US.m
-    """Length of the hull, which lies along Y."""
-
-    HULL_RADIUS: float = 0.9 * US.m
-    """Radius of the hull."""
-
-    HULL_MASS: float = 1500 * US.kg
-    """Mass of the hull."""
+    hull: CylinderInput = CylinderInput(
+        RADIUS=0.9 * US.m, LENGTH=3.0 * US.m, MASS=1500 * US.kg
+    )
+    """The hull, a cylinder that lies along Y."""
 
     RANGE: float = 6.0 * US.m
     """Horizontal distance from the shoulder's axis to the hull's center."""
@@ -60,13 +56,7 @@ class Visitor(mojo.UserData):
         assert mojo_model.mjcf.worldbody  # for type hinting
 
         mojo_model.mjcf.assets.append(
-            mojo.Asset(
-                meshes=[
-                    hull_mesh := cylinder_mesh(
-                        "hull_mesh", VISITOR.HULL_RADIUS, VISITOR.HULL_LENGTH
-                    )
-                ]
-            )
+            mojo.Asset(meshes=[hull_mesh := VISITOR.hull.mesh("hull_mesh")])
         )
         assert hull_mesh.name
 
@@ -74,7 +64,7 @@ class Visitor(mojo.UserData):
             name=mojo.GeomName("hull_geom"),
             mesh=hull_mesh.name,
             pose=lying_along("y"),
-            mass=VISITOR.HULL_MASS,
+            mass=VISITOR.hull.MASS,
             rgba=mojo.utils.Color.CYAN_500.with_alpha(OPACITY),
         )
 
@@ -82,7 +72,7 @@ class Visitor(mojo.UserData):
         fixture = GrappleFixture.new(
             mojo_model,
             "visitor",
-            mojo.PoseQuat(pos=np.array((-VISITOR.HULL_RADIUS, 0, 0))),
+            mojo.PoseQuat(pos=np.array((-VISITOR.hull.RADIUS, 0, 0))),
         )
 
         # the body faces along the line from the shoulder's axis out through its center

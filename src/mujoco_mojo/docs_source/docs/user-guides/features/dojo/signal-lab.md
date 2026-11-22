@@ -29,19 +29,19 @@ Every graph has the same two ends:
 
 Between them, the nodes are grouped in the add-node menu:
 
-| Group            | Nodes                                                                                                                                                   |
-| :--------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Signal**       | Signal In, Signal Out, and **Constant** (a number as a signal).                                                                                         |
-| **Smoothing**    | Low Pass, High Pass, Rolling Mean, Median and Savitzky-Golay, with their parameters as widgets on the node.                                             |
-| **Calculus**     | **Derivative** and **Integral**. Each has an optional second input, `wrt`, to differentiate or integrate with respect to another signal instead of time. |
+| Group            | Nodes                                                                                                                                                                                           |
+| :--------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Signal**       | Signal In, Signal Out, and **Constant** (a number as a signal).                                                                                                                                 |
+| **Smoothing**    | Low Pass, High Pass, Rolling Mean, Median and Savitzky-Golay, with their parameters as widgets on the node.                                                                                     |
+| **Calculus**     | **Derivative** and **Integral**. Each has an optional second input, `wrt`, to differentiate or integrate with respect to another signal instead of time.                                        |
 | **Arithmetic**   | **Add**, **Subtract**, **Multiply** and **Divide** of two signals, the **Norm** of several (the length of a vector, from its components), and Scale, Absolute Value, Log, Exp and Power of one. |
-| **Trigonometry** | Sine, cosine, tangent, their inverses and hyperbolic forms, and conversions between degrees and radians.                                                |
-| **Comparison**   | **Greater Than**, **Less Than**, **Equal** and the rest, which compare two signals and give 1 or 0, and Sign.                                           |
-| **Bounding**     | Clip, Deadband, Wrap, Taring, Normalize and Round.                                                                                                      |
-| **Statistics**   | Max, Min, Mean, Median, Mode, Standard Deviation, First and Last, each reduced to a single value.                                                       |
-| **Ordering**     | Sort and Reverse.                                                                                                                                       |
-| **Vector**       | **Rotation** (into the frame of an orientation, and optionally an origin) and **Translation** (add or subtract a position).                             |
-| **Template**     | Template In and Template Out, and each saved template as one node (see [Templates](#templates)).                                                        |
+| **Trigonometry** | Sine, cosine, tangent, their inverses and hyperbolic forms, and conversions between degrees and radians.                                                                                        |
+| **Comparison**   | **Greater Than**, **Less Than**, **Equal** and the rest, which compare two signals and give 1 or 0, and Sign.                                                                                   |
+| **Bounding**     | Clip, Deadband, Wrap, Taring, Normalize and Round.                                                                                                                                              |
+| **Statistics**   | Max, Min, Mean, Median, Mode, Standard Deviation, First and Last, each reduced to a single value.                                                                                               |
+| **Ordering**     | Sort and Reverse.                                                                                                                                                                               |
+| **Vector**       | **Rotation** (into the frame of an orientation, and optionally an origin) and **Translation** (add or subtract a position).                                                                     |
+| **Template**     | Template In and Template Out, and each saved template as one node (see [Templates](#templates)).                                                                                                |
 
 The single-signal nodes are the same filters that work in code on a [`MojoDataFrame`](../mojo-dataframe.md#filters), so a graph you prove out here can be written down as a short script.
 
@@ -49,14 +49,14 @@ The single-signal nodes are the same filters that work in code on a [`MojoDataFr
 
 ## The toolbar
 
-| Button      | What it does                                                                                              |
-| :---------- | :-------------------------------------------------------------------------------------------------------- |
-| **Refresh** | Checks again that every signal the lab reads exists in this trial.                                         |
-| **Fit**     | Zooms the canvas to show the whole graph (++ctrl+shift+f++).                                               |
-| **Arrange** | Lays the nodes out in tidy columns (++ctrl+shift+a++).                                                     |
-| **Clear**   | Empties the canvas.                                                                                        |
-| **Save**    | Saves the lab under the name in the box beside it (++ctrl+s++).                                            |
-| **Load**    | Opens a saved lab in a new tab.                                                                            |
+| Button      | What it does                                                       |
+| :---------- | :----------------------------------------------------------------- |
+| **Refresh** | Checks again that every signal the lab reads exists in this trial. |
+| **Fit**     | Zooms the canvas to show the whole graph (++ctrl+shift+f++).       |
+| **Arrange** | Lays the nodes out in tidy columns (++ctrl+shift+a++).             |
+| **Clear**   | Empties the canvas.                                                |
+| **Save**    | Saves the lab under the name in the box beside it (++ctrl+s++).    |
+| **Load**    | Opens a saved lab in a new tab.                                    |
 
 ++ctrl+z++ and ++ctrl+y++ undo and redo, as everywhere in the Dojo (++cmd+z++ and ++cmd+shift+z++ on a Mac).
 

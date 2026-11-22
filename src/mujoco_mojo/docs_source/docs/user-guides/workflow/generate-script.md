@@ -23,7 +23,7 @@ It also **must** return a `mojo.MojoModel`.
 
 ???+ example "Example: MojoGenerate Handle"
 
-    ```python
+    ``` python
     def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         """Generates the MJCF model and samples distributions."""
     ```
@@ -44,7 +44,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
 ??? example "Example: Handoff Class"
 
-    ```python
+    ``` python
     FIXED_CAMERA_NAME = mojo.CameraName("static")
 
 
@@ -149,7 +149,7 @@ Notice in the following code how enumerations such as [`mojo.TextureType.D2`][mu
 
 ???+ example "Example: Assets Definition"
 
-    ```python
+    ``` python
     # Configure simulation assets
     mojo_model.mjcf.assets = [
         mojo.Asset(
@@ -210,7 +210,7 @@ The `worldbody` contains your static environment and the kinematic tree of your 
 
 ???+ example "Example: Worldbody Definition"
 
-    ```python
+    ``` python
     mojo_model.mjcf.worldbody = mojo.WorldBody(
         geoms=[]
         if mojo_model.is_nominal
@@ -249,7 +249,7 @@ Instead of using `random.uniform()`, use `mojo_model.sample_dist()`. This ensure
 
 ???+ example "Example: Sampling"
 
-    ```python
+    ``` python
     # Perform random draws tied to the model seed
     stiffness = mojo_model.sample_dist(
         mojo.TruncatedNormalDistribution(
@@ -279,7 +279,7 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 ???+ example "Example: End of Function"
 
-    ```python
+    ``` python
     # Pack and execute handoff
     handoff = Handoff(box1_rot=box1_rot_site)
     mojo_model.user_data = handoff
@@ -301,13 +301,13 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
 
 !!! success
 
-    *Okay. That was kind of a lot.*
+    _Okay. That was kind of a lot._
 
     Now that we have completed building the kinematic tree, defining a user data to handoff, and an introduction to using distribution sampling, we now move on to defining the [runtime behavior](runtime-script.md) of the physics engine.
 
 ??? example "Example: Full Generate Script"
 
-    ```python
+    ``` python
     def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         """Generates the MJCF model and samples distributions."""
         skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()

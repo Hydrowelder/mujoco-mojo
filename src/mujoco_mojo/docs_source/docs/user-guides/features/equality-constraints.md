@@ -19,7 +19,7 @@
 
 This model has a ball above a hook, which is a site fixed in the world. The weld joins a site on the ball, `ball_site`, to the hook, `hook_site`:
 
-```python
+``` python
 assert ball_site.name
 assert hook_site.name
 weld = mojo.EqualityWeldSite(
@@ -40,7 +40,7 @@ mojo_model.mjcf.equalities.append(mojo.Equality(welds=[weld]))
 
 In the runtime function, `enable`, `disable` and `is_active` act on the running simulation. They take the state because the switch is `mjData.eq_active`, which lives in the state and not in the model. `set_active` does the same with a `bool`. Here the weld goes on as the ball passes the hook, holds it for half a second, and goes off:
 
-```python
+``` python
 # on only once the ball is close, so the weld has almost nothing to pull in
 while gap(state) > 0.05:
     rm.step(state)
@@ -139,7 +139,7 @@ Each kind goes in the matching list of an `Equality`: `connects`, `welds`, `join
 
 ??? example "All Code"
 
-    ```python
+    ``` python
     import numpy as np
 
     import mujoco_mojo as mojo

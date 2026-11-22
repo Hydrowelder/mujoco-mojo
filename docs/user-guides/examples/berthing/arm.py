@@ -9,7 +9,7 @@ import numpy as np
 from end_effector import END_EFFECTOR, EndEffector
 from fixture import GrappleFixture
 from pydantic import PrivateAttr
-from shapes import CylinderInput, cylinder_mesh, lying_along
+from shapes import CylinderInput, lying_along
 from visitor import VISITOR
 
 import mujoco_mojo as mojo
@@ -25,9 +25,11 @@ YAW_COLOR = mojo.utils.Color.BLUE_500.rgba
 REACH_OPACITY = 0.02
 
 # settings for `Arm.solve`
-SOLVER_TOLERANCE = 1e-4  # meters and radians; must stay above the error the home pull leaves, about 2e-5
+SOLVER_TOLERANCE = (
+    1e-4  # meters and radians; must stay above the small error the home pull leaves
+)
 SOLVER_ITERATIONS = 100
-SOLVER_DAMPING = 0.05  # keeps steps sane near a singular pose
+SOLVER_DAMPING = 0.05  # keeps steps small near a singular pose
 SOLVER_MAX_STEP = 0.2  # radians a joint may move in one iteration
 SOLVER_HOME_PULL = (
     0.01  # fraction of each joint's angle pulled toward home per iteration
@@ -149,6 +151,7 @@ ARM = ArmInput()
 # --8<-- [end:inputs]
 
 
+# --8<-- [start:helpers]
 # the housings are built once and used at both ends, so the ends cannot differ
 def roll_housing(name: str) -> mojo.GeomCylinder:
     """A roll housing: a drum from the joint along the arm."""
@@ -208,12 +211,15 @@ def turned(
     return mojo.PoseEuler(euler=euler, angle=mojo.Angle.DEGREE, pos=pos)
 
 
+# --8<-- [end:helpers]
+
+
 # --8<-- [start:arm]
 class Arm(mojo.UserData):
     """The arm, built in its home pose, so every joint angle is measured from home. In its own frame it points along +X, out of the station."""
 
     body: mojo.Body
-    """The first body, the shoulder roll's, at the root of the base end effector."""
+    """The first body, which the shoulder roll turns, at the root of the base end effector."""
 
     shoulder_roll: mojo.Joint
     """The shoulder roll joint."""
@@ -286,6 +292,7 @@ class Arm(mojo.UserData):
         """A copy of the commanded angles."""
         return self._command.copy()
 
+    # --8<-- [start:register]
     def register_servos(self) -> None:
         """Hands each servo to the runtime, which reads its control value from the commanded angles every step. Call it inside the runtime manager's `with` block."""
         for i, servo in enumerate(self.servos):
@@ -295,6 +302,9 @@ class Arm(mojo.UserData):
                 control_func=lambda user_data, state, i=i: float(self._command[i]),
             ).register_to_rm()
 
+    # --8<-- [end:register]
+
+    # --8<-- [start:solve]
     def solve(
         self, state: mojo.MjState, tip: mojo.Vec3, frame: mojo.Mat3
     ) -> np.ndarray:
@@ -359,6 +369,9 @@ class Arm(mojo.UserData):
         self._solution = angles
         return angles.copy()
 
+    # --8<-- [end:solve]
+
+    # --8<-- [start:slew]
     def slew(self, goal: np.ndarray, dt: float) -> None:
         """Moves the commanded angles one step of `dt` toward `goal`, in radians from home. The joint with the furthest to go moves at the slew rate and the others are scaled down, so they all arrive together."""
         limit = np.deg2rad(ARM.servo.RANGE_DEG)
@@ -373,6 +386,8 @@ class Arm(mojo.UserData):
         """Takes one step toward the tip being at `tip` with orientation `frame`, both fixed in the world. Returns the distance the tip still has to go."""
         self.slew(self.solve(state, tip, frame), state.model.opt.timestep)
         return float(np.linalg.norm(self.free_effector.tip.rt_pos(state) - tip))
+
+    # --8<-- [end:slew]
 
     def carry_to(
         self,
@@ -417,17 +432,20 @@ class Arm(mojo.UserData):
         )
         return float(np.linalg.norm(tip_site.rt_pos(state) - tip))
 
+    # --8<-- [start:approach]
     def approach(
         self, state: mojo.MjState, site: mojo.SiteSphere, standoff: float
     ) -> float:
-        """Takes one step toward the tip being `standoff` in front of `site`, facing it. Returns the distance the tip still has to go. In front is back along the site's X axis, and facing means the tip's frame matches the site's. The goal follows the site, so it is no use once the tip holds the site: use `move_to` then."""
+        """Takes one step toward the tip being `standoff` in front of `site`, facing it. Returns the distance the tip still has to go. `standoff` is measured back along the site's X axis, and facing means the tip's frame matches the site's. The goal follows the site, so it is no use once the tip holds the site: use `move_to` then."""
         frame = site.rt_xmat(state)
         return self.move_to(state, site.rt_pos(state) - standoff * frame[:, 0], frame)
+
+    # --8<-- [end:approach]
 
     def misalignment(
         self, state: mojo.MjState, site: mojo.SiteSphere
     ) -> tuple[float, float]:
-        """How far the tip is from being colinear with `site`: its distance from the site's axis, and the angle between the two X axes, in radians. Being near a spot on the axis is not enough, since the tip can be there and turned."""
+        """How far the tip is from being colinear with `site`: its distance from the site's axis, and the angle between the two X axes, in radians. Being on the axis is not enough, since the tip can be on it and turned."""
         axis = site.rt_xmat(state)[:, 0]
         to_tip = self.free_effector.tip.rt_pos(state) - site.rt_pos(state)
         off_axis = np.linalg.norm(to_tip - (to_tip @ axis) * axis)
@@ -454,12 +472,8 @@ class Arm(mojo.UserData):
         mojo_model.mjcf.assets.append(
             mojo.Asset(
                 meshes=[
-                    boom_1_mesh := cylinder_mesh(
-                        "boom_1_mesh", ARM.boom_1.RADIUS, ARM.boom_1.LENGTH
-                    ),
-                    boom_2_mesh := cylinder_mesh(
-                        "boom_2_mesh", ARM.boom_2.RADIUS, ARM.boom_2.LENGTH
-                    ),
+                    boom_1_mesh := ARM.boom_1.mesh("boom_1_mesh"),
+                    boom_2_mesh := ARM.boom_2.mesh("boom_2_mesh"),
                     reach_mesh := mojo.MeshHemisphere(
                         name=mojo.MeshName("reach_mesh"),
                         resolution=8,
@@ -509,6 +523,7 @@ class Arm(mojo.UserData):
         )
         base.frame.geoms.append(reach)
 
+        # --8<-- [start:shoulder]
         # one body per joint, from the station out, so each joint turns everything after it
         roll_body = mojo.Body(
             name=mojo.BodyName("shoulder_roll"),
@@ -538,6 +553,7 @@ class Arm(mojo.UserData):
         shoulder_pitch = hinge("shoulder_pitch", (0, 1, 0))
         pitch_body.joints.append(shoulder_pitch)
         yaw_body.bodies.append(pitch_body)
+        # --8<-- [end:shoulder]
 
         elbow_body = mojo.Body(
             name=mojo.BodyName("elbow_pitch"),
@@ -626,6 +642,7 @@ class Arm(mojo.UserData):
             servos=[],
         )
 
+        # --8<-- [start:servos]
         limit = np.deg2rad(ARM.servo.RANGE_DEG)
         arm.servos.extend(
             mojo.ActuatorPosition(
@@ -638,6 +655,7 @@ class Arm(mojo.UserData):
             for joint in arm.joints
         )
         mojo_model.mjcf.actuators.append(mojo.Actuator(positions=arm.servos))
+        # --8<-- [end:servos]
 
         return arm
 

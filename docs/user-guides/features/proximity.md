@@ -17,15 +17,15 @@
 
 ## Measuring a Pair
 
-A pair is two **mesh** volumes: a `GeomMesh` or a `SiteMesh`. Mojo's builtin meshes work, such as `MeshCylinder`, which MuJoCo generates when it compiles the model, so there are no mesh files to ship. This model has two cylinders, one fixed and one free to drift toward it:
+A pair is two **mesh** volumes: a `GeomMesh` or a `SiteMesh`. MuJoCo's builtin meshes work too, such as `MeshCylinder`, which MuJoCo generates when it compiles the model, so there are no mesh files to ship. This model has two cylinders, one fixed and one free to drift toward it:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/proximity_example.py:model"
 ```
 
 Inside the runtime function, make the [`Proximity`][mujoco_mojo.utils.proximity.Proximity] from the two volumes and register it with the [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager], which draws it. Then `request` logs it to the trial's telemetry, and `channels` picks what is logged: `dist` (the distance), `fromto` (the nearest point on each volume) and `prox_type` (the algorithm that produced the distance).
 
-```python
+``` python
 --8<-- "docs/user-guides/features/proximity_example.py:pair"
 ```
 
@@ -33,7 +33,7 @@ The distance is logged every step as `Proximities/probe_to_target:dist`, the nea
 
 You can also read a pair yourself at any step, which is how a runtime acts on a distance:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/proximity_example.py:read"
 ```
 
@@ -43,7 +43,7 @@ The surfaces start 1.3 m apart. The probe drifts toward the target at 0.8 m/s an
 
 ## Algorithm and Range
 
-By default the distance is between the **convex hulls** of the two meshes (`algorithm=ProximityType.CONVEX_HULL`). That is exact for convex shapes such as cylinders and boxes, and fast, so it is the one to use unless a part is concave. [`ProximityType`][mujoco_mojo.typing.ProximityType] lists the others, which work from the meshes' triangles.
+By default the distance is between the **convex hulls** of the two meshes (`algorithm=ProximityType.CONVEX_HULL`). That is exact for convex shapes such as cylinders and boxes, and fast, so it is the one to use unless a part is concave. A concave part, such as a cup, is treated as if it were filled in, so a ball inside the cup reads as touching it. For those, `algorithm=ProximityType.FACE_TO_FACE` measures to the actual surface, at a much higher cost per step, so use it only on the pairs that need it. [`ProximityType`][mujoco_mojo.typing.ProximityType] lists the others, which work from the meshes' triangles.
 
 `dist_max` is how far apart two volumes can be and still get an exact distance. When their bounding spheres are further apart than that, Mojo returns the sphere-to-sphere estimate and skips the rest, which is cheap and all you need when you only care about a part getting close. A closer pair gets its exact distance, but never more than `dist_max`. The `prox_type` channel says which you got.
 
@@ -57,7 +57,7 @@ Each registered pair is drawn as a line between its nearest points, in the viewe
 
 A pair that is drawn or logged costs a distance calculation every step, though it is calculated once per step however many times it is read. When a pair stops mattering, set its `active` flag to `False`. It is then no longer measured, drawn or logged, so it costs nothing, and setting `active` back to `True` starts it again. A direct call to `get_proximity` still works either way.
 
-```python
+``` python
 --8<-- "docs/user-guides/features/proximity_example.py:stop"
 ```
 
@@ -65,7 +65,7 @@ A pair that is drawn or logged costs a distance calculation every step, though i
 
 ??? example "All Code"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/proximity_example.py:example"
     ```
 

@@ -50,12 +50,17 @@ nav:
       - Examples:
           - user-guides/examples/examples.md
           - Vertically Landed Rocket:
-              - user-guides/examples/vlr/introduction.md
+              - Introduction: user-guides/examples/vlr/introduction.md
               - Composing the Model: user-guides/examples/vlr/composing-the-model.md
               - Defining a Ground Surface: user-guides/examples/vlr/ground.md
               - Building the Rocket: user-guides/examples/vlr/rocket.md
               - Assembling Landing Gear: user-guides/examples/vlr/landing-gear.md
               - Runtime Behavior: user-guides/examples/vlr/runtime.md
+          - Berthing:
+              - Introduction: user-guides/examples/berthing/introduction.md
+              - Station and Visitor: user-guides/examples/berthing/station-and-visitor.md
+              - 7-DOF Arm: user-guides/examples/berthing/7-dof-arm.md
+              - Mission Runtime: user-guides/examples/berthing/mission.md
 
       - Developer:
           - user-guides/developer/developer.md

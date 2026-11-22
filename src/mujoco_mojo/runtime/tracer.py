@@ -37,7 +37,7 @@ class Tracer:
     """The object whose world position is followed over time."""
 
     duration: float = 1.0
-    """How many seconds of trailing history to keep."""
+    """How much simulation time of trailing history to keep, in whatever time unit the model uses."""
 
     color: Vec4 | None = None
     """RGBA color of the trail. Defaults to the user's `visualization.trace_line` setting."""

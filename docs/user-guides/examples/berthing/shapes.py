@@ -22,17 +22,20 @@ class CylinderInput(mojo.UserData):
     MASS: float
     """Mass of the cylinder."""
 
+    CELLS: int = 8
+    """Cells along each axis of the mesh's grid. More cells make a finer mesh."""
 
-def cylinder_mesh(
-    name: str, radius: float, length: float, cells: int = 8
-) -> mojo.MeshCylinder:
-    """A builtin cylinder mesh along Z, centered on the origin."""
-    # a builtin mesh spans (count - 1) * spacing along each axis, so count is one more than the cells
-    return mojo.MeshCylinder(
-        name=mojo.MeshName(name),
-        count=(cells + 1, cells + 1, cells + 1),
-        spacing=np.array((2 * radius / cells, 2 * radius / cells, length / cells)),
-    )
+    def mesh(self, name: str) -> mojo.MeshCylinder:
+        """A builtin cylinder mesh along Z, centered on the origin."""
+        # a builtin mesh spans (count - 1) * spacing along each axis, so count is one more than the cells
+        cells = self.CELLS
+        return mojo.MeshCylinder(
+            name=mojo.MeshName(name),
+            count=(cells + 1, cells + 1, cells + 1),
+            spacing=np.array(
+                (2 * self.RADIUS / cells, 2 * self.RADIUS / cells, self.LENGTH / cells)
+            ),
+        )
 
 
 def lying_along(

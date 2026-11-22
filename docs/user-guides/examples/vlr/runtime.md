@@ -19,7 +19,7 @@ This [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] is cre
 
 Finally, we register this force to our [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.RuntimeManager] (`rm`). You will notice we do not provide one directly since we will use the `RuntimeManager` as a context manager.
 
-```python
+``` python
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:landing_gear_dynamics"
 ```
 
@@ -33,14 +33,14 @@ It also provides a [`RuntimeManager`][mujoco_mojo.runtime.runtime_manager.Runtim
 
 Once in the context block, we do a few things:
 
-1. Extract our `VLRModel` from the user data
-2. Loop over the landing gear to add the springs using our `add_spring` method
-3. Use the camera we defined to record video and take screenshots during the simulation
+1.  Extract our `VLRModel` from the user data
+2.  Loop over the landing gear to add the springs using our `add_spring` method
+3.  Use the camera we defined to record video and take screenshots during the simulation
     - We only do this for the nominal trial, not every randomized Monte Carlo trial, since video files can increase runtime, memory/storage space, and are generally not needed.
-4. Run the solver by looping using `rm.step(state)` (this is where [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] will automatically be computed and applied for each timestep)
-5. Take one last screenshot when the rocket has landed
+4.  Run the solver by looping using `rm.step(state)` (this is where [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] will automatically be computed and applied for each timestep)
+5.  Take one last screenshot when the rocket has landed
 
-```python
+``` python
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:runtime"
 ```
 
@@ -50,7 +50,7 @@ Once in the context block, we do a few things:
 
 Running the model can be done using [`mojo.utils.MojoRunner`][mujoco_mojo.utils.runner.MojoRunner], providing the generator, runtime, a workdir, and configuration for how many [Monte Carlo trials](../../workflow/running-jobs/running-jobs.md#running-a-monte-carlo) should be run. It then tells it to run with a clean working directory.
 
-```python
+``` python
 --8<-- "docs/user-guides/examples/vlr/vlr_example.py:main"
 ```
 
@@ -58,7 +58,7 @@ Running the model can be done using [`mojo.utils.MojoRunner`][mujoco_mojo.utils.
 
 ??? example "All Code"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/examples/vlr/vlr_example.py"
     ```
 

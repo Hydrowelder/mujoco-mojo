@@ -19,7 +19,7 @@
 
 A recorder films a camera that is named in the model. The camera can be fixed in the world, as here, or attached to a moving body, and then the video moves with that body. This model has a ball above a tilted wedge, so the ball bounces off sideways, a fixed camera beside the ball's path, and a spotlight overhead:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/video_recording_example.py:model"
 ```
 
@@ -29,7 +29,7 @@ To film it, make a [`VideoRecorder`][mujoco_mojo.runtime.video_recorder.VideoRec
 
     H.264 through ffmpeg, which has to be installed and on your `PATH`. It plays almost everywhere, so it is the safe choice when you do not know where the video will be watched.
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/video_recording_example.py:mp4"
     ```
 
@@ -37,7 +37,7 @@ To film it, make a [`VideoRecorder`][mujoco_mojo.runtime.video_recorder.VideoRec
 
     VP9 through ffmpeg, so the file is smaller than an MP4, and it is fully seekable in the Dojo viewer. It needs an ffmpeg with VP9 support.
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/video_recording_example.py:webm"
     ```
 
@@ -45,7 +45,7 @@ To film it, make a [`VideoRecorder`][mujoco_mojo.runtime.video_recorder.VideoRec
 
     Written with PIL, so it needs no ffmpeg. It loops, and the file is large. Every frame is held in memory until the run ends, and `max_frames` caps how many are taken.
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/video_recording_example.py:gif"
     ```
 
@@ -57,11 +57,11 @@ Only the MP4 records in the example. The WebM and the GIF are there to show thei
 
 The recorders in the example also take a `recording_trigger` and a `frame_label`. Both are functions of the state, defined in the runtime function just above the recorders:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/video_recording_example.py:functions"
 ```
 
-- `recording_trigger` makes the recorder only take frames while it returns `True`. This one latches on when the ball first comes within 0.6 m of the floor and stays on. A trigger that followed the ball's height instead would skip the top of every bounce, and the video would jump forward over each gap.
+-   `recording_trigger` makes the recorder only take frames while it returns `True`. This one latches on when the ball first comes within 0.6 m of the floor and stays on. A trigger that followed the ball's height instead would skip the top of every bounce, and the video would jump forward over each gap.
     - This is helpful to programmatically control when your recorder is active.
 
 ???+ tip "Tip: The Video Does Not Start at t = 0"
@@ -80,7 +80,7 @@ A recorder can draw more than the camera sees. `show_proximities` draws the line
 
 `show_traces` draws trails. A [`Tracer`][mujoco_mojo.runtime.tracer.Tracer] follows a body, site or geom and keeps its recent path, and any recorder with `show_traces=True` draws that path behind it. The example traces the ball:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/video_recording_example.py:tracer"
 ```
 
@@ -109,7 +109,7 @@ A recorder can draw more than the camera sees. `show_proximities` draws the line
 
 `width` and `height` set the size of the picture, and they default to 640 by 480. MuJoCo renders into an offscreen buffer that is also 640 by 480 unless the model says otherwise, so a recorder that asks for a larger picture raises a `ValueError` when `setup` runs, naming both sizes. If a higher resolution than standard definition is desired, you need to raise the buffer size in the generator like this:
 
-```python
+``` python
 --8<-- "docs/user-guides/features/video_recording_example.py:offscreen"
 ```
 
@@ -127,7 +127,7 @@ Every frame is rendered on the thread that steps the simulation, so it costs wal
 
 ??? example "All Code"
 
-    ```python
+    ``` python
     --8<-- "docs/user-guides/features/video_recording_example.py:example"
     ```
 

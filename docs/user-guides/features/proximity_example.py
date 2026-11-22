@@ -23,7 +23,7 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
     """A cylinder fixed in place, and an identical one free to drift toward it."""
     mojo_model.mjcf.worldbody = mojo.WorldBody()
 
-    # a builtin mesh, which MuJoCo generates when it compiles the model: 0.2 m across and 0.4 m long
+    # MuJoCo generates this mesh, so there is no mesh file to ship
     mesh = mojo.MeshCylinder(
         name=mojo.MeshName("cylinder"),
         count=(9, 9, 9),
@@ -67,6 +67,7 @@ def runtime(
     *args,
     **kwargs,
 ) -> mojo.MojoModel:
+    """Measures the distance between the cylinders as the probe drifts toward the target."""
     with runtime_manager as rm:
         cylinders = mojo_model.get_user_data(Cylinders)
 
@@ -77,7 +78,7 @@ def runtime(
         proximity.request(channels=["dist", "fromto", "prox_type"])
         # --8<-- [end:pair]
 
-        # set the initial velocity (qvel) of a free-joint body: the probe drifts toward the target at 0.8 m/s and spins, so the nearest points move around the surfaces
+        # set the initial velocity (qvel) of a free-joint body: the probe drifts toward the target and spins, so the nearest points move around the surfaces
         cylinders.probe_body.set_initial_velocity(
             state,
             linear_velocity=np.array((0.8, 0, 0)),
@@ -110,7 +111,8 @@ def record_clip(path: Path) -> None:
         mojo_model = generate(mojo_model, *args, **kwargs)
         assert mojo_model.mjcf.worldbody
 
-        # from a little above, so the cylinders' top faces and the line between them show
+        # from a little above, so the top faces and the line between them show
+        # look_at leaves the picture turned a quarter turn, so the roll turns it back upright
         mojo_model.mjcf.worldbody.cameras.append(
             mojo.Camera(
                 name=mojo.CameraName("side"),
@@ -145,7 +147,7 @@ def record_clip(path: Path) -> None:
                     "background_color": mojo.utils.Color.SLATE_900.with_alpha(0.7),
                 }
 
-            # frames are taken in simulation time, so half the playback speed is slow motion
+            # slow motion, so the tumble is easy to follow
             rt.VideoRecorder(
                 path=path,
                 camera_name=mojo.CameraName("side"),
