@@ -10,6 +10,15 @@ import mujoco_mojo as mojo
 
 
 # --8<-- [start:shapes]
+# contact filtering: MuJoCo lets two geoms collide only if the `contype` of one shares a bit with the `conaffinity` of the other
+# the arm's parts offer bit 1 and accept none, so no part of the arm touches another, even where their volumes overlap at a joint
+ARM_CONTYPE = 1
+ARM_CONAFFINITY = 0
+# the hull, the station and the grapple fixtures accept bit 1 and offer none, so the arm touches them and they do not touch each other
+OBSTACLE_CONTYPE = 0
+OBSTACLE_CONAFFINITY = 1
+
+
 class CylinderInput(mojo.UserData):
     """Radius, length and mass of a cylinder."""
 

@@ -49,7 +49,7 @@ Each part is a class that holds what the runtime will need later, as `UserData`,
 --8<-- "docs/user-guides/examples/berthing/simulation.py:new"
 ```
 
-`generate` calls `Berthing.new` and stores the result on `mojo_model.user_data`, so the runtime can read it back with `get_user_data(Berthing)`. It also sets the options for the whole model. Contacts are switched off, because nothing here is meant to touch, and the weld is a constraint, not a contact, so it still works.
+`generate` calls `Berthing.new` and stores the result on `mojo_model.user_data`, so the runtime can read it back with `get_user_data(Berthing)`. It also sets the options for the whole model. Contacts stay on, with [contact settings](station-and-visitor.md#shared-helpers) on each geom deciding which parts can touch.
 
 ``` python
 --8<-- "docs/user-guides/examples/berthing/simulation.py:generate"

@@ -10,7 +10,7 @@ import numpy as np
 from end_effector import END_EFFECTOR, EndEffector
 from fixture import GrappleFixture
 from pydantic import PrivateAttr
-from shapes import CylinderInput, lying_along
+from shapes import ARM_CONAFFINITY, ARM_CONTYPE, CylinderInput, lying_along
 from visitor import VISITOR
 
 import mujoco_mojo as mojo
@@ -216,6 +216,8 @@ def roll_housing(name: str) -> mojo.GeomCylinder:
         fromto=np.array((0, 0, 0, ARM.roll.LENGTH, 0, 0)),
         mass=ARM.roll.MASS,
         rgba=ROLL_COLOR,
+        contype=ARM_CONTYPE,
+        conaffinity=ARM_CONAFFINITY,
     )
 
 
@@ -227,6 +229,8 @@ def yaw_housing(name: str) -> mojo.GeomCylinder:
         fromto=np.array((0, 0, -ARM.yaw.LENGTH / 2, 0, 0, ARM.yaw.LENGTH / 2)),
         mass=ARM.yaw.MASS,
         rgba=YAW_COLOR,
+        contype=ARM_CONTYPE,
+        conaffinity=ARM_CONAFFINITY,
     )
 
 
@@ -238,6 +242,8 @@ def pitch_housing(name: str) -> mojo.GeomCylinder:
         fromto=np.array((0, -ARM.pitch.LENGTH / 2, 0, 0, ARM.pitch.LENGTH / 2, 0)),
         mass=ARM.pitch.MASS,
         rgba=PITCH_COLOR,
+        contype=ARM_CONTYPE,
+        conaffinity=ARM_CONAFFINITY,
     )
 
 
@@ -574,6 +580,8 @@ class Arm(mojo.UserData):
             pose=lying_along("x", center=np.array((ARM.boom_1.LENGTH / 2, 0, 0))),
             mass=ARM.boom_1.MASS,
             rgba=mojo.utils.Color.SLATE_200.rgba,
+            contype=ARM_CONTYPE,
+            conaffinity=ARM_CONAFFINITY,
         )
         boom_2 = mojo.GeomMesh(
             name=mojo.GeomName("boom_2_geom"),
@@ -581,6 +589,8 @@ class Arm(mojo.UserData):
             pose=lying_along("x", center=np.array((ARM.boom_2.LENGTH / 2, 0, 0))),
             mass=ARM.boom_2.MASS,
             rgba=mojo.utils.Color.SLATE_400.rgba,
+            contype=ARM_CONTYPE,
+            conaffinity=ARM_CONAFFINITY,
         )
 
         # the same part as the free end, latched onto the station's fixture: its tip is at the fixture's site, so its root is one length farther out
@@ -632,6 +642,8 @@ class Arm(mojo.UserData):
                     ),
                     mass=ARM.elbow.MASS,
                     rgba=PITCH_COLOR,
+                    contype=ARM_CONTYPE,
+                    conaffinity=ARM_CONAFFINITY,
                 ),
                 boom_2,
             ],

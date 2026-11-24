@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Self
 
 import numpy as np
-from shapes import CylinderInput, lying_along
+from shapes import ARM_CONAFFINITY, ARM_CONTYPE, CylinderInput, lying_along
 
 import mujoco_mojo as mojo
 
@@ -60,6 +60,8 @@ class EndEffector(mojo.UserData):
             pose=lying_along("x", center=np.array((END_EFFECTOR.LENGTH / 2, 0, 0))),
             mass=END_EFFECTOR.MASS,
             rgba=mojo.utils.Color.SLATE_300.rgba,
+            contype=ARM_CONTYPE,
+            conaffinity=ARM_CONAFFINITY,
         )
 
         # no rotation of its own, so the site's X axis points along the end effector, and a fixture's site points the same way when the two are joined

@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Self
 
 import numpy as np
-from shapes import CylinderInput, lying_along
+from shapes import (
+    OBSTACLE_CONAFFINITY,
+    OBSTACLE_CONTYPE,
+    CylinderInput,
+    lying_along,
+)
 
 import mujoco_mojo as mojo
 
@@ -66,6 +71,8 @@ class GrappleFixture(mojo.UserData):
             pose=lying_along("x", center=np.array(((SEAT - FIXTURE.LENGTH) / 2, 0, 0))),
             mass=FIXTURE.MASS,
             rgba=mojo.utils.Color.ORANGE_500.rgba,
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # no rotation of its own, so the site's X axis is the mount's
