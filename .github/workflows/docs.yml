@@ -2,10 +2,12 @@ name: Documentation
 on:
   push:
     tags: ["v*"] # publish the docs only when a version is released, like the PyPI publish job
+  workflow_dispatch: # deploys master as it is, for a release whose deploy failed
 permissions:
   contents: read
   pages: write
   id-token: write
+  actions: write # to list and delete this run's Pages artifacts
 jobs:
   deploy:
     environment:
@@ -18,11 +20,11 @@ jobs:
         with:
           # fetch all history so the master check below can see other branches
           fetch-depth: 0
-      - name: Verify tag is on master
+      - name: Verify the commit is on master
         run: |
-          # same guard as the publish job: a tag pushed from another branch must not deploy its docs
+          # same guard as the publish job: a tag or a branch that is not on master must not deploy its docs
           if ! git branch -r --contains ${{ github.sha }} | grep -q "origin/master"; then
-            echo "::error::Tag ${{ github.ref_name }} was pushed on a non-master branch. Skipping the docs deploy."
+            echo "::error::${{ github.ref_name }} is not on master. Skipping the docs deploy."
             exit 1
           fi
       - name: Install uv
@@ -32,8 +34,32 @@ jobs:
       - name: Install Python 3.14
         run: uv python install 3.14
       - run: uv run --locked --python 3.14 --group dev --extra all --extra docs zensical build --clean
+      - name: Remove Pages artifacts from an earlier attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # a re-run keeps the earlier attempt's artifact, and deploy-pages stops when it finds two
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?name=github-pages" --jq '.artifacts[].id' |
+            while read -r id; do
+              gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id"
+            done
       - uses: actions/upload-pages-artifact@v5
         with:
           path: site
+      - name: Wait for the artifact to be listed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # deploy-pages looks the artifact up by name right after the upload, and stops when the list has not caught up yet
+          for _ in $(seq 1 30); do
+            count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts?name=github-pages" --jq '.total_count' || echo 0)
+            if [ "$count" = "1" ]; then
+              exit 0
+            fi
+            echo "found $count github-pages artifacts, waiting"
+            sleep 2
+          done
+          echo "::error::The github-pages artifact was not listed after 60 seconds."
+          exit 1
       - uses: actions/deploy-pages@v5
         id: deployment
