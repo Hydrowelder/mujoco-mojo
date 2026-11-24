@@ -46,7 +46,7 @@ Built bent into a V that points toward the visitor, the arm starts in its home p
 
 A few small helpers build the joints, and each is used many times:
 
-- **Housings**, one each for roll, yaw and pitch, are the shapes at a joint. They are colored by the axis they turn about, red for roll (X), green for pitch (Y) and blue for yaw (Z), which makes each joint's axis visible in the viewer. The shoulder and the wrist have the same three, and building each housing once means the two ends cannot differ.
+- **Housings**, one each for roll, yaw and pitch, are the shapes at a joint. They are colored by the axis they turn about, red for roll (X), green for pitch (Y) and blue for yaw (Z), which makes each joint's axis visible in the viewer. The shoulder and the wrist have the same three, and building each housing once means the two ends cannot differ. Like every part of the arm, each takes the arm's [contact settings](station-and-visitor.md#shared-helpers).
 - `hinge` makes every joint. It gives each one the arm's armature, an added inertia that keeps the light joints stable under the servos' high gains, so the servos can be stiff. It also gives each joint the servos' range as a joint limit, which is how `mink` learns the range.
 - `turned` places a joint's body at its home angle. The arm is built bent, so each body is turned from straight by its home angle about its own axis. This is how the home pose gets into the model.
 - `out_of_station` places the whole arm. The station's fixture points into the station, but the arm should point out of it, so the first body is given a half turn about Y, and everything after it follows.
@@ -107,7 +107,7 @@ Inverse kinematics finds the joint motion that puts the end effector at a goal. 
 - A posture task pulls the joints weakly toward home. A goal does not fix all seven joints, because the elbow can swivel about the line from the shoulder to the wrist, so the pull picks one answer.
 - A configuration limit keeps every joint inside its range, which `mink` reads from the model.
 - A velocity limit caps how fast each joint moves.
-- A collision avoidance limit slows any part of the arm that gets within a keep-out distance of the station or the visitor's hull, and `keep_clear_of` says which geoms those are. The free end effector may touch the visitor's grapple fixture, since that is its job, but no other part of the arm may.
+- A collision avoidance limit slows any part of the arm that gets within a keep-out distance of the station or the visitor's hull, and `keep_clear_of` says which geoms those are. The free end effector may touch the visitor's grapple fixture, since that is its job, but no other part of the arm may. `mink` skips pairs that fail the contact check, so it avoids the hull, the station and the fixtures, but not the arm itself.
 - A frozen set of degrees of freedom holds everything that is not one of the arm's joints still, which here is the visitor's free joint. `mink` treats every degree of freedom in the model as something it can move, so without this it could satisfy a distance limit by pushing the visitor out of the arm's way.
 
 `move_to` gives `mink` the goal, asks for the joint velocities, integrates them for one timestep, and copies the result into the commanded angles, so all the joints move at once. Mojo helps with the setup: `Joint.qpos_address` and `Joint.dof_address` say where each joint sits in the configuration and in the Jacobian.

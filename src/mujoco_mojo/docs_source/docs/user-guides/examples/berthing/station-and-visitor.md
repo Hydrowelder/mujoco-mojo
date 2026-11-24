@@ -12,9 +12,20 @@
 
 [Proximity](../../features/proximity.md) measures distances between mesh volumes, so the station, the hull and the fixtures are meshes instead of primitive `Geom`s. MuJoCo can generate a mesh itself, so no mesh file is needed. `CylinderInput` holds the radius, length and mass of a cylindrical part, and its `mesh` method uses Mojo's `MeshCylinder` to make the mesh. A generated cylinder is built along Z, and `lying_along` gives the pose that turns one to lie along X or Y.
 
+The helpers also hold the contact settings. Two geoms collide only if the `contype` of one shares a bit with the `conaffinity` of the other. The arm's parts offer bit 1 and accept none, so none touches another, which matters because the housings overlap at the joints. The hull, the station and the fixtures accept bit 1 and offer none, so the arm can touch them but they cannot touch each other.
+
 ??? example "Helper Code"
 
     ``` python
+    # contact filtering: MuJoCo lets two geoms collide only if the `contype` of one shares a bit with the `conaffinity` of the other
+    # the arm's parts offer bit 1 and accept none, so no part of the arm touches another, even where their volumes overlap at a joint
+    ARM_CONTYPE = 1
+    ARM_CONAFFINITY = 0
+    # the hull, the station and the grapple fixtures accept bit 1 and offer none, so the arm touches them and they do not touch each other
+    OBSTACLE_CONTYPE = 0
+    OBSTACLE_CONAFFINITY = 1
+
+
     class CylinderInput(mojo.UserData):
         """Radius, length and mass of a cylinder."""
 
@@ -115,6 +126,8 @@ class GrappleFixture(mojo.UserData):
             pose=lying_along("x", center=np.array(((SEAT - FIXTURE.LENGTH) / 2, 0, 0))),
             mass=FIXTURE.MASS,
             rgba=mojo.utils.Color.ORANGE_500.rgba,
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # no rotation of its own, so the site's X axis is the mount's
@@ -195,6 +208,8 @@ class Station(mojo.UserData):
             pose=lying_along("y"),
             mass=STATION.MASS,
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # turned so the fixture's X axis points down into the station
@@ -287,6 +302,8 @@ class Visitor(mojo.UserData):
             pose=lying_along("y"),
             mass=VISITOR.hull.MASS,
             rgba=mojo.utils.Color.CYAN_500.with_alpha(OPACITY),
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # the station is on the body's -X side, so the fixture is mounted there, and the body's X axis already points into the hull

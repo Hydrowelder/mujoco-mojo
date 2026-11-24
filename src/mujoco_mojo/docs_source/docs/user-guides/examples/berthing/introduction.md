@@ -87,7 +87,7 @@ class Berthing(mojo.UserData):
 
 ```
 
-`generate` calls `Berthing.new` and stores the result on `mojo_model.user_data`, so the runtime can read it back with `get_user_data(Berthing)`. It also sets the options for the whole model. Contacts are switched off, because nothing here is meant to touch, and the weld is a constraint, not a contact, so it still works.
+`generate` calls `Berthing.new` and stores the result on `mojo_model.user_data`, so the runtime can read it back with `get_user_data(Berthing)`. It also sets the options for the whole model. Contacts stay on, with [contact settings](station-and-visitor.md#shared-helpers) on each geom deciding which parts can touch.
 
 ``` python
 def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
@@ -101,8 +101,6 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
             gravity=np.array((0, 0, 0)) * US["m/s**2"],
             # the servos are stiff and heavily damped, which only an implicit integrator keeps stable at this timestep
             integrator=mojo.Integrator.IMPLICITFAST,
-            # parts overlap in places and nothing is meant to touch, so contacts are off; the weld is a constraint, not a contact, so it still works
-            flag=mojo.Flag(contact=mojo.typing.EnableDisable.DISABLE),
         )
     )
 

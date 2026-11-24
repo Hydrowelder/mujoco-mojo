@@ -6,7 +6,12 @@ from typing import Self
 
 import numpy as np
 from fixture import GrappleFixture
-from shapes import CylinderInput, lying_along
+from shapes import (
+    OBSTACLE_CONAFFINITY,
+    OBSTACLE_CONTYPE,
+    CylinderInput,
+    lying_along,
+)
 
 import mujoco_mojo as mojo
 
@@ -67,6 +72,8 @@ class Station(mojo.UserData):
             pose=lying_along("y"),
             mass=STATION.MASS,
             rgba=mojo.utils.Color.SLATE_500.with_alpha(OPACITY),
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # turned so the fixture's X axis points down into the station

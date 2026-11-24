@@ -6,7 +6,12 @@ from typing import Self
 
 import numpy as np
 from fixture import GrappleFixture
-from shapes import CylinderInput, lying_along
+from shapes import (
+    OBSTACLE_CONAFFINITY,
+    OBSTACLE_CONTYPE,
+    CylinderInput,
+    lying_along,
+)
 
 import mujoco_mojo as mojo
 
@@ -66,6 +71,8 @@ class Visitor(mojo.UserData):
             pose=lying_along("y"),
             mass=VISITOR.hull.MASS,
             rgba=mojo.utils.Color.CYAN_500.with_alpha(OPACITY),
+            contype=OBSTACLE_CONTYPE,
+            conaffinity=OBSTACLE_CONAFFINITY,
         )
 
         # the station is on the body's -X side, so the fixture is mounted there, and the body's X axis already points into the hull
