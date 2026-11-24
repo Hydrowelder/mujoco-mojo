@@ -6,10 +6,11 @@ import subprocess
 import sys
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from importlib.machinery import ModuleSpec
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import mujoco
@@ -893,20 +894,64 @@ def test_the_viewer_cannot_be_started_without_the_controls_for_its_buttons(
         backend.start(make_state())
 
 
-def only_the_bindings_exist(name: str) -> ModuleSpec | None:
-    """Stands in for `importlib.util.find_spec` on a MuJoCo build that has the browser viewer's bindings but no client in the package."""
-    return ModuleSpec(name, None) if name == "mujoco.studio.web.state_payload" else None
+@pytest.fixture
+def web_bindings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Makes the browser viewer's native bindings importable, whichever MuJoCo build this really is."""
+    name = "mujoco.studio.web.state_payload"
+    monkeypatch.setitem(sys.modules, name, ModuleType(name))
 
 
-def test_the_browser_client_is_found_where_the_override_points_or_in_the_package(
+def find_spec_of(*found: str) -> Callable[[str], ModuleSpec | None]:
+    """Stands in for `importlib.util.find_spec` on a MuJoCo build where only the modules named in `found` exist."""
+
+    def find_spec(name: str) -> ModuleSpec | None:
+        return ModuleSpec(name, None) if name in found else None
+
+    return find_spec
+
+
+@pytest.mark.usefixtures("web_bindings")
+def test_the_browser_client_is_found_where_the_override_points(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(importlib.util, "find_spec", only_the_bindings_exist)
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec_of())
     monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path))
     assert studio_module.web_client_available()
 
     monkeypatch.setenv("MUJOCO_WEB_VIEWER_DIST", str(tmp_path / "missing"))
     assert not studio_module.web_client_available()
+
+
+@pytest.mark.usefixtures("web_bindings")
+def test_the_browser_client_is_found_in_the_wasm_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """MuJoCo 4.0.1 and later ship the client as `mujoco-studio-wasm`, not inside `mujoco.studio.web`."""
+    monkeypatch.delenv("MUJOCO_WEB_VIEWER_DIST", raising=False)
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec_of())
+    assert not studio_module.web_client_available()
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec_of("mujoco_studio_wasm"))
+    assert studio_module.web_client_available()
+
+
+@pytest.mark.usefixtures("web_bindings")
+def test_the_browser_client_is_found_inside_the_web_package(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Earlier releases built the client into `mujoco.studio.web`, as a `dist` folder."""
+    monkeypatch.delenv("MUJOCO_WEB_VIEWER_DIST", raising=False)
+    spec = ModuleSpec("mujoco.studio.web", None, is_package=True)
+    spec.submodule_search_locations = [str(tmp_path)]
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name: spec if name == "mujoco.studio.web" else None,
+    )
+    assert not studio_module.web_client_available()
+
+    (tmp_path / "dist").mkdir()
+    assert studio_module.web_client_available()
 
 
 def test_a_client_is_no_use_without_the_browser_viewers_bindings(
