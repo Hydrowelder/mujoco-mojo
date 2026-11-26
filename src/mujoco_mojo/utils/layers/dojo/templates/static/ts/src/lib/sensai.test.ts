@@ -9,6 +9,13 @@ import {
   TABS_KEY,
   applyToolEvent,
   blankTab,
+  carriedContext,
+  contextLabel,
+  conversationOf,
+  latestQuestion,
+  parseContext,
+  parseContextUsage,
+  type ContextEntry,
   chatHistory,
   chatRequestBody,
   composerSize,
@@ -1319,5 +1326,93 @@ describe("mergeSavedTabs", () => {
     const a = tab({ id: "a" });
     expect(mergeSavedTabs([a], [a, tab({ id: "z" })], idle).changed).toBe(true);
     expect(mergeSavedTabs([a, tab({ id: "z" })], [a], idle).changed).toBe(true);
+  });
+});
+
+describe("a chat's conversation and context window", () => {
+  const conversation: ContextEntry[] = [
+    { role: "user", content: "q" },
+    { role: "summary", content: "s" },
+    { role: "assistant", content: "a" },
+  ];
+
+  it("reads a conversation from the server and refuses anything else", () => {
+    expect(parseContext(conversation)).toEqual(conversation);
+    expect(parseContext([{ role: "system", content: "x" }])).toBeNull();
+    expect(parseContext([{ role: "user", content: 3 }])).toBeNull();
+    expect(parseContext("nope")).toBeNull();
+  });
+
+  it("keeps the provider's count an answer carries, and only a count", () => {
+    const counted = [
+      { role: "user", content: "q", instructions: "You are SensAI." },
+      { role: "assistant", content: "a", input_tokens: 1200, output_tokens: 40 },
+    ];
+    expect(parseContext(counted)).toEqual(counted);
+    expect(parseContext([{ role: "assistant", content: "a", input_tokens: "lots", output_tokens: -1 }])).toEqual([
+      { role: "assistant", content: "a" },
+    ]);
+  });
+
+  it("reads how full the window is and refuses a reading that is not one", () => {
+    expect(parseContextUsage({ fraction: 0.5, estimated: true })).toEqual({ fraction: 0.5, estimated: true });
+    expect(parseContextUsage({ fraction: 0.5 })).toEqual({ fraction: 0.5, estimated: false });
+    expect(parseContextUsage({ fraction: -1 })).toBeNull();
+    expect(parseContextUsage({ fraction: Number.NaN })).toBeNull();
+    expect(parseContextUsage(null)).toBeNull();
+  });
+
+  it("goes on from the server's conversation, or adds the exchange to the one there was", () => {
+    expect(carriedContext(undefined, "q2", "a2", conversation)).toEqual(conversation);
+    expect(carriedContext(conversation, "q2", "a2", undefined)).toEqual([
+      ...conversation,
+      { role: "user", content: "q2" },
+      { role: "assistant", content: "a2" },
+    ]);
+    expect(carriedContext(undefined, "q2", "a2", undefined)).toBeUndefined();
+  });
+
+  it("is sent in place of the chat's messages once there is one", () => {
+    const messages = [
+      { role: "user" as const, content: "old", ts: 1 },
+      { role: "user" as const, content: "new", ts: 2 },
+    ];
+    const body = chatRequestBody("new", messages, null, null, null, conversation) as { message_history: unknown };
+    expect(body.message_history).toEqual(conversation);
+    const without = chatRequestBody("new", messages, null, null, null) as { message_history: unknown };
+    expect(without.message_history).toEqual([{ role: "user", content: "old" }]);
+  });
+
+  it("is the conversation a chat would send, for Compact to summarize", () => {
+    const messages = [{ role: "user" as const, content: "hi", ts: 1 }];
+    expect(conversationOf({ messages, context: conversation })).toEqual(conversation);
+    expect(conversationOf({ messages })).toEqual([{ role: "user", content: "hi" }]);
+  });
+
+  it("finds the question a reply answers", () => {
+    expect(
+      latestQuestion([
+        { role: "user", content: "first", ts: 1 },
+        { role: "assistant", content: "a", ts: 2 },
+        { role: "user", content: "second", ts: 3 },
+      ]),
+    ).toBe("second");
+    expect(latestQuestion([])).toBe("");
+  });
+
+  it("writes how full the window is, with a decimal while it is small and ~ when the window is a guess", () => {
+    expect(contextLabel(undefined)).toBe("");
+    expect(contextLabel({ fraction: 0.034, estimated: false })).toBe("Context 3.4%");
+    expect(contextLabel({ fraction: 0.567, estimated: true })).toBe("Context ~57%");
+  });
+
+  it("is taken from another browser tab with the messages it was made from", () => {
+    const own = { ...blankTab([]), id: "a", messages: [] };
+    const theirs = { ...own, messages: [{ role: "user" as const, content: "q", ts: 1 }], context: conversation, contextUsage: { fraction: 0.1, estimated: false } };
+
+    const { tabs } = mergeSavedTabs([own], [theirs], () => false);
+
+    expect(tabs[0]!.context).toEqual(conversation);
+    expect(tabs[0]!.contextUsage).toEqual({ fraction: 0.1, estimated: false });
   });
 });

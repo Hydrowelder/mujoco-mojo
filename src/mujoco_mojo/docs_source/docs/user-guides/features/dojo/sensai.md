@@ -24,6 +24,7 @@ Press the sparkle button to open the chat. Type and press ++enter++ (++shift+ent
 - **Tool calls:** every reply lists the calls behind it, such as what it asked the job report for or which signals it added, live while it works and as a closed _N tool calls_ line afterward. A call the server turned away is shown with its reason.
 - **Copy and the model:** each message has a copy button, and hovering the row above a reply shows which of your models wrote it, which tells you when a fallback answered.
 - **Long messages:** the latest stays open and older ones fold to a preview you can click open.
+- **Context and Compact:** under the box, how much of the model's context window the chat takes up, and **Compact**, which summarizes it so far so SensAI goes on from the summary. SensAI also does that by itself once the chat grows long (see [long conversations](../sensai.md#long-conversations)).
 - **Chat history:** the [export menu](mosaic.md#export-options) can download the conversation.
 
 What the chat can do depends on which of SensAI's [features](../sensai.md#choosing-what-it-can-do) are on. Ask for one that is off and it tells you so.

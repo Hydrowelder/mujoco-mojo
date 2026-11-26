@@ -323,6 +323,9 @@ DEFAULT_MAX_REQUESTS = 12
 DEFAULT_MAX_VERSUS_TRIALS = 50
 """The default of `sensai.max_versus_trials`."""
 
+DEFAULT_COMPACT_AT = 0.8
+"""The default of `sensai.compact_at`."""
+
 
 class SensAIModelEntry(BaseModel):
     """One entry in `SensAISettings.models` - a provider paired with that provider's own model identifier."""
@@ -343,6 +346,13 @@ class SensAIModelEntry(BaseModel):
         default=None,
         title="Base URL",
         description="Send this entry's requests here instead of the provider's default endpoint, e.g. to a gateway or proxy. Ollama has no default endpoint and needs one. Not every provider accepts one.",
+    )
+
+    context_window: int | None = Field(
+        default=None,
+        ge=1,
+        title="Context Window",
+        description="This model's context window in tokens, for one Mojo cannot look up, such as most served by Ollama (its `num_ctx`). SensAI summarizes a long conversation to fit it.",
     )
 
 
@@ -448,6 +458,16 @@ class SensAISettings(BaseModel):
         le=1000,
         title="Max Versus Trials",
         description="The most trials one message may add to versus mode, since each loads its data. Pins past it are left out and a later message adds the next batch.",
+    )
+
+    compact_at: float = Field(
+        default=DEFAULT_COMPACT_AT,
+        ge=0.1,
+        le=1.0,
+        title="Compact At",
+        description="How full the model's context window (the smallest of your models') may get before SensAI summarizes the earlier conversation. Reloaded's `sensai compact` does it on demand.",
+        # stored as a fraction, edited in the Dojo's settings panel as a percentage
+        json_schema_extra={"x-widget": "percent"},
     )
 
     features: SensAIFeatures = Field(

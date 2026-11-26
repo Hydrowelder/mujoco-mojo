@@ -4,6 +4,12 @@
 
 - Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
 - Added a `sensai` command to Reloaded, which answers questions about using Mojo from the docs
+- Reloaded's SensAI answers show in a pane that swaps with the log (Tab switches), and remember the conversation
+- SensAI summarizes a long conversation once it fills `sensai.compact_at` of the context window, in the Dojo chat and in Reloaded
+- The Dojo chat and Reloaded show how full the context window is, with a button to summarize the conversation
+- Each `sensai.models` entry can set `context_window`, for a model Mojo cannot look up, such as one served by Ollama
+- The settings panel explains each field of a SensAI model, and shows `sensai.compact_at` as a percentage
+- Updated pydantic-ai to 2.75.0, and added pydantic-ai-harness to the `sensai` extra
 - Added `sensai.features` to turn off any of SensAI's specialists (docs, job status, signals, plot)
 - SensAI's settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
 - Reloaded shows SensAI's disclaimer on an icon in the status bar while SensAI is on

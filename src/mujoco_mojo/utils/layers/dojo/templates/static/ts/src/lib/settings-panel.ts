@@ -65,6 +65,10 @@ export interface SettingsField {
   enumDescriptions?: Record<string, string>;
   minimum?: number;
   maximum?: number;
+  // a number stored as a fraction (0.8) and edited as a percentage (80, with
+  // a % after it): value, default, minimum and maximum are all in percent
+  // here, and serializeFieldValue turns the value back into the fraction
+  percent?: boolean;
   nullable: boolean;
   // for a "url" field, whether the *current* value should show the
   // clickable-globe affordance. Seeded from the backend's value_meta
@@ -247,7 +251,7 @@ export interface SettingsPanelState {
   removeListItem(listPath: string, index: number): void;
   showSettingsHint(text: string): void;
   hideSettingsHint(): void;
-  listRowHint(item: SettingsListItem, list: SettingsListField): string;
+  listRowHint(item: SettingsListItem, list: SettingsListField, field?: SettingsField): string;
   settingsFieldOutOfRange(field: SettingsField): boolean;
   settingsFieldRangeMessage(field: SettingsField): string;
   renderMarkdown(text: string): string;
@@ -293,6 +297,7 @@ interface LeafDescription {
   nullable: boolean;
   minimum?: number;
   maximum?: number;
+  percent?: boolean;
   enumOptions?: string[];
   enumDescriptions?: Record<string, string>;
 }
@@ -317,14 +322,30 @@ function describeLeaf(node: SettingsSchemaNode): LeafDescription {
 
   if (nonNull.some((b) => b.format === "uri")) return { widget: "url", nullable };
   if (primary.type === "integer" || primary.type === "number") {
-    return {
-      widget: "number",
-      nullable,
-      minimum: primary.minimum ?? node.minimum,
-      maximum: primary.maximum ?? node.maximum,
-    };
+    const minimum = primary.minimum ?? node.minimum;
+    const maximum = primary.maximum ?? node.maximum;
+    if (node["x-widget"] === "percent") {
+      return {
+        widget: "number",
+        nullable,
+        percent: true,
+        minimum: minimum === undefined ? undefined : toPercent(minimum),
+        maximum: maximum === undefined ? undefined : toPercent(maximum),
+      };
+    }
+    return { widget: "number", nullable, minimum, maximum };
   }
   return { widget: "text", nullable };
+}
+
+/** A fraction as the percentage the settings panel shows (0.8 is 80). Rounded to six decimals, since 0.15 * 100 is 15.000000000000002 in floating point. */
+export function toPercent(fraction: number): number {
+  return Math.round(fraction * 100 * 1e6) / 1e6;
+}
+
+/** A percentage typed in the settings panel as the fraction the setting holds (80 is 0.8). */
+export function fromPercent(percent: number): number {
+  return percent / 100;
 }
 
 function buildField(
@@ -336,9 +357,10 @@ function buildField(
   valueMeta: Record<string, SettingsValueMetaEntry>,
 ): SettingsField {
   const node = resolveRef(schema, rawNode);
-  const { widget, nullable, minimum, maximum, enumOptions, enumDescriptions } = describeLeaf(node);
+  const { widget, nullable, minimum, maximum, percent, enumOptions, enumDescriptions } = describeLeaf(node);
   const isSecret = widget === "secret";
-  const rawValue = value as string | number | boolean | null | undefined;
+  const asShown = (v: unknown): unknown => (percent && typeof v === "number" ? toPercent(v) : v);
+  const rawValue = asShown(value) as string | number | boolean | null | undefined;
 
   return {
     path,
@@ -346,12 +368,13 @@ function buildField(
     title: node.title ?? key,
     description: node.description ?? "",
     widget,
-    default: (node.default ?? null) as string | number | boolean | null,
+    default: (asShown(node.default) ?? null) as string | number | boolean | null,
     value: isSecret ? "" : (rawValue ?? null),
     enumOptions,
     enumDescriptions,
     minimum,
     maximum,
+    percent,
     nullable,
     isUrl: widget === "url" ? !!valueMeta[path]?.is_url : false,
     secretOriginal: isSecret ? String(rawValue ?? "") : undefined,
@@ -585,11 +608,14 @@ export function settingsDropdown() {
   };
 }
 
-// what a row of a list shows in the hint bar: the docstring of the row's own choice
-// (a model's provider), whichever of its controls is under the mouse or being edited,
-// else the list's own description
-export function listRowHint(item: SettingsListItem, list: SettingsListField): string {
+// what a row of a list shows in the hint bar: for one of its fields under the mouse or
+// being edited, that field's own description (a row has no labels, so this is the only
+// place it is explained); for the row's choice (a model's provider) and the row around
+// its fields, the choice's docstring, which says which API key to set; else the list's
+// own description
+export function listRowHint(item: SettingsListItem, list: SettingsListField, field?: SettingsField): string {
   const choice = item.fields.find((f) => f.widget === "select");
+  if (field && field !== choice && field.description) return field.description;
   return choice
     ? (choice.enumDescriptions?.[String(choice.value)] ?? choice.description)
     : list.description;
@@ -635,7 +661,8 @@ function blankFieldValue(field: SettingsField): string | number | boolean | null
   if (field.default !== null) return field.default;
   if (field.widget === "select") return field.enumOptions?.[0] ?? null;
   if (field.widget === "toggle") return false;
-  if (field.widget === "number") return field.minimum ?? 0;
+  // an optional number starts empty: its minimum would be a value nobody chose (a context window of 1 token)
+  if (field.widget === "number") return field.nullable ? null : (field.minimum ?? 0);
   return "";
 }
 
@@ -671,11 +698,12 @@ export function isFieldOutOfRange(field: SettingsField): boolean {
 }
 
 export function fieldRangeMessage(field: SettingsField): string {
+  const unit = field.percent ? "%" : "";
   if (field.minimum !== undefined && field.maximum !== undefined) {
-    return `Must be between ${field.minimum} and ${field.maximum}`;
+    return `Must be between ${field.minimum}${unit} and ${field.maximum}${unit}`;
   }
-  if (field.minimum !== undefined) return `Must be at least ${field.minimum}`;
-  if (field.maximum !== undefined) return `Must be at most ${field.maximum}`;
+  if (field.minimum !== undefined) return `Must be at least ${field.minimum}${unit}`;
+  if (field.maximum !== undefined) return `Must be at most ${field.maximum}${unit}`;
   return "";
 }
 
@@ -694,6 +722,7 @@ function listFieldValue(listField: SettingsListField): Record<string, unknown>[]
 function serializeFieldValue(field: SettingsField): unknown {
   if (field.widget === "secret") return field.value ? field.value : (field.secretOriginal ?? "");
   if (field.nullable && field.value === "") return null;
+  if (field.percent && typeof field.value === "number") return fromPercent(field.value);
   return field.value;
 }
 

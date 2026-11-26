@@ -108,7 +108,12 @@ ParamField.-toggle:hover {
     background: $border-blurred;
 }
 
-#log {
+#panes {
+    height: 1fr;
+}
+
+#log,
+#sensai-log {
     height: 1fr;
     margin: 0 1;
     padding: 0 1;

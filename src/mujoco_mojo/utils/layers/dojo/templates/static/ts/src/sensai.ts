@@ -15,8 +15,11 @@ import {
   applyToolEvent,
   blankTab,
   bubbleStyle,
+  carriedContext,
   chatRequestBody,
   composerSize,
+  contextLabel,
+  conversationOf,
   createSseParser,
   enabledFromSettings,
   finalToolCalls,
@@ -26,11 +29,14 @@ import {
   historyFileName,
   isAtBottom,
   lastUserIndex,
+  latestQuestion,
   loadOpen,
   loadPinned,
   loadSensAITabs,
   mergeSavedTabs,
   messageLayout,
+  parseContext,
+  parseContextUsage,
   promptScrollTop,
   readSavedTabs,
   rememberedScroll,
@@ -85,6 +91,8 @@ function sensai() {
     // the chat whose request is running, and the chats waiting their turn
     runningId: null as string | null,
     queue: [] as string[],
+    // the chat whose conversation is being summarized, which takes no message meanwhile
+    compactingId: null as string | null,
     streaming: false,
     streamingContent: "",
     thinkingLabel: null as string | null,
@@ -119,6 +127,17 @@ function sensai() {
       return this.tabs.find((t) => t.id === this.activeId);
     },
 
+    // how full the context window is with the open chat's conversation, under the box
+    get contextText(): string {
+      return contextLabel(this.activeTab?.contextUsage);
+    },
+
+    get contextTooltip(): string {
+      return this.activeTab?.contextUsage?.estimated
+        ? "How much of the context window this chat takes up, with SensAI's own instructions. Your model's window is not known, so this assumes 200,000 tokens: set its context window in the SensAI settings."
+        : "How much of the model's context window this chat takes up, with SensAI's own instructions. SensAI summarizes the earlier part once it passes Compact At in the SensAI settings.";
+    },
+
     // the open chat's messages, which is what the message list shows
     get messages(): SensAIMessage[] {
       return this.activeTab?.messages ?? [];
@@ -142,9 +161,9 @@ function sensai() {
       return this.queue.includes(id);
     },
 
-    // a chat with a request running or waiting takes no second message
+    // a chat with a request running or waiting, or being summarized, takes no second message
     isBusy(id: string): boolean {
-      return this.isRunning(id) || this.isQueued(id);
+      return this.isRunning(id) || this.isQueued(id) || this.compactingId === id;
     },
 
     async init() {
@@ -517,6 +536,7 @@ function sensai() {
               currentPlotConfigJson,
               (Alpine.store("dojo") as DojoStore).columnManifest,
               (Alpine.store("dojo") as DojoStore).versus,
+              tab.context,
             ),
           ),
           signal: controller.signal,
@@ -557,6 +577,47 @@ function sensai() {
       }
     },
 
+    // summarizes the open chat's conversation so far, all but its first and latest
+    // questions, which its Compact button asks for; the chat goes on from the summary
+    async compact() {
+      const tab = this.activeTab;
+      if (!tab || tab.messages.length === 0 || this.isBusy(tab.id)) return;
+      this.compactingId = tab.id;
+      const note = (content: string, error = false) =>
+        tab.messages.push({ role: "assistant", content, ...(error ? { error: true } : {}), ts: Date.now() });
+      try {
+        const response = await fetch("/sensai/compact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_history: conversationOf(tab) }),
+        });
+        if (!response.ok) {
+          let detail = "Could not summarize the conversation.";
+          try {
+            const err = (await response.json()) as { detail?: unknown };
+            if (typeof err.detail === "string") detail = err.detail;
+          } catch { /* ignore */ }
+          note(detail, true);
+          return;
+        }
+        const data = (await response.json()) as { conversation?: unknown; context?: unknown; compacted?: unknown };
+        const conversation = parseContext(data.conversation);
+        if (data.compacted === true && conversation) {
+          tab.context = conversation;
+          tab.contextUsage = parseContextUsage(data.context) ?? tab.contextUsage;
+          note("Summarized the conversation so far. SensAI goes on from the summary.");
+        } else {
+          note("Nothing to summarize yet: the conversation is only its first and latest questions.");
+        }
+      } catch {
+        note("Network error. Please try again.", true);
+      } finally {
+        this.compactingId = null;
+        this._saveTabs();
+        window.dispatchEvent(new CustomEvent("sensai-remeasure"));
+      }
+    },
+
     // marks a reply the user has not seen: a chat that was not open gets a dot,
     // and the button shows one when the window is closed or scrolled up
     _noteReply(tab: SensAITab) {
@@ -585,6 +646,8 @@ function sensai() {
           this._flushReveal();
           const content = resultContent(payload.message, this.streamingContent);
           const toolCalls = finalToolCalls(payload.tool_calls, this.toolCalls);
+          tab.context = carriedContext(tab.context, latestQuestion(tab.messages), content, payload.conversation);
+          tab.contextUsage = parseContextUsage(payload.context) ?? tab.contextUsage;
           tab.messages.push({
             role: "assistant",
             content,

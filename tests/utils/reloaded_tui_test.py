@@ -19,11 +19,14 @@ from rich.style import Style
 from rich.text import Text
 from textual.pilot import Pilot
 from textual.strip import Strip
-from textual.widgets import RichLog, Static
+from textual.content import Content
+from textual.widgets import ContentSwitcher, RichLog, Static
 
 import mujoco_mojo.utils.layers.reloaded.tui as tui_module
 
 from mujoco_mojo.settings import SENSAI_DISCLOSURE, ReloadedKeySettings
+from mujoco_mojo.utils.layers.reloaded import sensai as reloaded_sensai
+from mujoco_mojo.utils.sensai.compaction import ContextGauge
 from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
 from mujoco_mojo.utils.layers.reloaded.rain import RainScreen
 from mujoco_mojo.utils.layers.reloaded.controller import (
@@ -96,6 +99,19 @@ def make_app(
 
 def log_text(app: ReloadedApp) -> str:
     return "\n".join(line.text for line in app.query_one("#log", RichLog).lines)
+
+
+def sensai_text(app: ReloadedApp) -> str:
+    return "\n".join(line.text for line in app.query_one("#sensai-log", RichLog).lines)
+
+
+def shown_pane(app: ReloadedApp) -> str | None:
+    return app.query_one("#panes", ContentSwitcher).current
+
+
+def pane_title_text(app: ReloadedApp) -> str:
+    title = app.query_one("#log", RichLog).border_title
+    return Content.from_markup(str(title)).plain
 
 
 async def wait_until(
@@ -757,7 +773,7 @@ def test_the_app_starts_with_its_panels_the_hint_and_a_control_row(
             assert app.query_one("#hint", Static).display
             assert app.query_one(ExplainButton).has_class("-open")
             assert app.query_one(CommandInput).placeholder == CommandInput.PLACEHOLDER
-            assert app.query_one("#log", RichLog).border_title == "Log"
+            assert pane_title_text(app) == "Log · SensAI"
             assert app.query_one("#command-box").border_title == "Command"
             # the title shares the status row, so there is no header row above it
             assert title.region.y == app.query_one("#badge").region.y
@@ -1106,7 +1122,268 @@ class TestMarkdownInTheLog:
         assert len(lines) > 1
         assert all(len(line) <= 30 and line == line.rstrip() for line in lines)
 
-    def test_a_markdown_event_is_drawn_as_markdown(self) -> None:
-        drawn = render_log_item(LogEvent(message=self.ANSWER, markdown=True), 60)
 
-        assert drawn.plain == render_markdown(self.ANSWER, 60).plain
+class TestTheSensAIPane:
+    """The one pane shows the log or the conversation with SensAI, and its title switches between them."""
+
+    @staticmethod
+    def answer_with(
+        monkeypatch: pytest.MonkeyPatch, release: threading.Event | None = None
+    ) -> list[str]:
+        """Makes SensAI answer every question with "Use `pause`." (after `release`, when given), and gives the list the questions are put in."""
+        questions: list[str] = []
+
+        def ask(question: str, history: object = ()) -> reloaded_sensai.Answer:
+            questions.append(question)
+            if release is not None:
+                assert release.wait(5)
+            return reloaded_sensai.Answer(
+                text="Use `pause`.",
+                model="model-b",
+                history=[],
+                context=ContextGauge(
+                    used_tokens=3_400, window_tokens=10_000, known_window=True
+                ),
+            )
+
+        monkeypatch.setattr(reloaded_sensai, "ask", ask)
+        return questions
+
+    @staticmethod
+    async def enter(pilot: Pilot[None], app: ReloadedApp, text: str) -> None:
+        app.query_one(CommandInput).value = text
+        await pilot.press("enter")
+        await pilot.pause()
+
+    @staticmethod
+    def title_offset(app: ReloadedApp, name: str) -> int:
+        # the rounded corner, a line and a space come before the title
+        return 3 + pane_title_text(app).index(name)
+
+    def test_the_title_names_both_panes_and_marks_an_unseen_answer(self) -> None:
+        assert Content.from_markup(tui_module.pane_title("log")).plain == "Log · SensAI"
+        assert (
+            Content.from_markup(tui_module.pane_title("log", unread=True)).plain
+            == "Log · SensAI •"
+        )
+
+    def test_a_click_on_a_name_in_the_title_shows_that_pane(
+        self, tmp_path: Path
+    ) -> None:
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await pilot.click("#log", offset=(self.title_offset(app, "SensAI"), 0))
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                assert app.focused is app.query_one(CommandInput)
+                assert app.query_one("#command-box").border_title == "Ask SensAI"
+                assert "Ask SensAI how to use Mojo" in sensai_text(app)
+
+                await pilot.click(
+                    "#sensai-log", offset=(self.title_offset(app, "Log"), 0)
+                )
+                await wait_until(pilot, lambda: shown_pane(app) == "log")
+                assert app.query_one("#command-box").border_title == "Command"
+
+        run(scenario())
+
+    def test_tab_switches_the_pane_when_there_is_nothing_to_complete(
+        self, tmp_path: Path
+    ) -> None:
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                command = app.query_one(CommandInput)
+                await pilot.press("tab")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+
+                command.value = "how do I pause?"
+                await pilot.press("tab")
+                await wait_until(pilot, lambda: shown_pane(app) == "log")
+                assert command.value == "how do I pause?"
+
+                command.value = "ge"
+                await pilot.pause()
+                await pilot.press("tab")
+                await wait_until(pilot, lambda: command.value == "gen")
+                assert shown_pane(app) == "log"
+
+                await pilot.press("tab")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+
+        run(scenario())
+
+    def test_the_sensai_and_log_commands_switch_the_pane(self, tmp_path: Path) -> None:
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await self.enter(pilot, app, "log")
+                await wait_until(pilot, lambda: shown_pane(app) == "log")
+
+        run(scenario())
+
+    def test_in_the_sensai_pane_a_question_needs_no_prefix_and_a_command_still_runs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        questions = self.answer_with(monkeypatch)
+
+        async def scenario() -> None:
+            app, session = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                command = app.query_one(CommandInput)
+                assert command.placeholder == "Ask SensAI a question, or type a command"
+
+                command.value = "how do I pause?"
+                await wait_until(pilot, lambda: "Asks SensAI." in hint_text(app))
+                await pilot.press("enter")
+                await wait_until(pilot, lambda: "Use pause." in sensai_text(app))
+                assert questions == ["how do I pause?"]
+                assert "> how do I pause?" in sensai_text(app)
+                assert "model-b" in sensai_text(app)
+                assert "how do I pause?" not in log_text(app)
+
+                command.value = "gen"
+                await wait_until(
+                    pilot, lambda: "Generates the model only." in hint_text(app)
+                )
+                await pilot.press("enter")
+                await wait_until(pilot, lambda: session.calls == [False])
+
+        run(scenario())
+
+    def test_an_empty_line_in_the_sensai_pane_runs_nothing(
+        self, tmp_path: Path
+    ) -> None:
+        async def scenario() -> None:
+            app, session = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                assert hint_text(app) == "Type a question, or a command."
+                await self.enter(pilot, app, "")
+                await pilot.pause(0.2)
+                assert session.calls == []
+
+        run(scenario())
+
+    def test_an_answer_that_comes_in_while_the_log_shows_marks_the_title(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        release = threading.Event()
+        self.answer_with(monkeypatch, release)
+
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai how do I pause?")
+                await self.enter(pilot, app, "log")
+                await wait_until(pilot, lambda: shown_pane(app) == "log")
+                release.set()
+                await wait_until(pilot, lambda: pane_title_text(app).endswith("•"))
+
+                await self.enter(pilot, app, "sensai")
+                await wait_until(pilot, lambda: pane_title_text(app) == "Log · SensAI")
+                assert "Use pause." in sensai_text(app)
+
+        run(scenario())
+
+    def test_sensai_clear_empties_the_pane_back_to_its_introduction(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.answer_with(monkeypatch)
+
+        async def scenario() -> None:
+            backend = FakeBackend()
+            controller = ReloadedController(FakeSession(), backend, watch_path=tmp_path)
+            app = ReloadedApp(controller, backend, rain_seconds=0.0, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai how do I pause?")
+                await wait_until(pilot, lambda: "Use pause." in sensai_text(app))
+                # the answer shows a moment before SensAI takes the next line
+                await wait_until(
+                    pilot,
+                    lambda: (
+                        controller.describe("sensai clear")
+                        == "Starts a new conversation."
+                    ),
+                )
+                await self.enter(pilot, app, "sensai clear")
+                await wait_until(pilot, lambda: "Use pause." not in sensai_text(app))
+                assert "Ask SensAI how to use Mojo" in sensai_text(app)
+
+        run(scenario())
+
+    def test_with_sensai_off_its_pane_says_how_to_turn_it_on(
+        self, tmp_path: Path
+    ) -> None:
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=False)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai")
+                await wait_until(pilot, lambda: "SensAI is off" in sensai_text(app))
+                assert "sensai.enabled true" in sensai_text(app)
+
+        run(scenario())
+
+
+class TestTheContextGauge:
+    """The bottom edge of SensAI's pane says how full the context window is, and its `compact` summarizes the conversation."""
+
+    def test_the_share_is_written_with_a_decimal_only_while_it_is_small(self) -> None:
+        assert tui_module.percent_label(0.0) == "0%"
+        assert tui_module.percent_label(0.034) == "3.4%"
+        assert tui_module.percent_label(0.567) == "57%"
+
+    def test_a_guessed_window_is_marked_and_compact_is_a_link(self) -> None:
+        subtitle = tui_module.context_subtitle(0.12, estimated=True)
+
+        assert Content.from_markup(subtitle).plain == "context ~12% · compact"
+        assert "@click=app.compact_sensai" in subtitle
+        assert Content.from_markup(tui_module.context_subtitle(None)).plain == "compact"
+
+    def test_the_gauge_starts_empty_and_follows_the_answers(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        TestTheSensAIPane.answer_with(monkeypatch)
+
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                sensai = app.query_one("#sensai-log", RichLog)
+                # nothing is measured until SensAI has answered
+                assert (
+                    Content.from_markup(str(sensai.border_subtitle)).plain == "compact"
+                )
+
+                await TestTheSensAIPane.enter(pilot, app, "sensai how do I pause?")
+                await wait_until(
+                    pilot,
+                    lambda: (
+                        Content.from_markup(str(sensai.border_subtitle)).plain
+                        == "context 34% · compact"
+                    ),
+                )
+
+        run(scenario())
+
+    def test_compact_asks_for_a_summary(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def scenario() -> None:
+            backend = FakeBackend()
+            session = FakeSession()
+            controller = ReloadedController(session, backend, watch_path=tmp_path)
+            submitted: list[str] = []
+            monkeypatch.setattr(controller, "submit", submitted.append)
+            app = ReloadedApp(controller, backend, rain_seconds=0.0, sensai=True)
+            async with app.run_test(size=(140, 30)):
+                await app.run_action("compact_sensai")
+
+                assert submitted == ["sensai compact"]
+                assert app.focused is app.query_one(CommandInput)
+
+        run(scenario())

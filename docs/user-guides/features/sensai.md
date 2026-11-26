@@ -5,7 +5,7 @@
     **SensAI** is an optional assistant that answers in plain language, using a language model that you choose and provide a key for. It works in two places:
 
     - **The Dojo:** the [SensAI chat](dojo/sensai.md) on every page answers questions about your job and its trials, changes your plot, compares trials in [versus mode](dojo/mosaic.md#versus-mode), and explains how to use Mojo.
-    - **Reloaded:** the [`sensai` command](reloaded.md#asking-sensai) answers how to use Mojo, from the docs.
+    - **Reloaded:** the [`sensai` command](reloaded.md#asking-sensai) answers how to use Mojo from the docs, in a pane that swaps with the log, and follows on from your last few questions.
 
     SensAI is still **experimental**. It is an AI assistant and can make mistakes, so please verify its answers and any changes it makes before relying on them. It is not a code assistant: it reads the Mojo docs and, in the Dojo, the job and plot you have open, but never your project's code. Nothing is sent anywhere until you turn it on.
 
@@ -63,23 +63,24 @@ SensAI reads the key from the environment and never stores it in the settings fi
 
 `models` is a list, and the order matters: SensAI tries the first entry, and **falls back** to the next when a model cannot answer, for example when you hit a free tier's rate limit. Each entry has:
 
-| Field        | Meaning                                                                                                                                       |
-| :----------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`   | Who serves the model. One of the providers below.                                                                                             |
-| `model_name` | That provider's own name for the model, such as `gemini-3.5-flash-lite`.                                                                      |
-| `base_url`   | Optional. Send this entry's requests to this address instead of the provider's usual one, for example a gateway or a proxy. Ollama needs one. |
+| Field            | Meaning                                                                                                                                                                      |
+| :--------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`       | Who serves the model. One of the providers below.                                                                                                                            |
+| `model_name`     | That provider's own name for the model, such as `gemini-3.5-flash-lite`.                                                                                                     |
+| `base_url`       | Optional. Send this entry's requests to this address instead of the provider's usual one, for example a gateway or a proxy. Ollama needs one.                                |
+| `context_window` | Optional. This model's context window in tokens, for a model whose window Mojo cannot look up, such as most served by Ollama. See [long conversations](#long-conversations). |
 
 The Provider menu in the settings panel shows the variable for each choice.
 
 ???+ example "Example: A local model with Ollama, and a cloud model as a backup"
 
-    Ollama has no default address, so give each Ollama entry its own `base_url`:
+    Ollama has no default address, so give each Ollama entry its own `base_url`, and the context window it serves the model with:
 
     ``` toml
     [sensai]
     enabled = true
     models = [
-        { provider = "Ollama", model_name = "llama3.1", base_url = "http://localhost:11434/v1" },
+        { provider = "Ollama", model_name = "llama3.1", base_url = "http://localhost:11434/v1", context_window = 8192 },
         { provider = "Google", model_name = "gemini-3.5-flash-lite" },
     ]
     ```
@@ -100,6 +101,16 @@ Two settings keep a message from running away:
 | `sensai.max_versus_trials` | 50      | The most trials one message may add to [versus mode](dojo/mosaic.md#versus-mode), since each one loads its data. Ask again to add the next batch.         |
 
 `max_requests` limits each question in Reloaded the same way.
+
+### Long conversations
+
+The conversation so far goes with every message, in the Dojo's [chat](dojo/sensai.md#the-chat-window) and in [Reloaded](reloaded.md#asking-sensai), so a long one fills the model's context window. Once it fills `sensai.compact_at` of the window (80% by default), SensAI first summarizes its earlier part with the same model, keeping your first question and the latest few as they are, and goes on from the summary.
+
+Both show how much of the window the conversation takes up, with a way to summarize it on demand: under the Dojo chat's message box, with a **Compact** button, and at the bottom edge of Reloaded's SensAI pane, where clicking **compact** does what `sensai compact` does. The number counts everything that goes with each message, not only the conversation: SensAI's own instructions and tool definitions too, as your model's provider counted them for the last answer, so it shows once SensAI has answered. A `~` before it means the window is a guess (see below).
+
+What SensAI reads while working out one answer, such as a page of the docs, is not in the number, since it is dropped once the answer is in. It does take room while SensAI works, so with a small window, set Compact At low enough to leave a few thousand tokens free.
+
+With several models, the smallest window among them counts. For a model whose window Mojo cannot look up, such as most models served by Ollama, set `context_window` on its entry to the window it is served with (Ollama's `num_ctx`); without one, Mojo assumes 200,000 tokens and a smaller model can run out of room before SensAI summarizes.
 
 ### Choosing what it can do
 

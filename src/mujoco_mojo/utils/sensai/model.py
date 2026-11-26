@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from google.genai import errors as google_errors
 from pydantic_ai import ModelAPIError, UsageLimits
+from pydantic_ai.models import Model
 from pydantic_ai.models.fallback import FallbackModel
 
-from mujoco_mojo.settings import MujocoMojoSettings
+from mujoco_mojo.settings import MujocoMojoSettings, SensAIModelEntry
 
 
 def build_fallback_model() -> FallbackModel:
@@ -48,3 +51,23 @@ def usage_limits(max_requests: int) -> UsageLimits:
     `max_requests` is `sensai.max_requests`. A request takes one to three (route it, edit, answer) and a refused edit adds one to three more, so the default of 12 leaves room to correct a mistake or two. When a model loops, or rate limits make every request cost several attempts, it is what stops the question from sending dozens.
     """
     return UsageLimits(request_limit=max_requests)
+
+
+def smallest_context_window(
+    entries: Sequence[SensAIModelEntry], model: Model
+) -> int | None:
+    """
+    The context window a conversation with `model` has to fit in: the smallest of its models' windows, each from its entry's `context_window` when that is set and from the model otherwise (its profile, or genai-prices), or None when none is known.
+
+    `entries` are the ones `build_fallback_model` built `model`'s models from, in the same order.
+    """
+    models = model.models if isinstance(model, FallbackModel) else [model]
+    windows = []
+    for index, each in enumerate(models):
+        entry = entries[index] if index < len(entries) else None
+        window = (entry.context_window if entry is not None else None) or (
+            each.context_window
+        )
+        if window:
+            windows.append(window)
+    return min(windows, default=None)

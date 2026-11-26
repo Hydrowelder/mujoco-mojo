@@ -63,6 +63,8 @@ type SensAI = {
   closeTab(id: string): void;
   renameTab(id: string, value: string): void;
   send(): Promise<void>;
+  compact(): Promise<void>;
+  readonly contextText: string;
   isBusy(id: string): boolean;
   isRunning(id: string): boolean;
   isQueued(id: string): boolean;
@@ -127,6 +129,11 @@ interface Call {
 
 let calls: Call[];
 let failNextRequest: boolean;
+// what /sensai/compact is asked to summarize, and what it answers; a test that leaves
+// `compactAnswer` unset holds the request until it calls `release`
+let compactCalls: Array<{ message_history: Array<{ role: string; content: string }> }>;
+let compactAnswer: object | undefined;
+let releaseCompact: (() => void) | undefined;
 
 // the dojo store the component reaches through Alpine, with a copy the tests can watch
 const store = {
@@ -139,11 +146,23 @@ beforeEach(() => {
   localStorage.clear();
   calls = [];
   failNextRequest = false;
+  compactCalls = [];
+  compactAnswer = undefined;
+  releaseCompact = undefined;
   store.copyText.mockClear();
   vi.stubGlobal("Alpine", { store: () => store });
   vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
     if (url === "/sensai/config") {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ enabled: true }) });
+    }
+    if (url === "/sensai/compact") {
+      compactCalls.push(JSON.parse(typeof init?.body === "string" ? init.body : "{}") as (typeof compactCalls)[number]);
+      const answered = compactAnswer;
+      if (answered) return Promise.resolve({ ok: true, json: () => Promise.resolve(answered) });
+      return new Promise((resolve) => {
+        releaseCompact = () =>
+          resolve({ ok: true, json: () => Promise.resolve({ compacted: false, conversation: [], context: null }) });
+      });
     }
     if (failNextRequest) {
       failNextRequest = false;
@@ -2758,5 +2777,108 @@ describe("chats shared with another browser tab", () => {
 
     expect(s.tabs).toBe(before);
     expect(first(s).messages).toEqual([]);
+  });
+});
+
+describe("a chat's conversation", () => {
+  const conversation = [
+    { role: "user", content: "first" },
+    { role: "summary", content: "what was said before" },
+    { role: "assistant", content: "one" },
+  ];
+
+  // asks `text` in the open chat and answers it with `reply`, with `extra` in the result
+  async function exchange(s: SensAI, text: string, reply: string, extra: object = {}): Promise<void> {
+    const sent = ask(s, text);
+    await settle();
+    calls[calls.length - 1]!.reply.answer(reply, extra);
+    await sent;
+  }
+
+  it("is what the server sends back, and goes with the next message in place of the chat's messages", async () => {
+    const s = await boot();
+    await exchange(s, "first", "one", { conversation, context: { fraction: 0.25, estimated: false } });
+
+    expect(first(s).context).toEqual(conversation);
+    expect(s.contextText).toBe("Context 25%");
+
+    const sent = ask(s, "second");
+    await settle();
+    expect(calls[1]!.body.message_history).toEqual(conversation);
+    calls[1]!.reply.answer("two");
+    await sent;
+  });
+
+  it("grows by the exchange when a reply comes without one", async () => {
+    const s = await boot();
+    await exchange(s, "first", "one", { conversation, context: { fraction: 0.25, estimated: false } });
+    await exchange(s, "second", "two");
+
+    expect(first(s).context).toEqual([
+      ...conversation,
+      { role: "user", content: "second" },
+      { role: "assistant", content: "two" },
+    ]);
+    // the last reading stays until the server sends another
+    expect(s.contextText).toBe("Context 25%");
+  });
+
+  it("is summarized by Compact, and the chat goes on from the summary", async () => {
+    const s = await boot();
+    await exchange(s, "first", "one", { conversation, context: { fraction: 0.25, estimated: false } });
+    const summary = [
+      { role: "user", content: "first" },
+      { role: "summary", content: "shorter" },
+    ];
+    compactAnswer = { compacted: true, conversation: summary, context: { fraction: 0.05, estimated: true } };
+
+    await s.compact();
+
+    expect(compactCalls[0]!.message_history).toEqual(conversation);
+    expect(first(s).context).toEqual(summary);
+    expect(s.contextText).toBe("Context ~5.0%");
+    expect(first(s).messages.at(-1)!.content).toContain("Summarized the conversation so far");
+  });
+
+  it("is left as it was when there was nothing to summarize, which the chat says", async () => {
+    const s = await boot();
+    await exchange(s, "first", "one", { conversation, context: { fraction: 0.25, estimated: false } });
+    compactAnswer = { compacted: false, conversation, context: { fraction: 0.25, estimated: false } };
+
+    await s.compact();
+
+    expect(first(s).context).toEqual(conversation);
+    expect(first(s).messages.at(-1)!.content).toContain("Nothing to summarize yet");
+  });
+
+  it("takes no message while it is being summarized", async () => {
+    const s = await boot();
+    await exchange(s, "first", "one", { conversation });
+    const compacting = s.compact();
+    await settle();
+
+    expect(s.isBusy(first(s).id)).toBe(true);
+    await ask(s, "too soon");
+    expect(calls).toHaveLength(1);
+
+    releaseCompact!();
+    await compacting;
+    expect(s.isBusy(first(s).id)).toBe(false);
+  });
+
+  it("is the chat's own messages for a chat the server has not sent one for", async () => {
+    const s = await boot();
+    first(s).messages.push(
+      { role: "user", content: "earlier", ts: 1 },
+      { role: "assistant", content: "answer", ts: 2 },
+    );
+    compactAnswer = { compacted: false, conversation: [], context: null };
+
+    await s.compact();
+
+    expect(compactCalls[0]!.message_history).toEqual([
+      { role: "user", content: "earlier" },
+      { role: "assistant", content: "answer" },
+    ]);
   });
 });

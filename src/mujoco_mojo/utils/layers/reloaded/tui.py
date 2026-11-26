@@ -33,7 +33,7 @@ from textual.selection import Selection
 from textual.strip import Strip
 from textual.suggester import Suggester
 from textual.widget import Widget
-from textual.widgets import Button, Footer, Input, RichLog, Static
+from textual.widgets import Button, ContentSwitcher, Footer, Input, RichLog, Static
 
 from mujoco_mojo.settings import SENSAI_DISCLOSURE, ReloadedKeySettings
 from mujoco_mojo.utils.log import TerminalFilter
@@ -47,8 +47,13 @@ from .controller import (
     HelpEvent,
     LogEvent,
     Outcome,
+    Pane,
     ReloadedController,
     RunState,
+    SensAIClearedEvent,
+    SensAIContextEvent,
+    SensAIEvent,
+    ShowPaneEvent,
     StatusEvent,
     speed_label,
 )
@@ -114,10 +119,14 @@ _LEVEL_STYLES = {
 _EXTRA_KEY_HELP = [
     ("Enter", "Repeat the last command, when nothing is typed"),
     ("Click ?", "Show or hide the hint on what the typed command does"),
-    ("Tab", "Complete the command being typed"),
+    (
+        "Tab",
+        "Complete the command being typed, or with nothing to complete, switch between the log and SensAI",
+    ),
     ("Up / Down", "Previous and next command"),
     ("Click seed, trial, speed", "Edit it. Enter applies and Esc cancels"),
     ("Click watch, record", "Switch it on or off"),
+    ("Click Log, SensAI", "Show the log or the conversation with SensAI"),
 ]
 
 
@@ -367,14 +376,64 @@ def format_record(record: logging.LogRecord, width: int | None = None) -> Text:
     return text
 
 
+PANES: tuple[tuple[Pane, str], ...] = (("log", "Log"), ("sensai", "SensAI"))
+"""What the one pane can show, by the name its title gives each."""
+
+PANE_IDS: dict[Pane, str] = {"log": "log", "sensai": "sensai-log"}
+"""The widget that shows each pane's content."""
+
+
+def pane_title(shown: Pane, unread: bool = False) -> str:
+    """The pane's border title, which is how to switch it: each pane's name, the shown one bright and the other a click away, with a dot on SensAI while an answer it gave has not been seen."""
+    names = []
+    for pane, name in PANES:
+        style = f"bold {INK_STRONG}" if pane == shown else str(INK_MUTED)
+        dot = f" [{ACCENT}]•[/]" if pane == "sensai" and unread else ""
+        names.append(f"[@click=app.show_pane('{pane}')][{style}]{name}[/]{dot}[/]")
+    return f" [{INK_MUTED}]·[/] ".join(names)
+
+
+def percent_label(fraction: float) -> str:
+    """A share as the gauge writes it: a decimal below 10% so a short conversation does not read as nothing, whole percents above."""
+    percent = fraction * 100
+    if percent == 0:
+        return "0%"
+    return f"{percent:.1f}%" if percent < 10 else f"{percent:.0f}%"
+
+
+def context_subtitle(fraction: float | None, estimated: bool = False) -> str:
+    """The bottom edge of SensAI's pane: how full the context window is with the conversation, `~` when the window is a guess and nothing before SensAI has answered (no number has been measured), and a `compact` that summarizes it."""
+    compact = f"[@click=app.compact_sensai][{ACCENT}]compact[/][/]"
+    if fraction is None:
+        return compact
+    approximately = "~" if estimated else ""
+    return f"[{INK_MUTED}]context {approximately}{percent_label(fraction)}[/] [{INK_MUTED}]·[/] {compact}"
+
+
+def sensai_intro(enabled: bool) -> Text:
+    """What SensAI's pane says before anything is asked: how to use it, or that it is off."""
+    if not enabled:
+        return render_markup(
+            "[dim]SensAI is off. Turn it on with [bold]mujoco-mojo settings set sensai.enabled true[/bold] and add a model, "
+            "as the SensAI guide in the docs says. Type [bold]log[/bold], or click Log above, to go back.[/dim]"
+        )
+    return Text.assemble(
+        render_markup(
+            "[dim]Ask SensAI how to use Mojo: type a question and press Enter. It answers from the Mojo docs, not from your code or the run, "
+            "and remembers the conversation, summarizing its earlier part once it grows long "
+            "([bold]sensai compact[/bold] does that now, [bold]sensai clear[/bold] starts over). "
+            "Commands still work here, and [bold]log[/bold], or a click on Log above, goes back.[/dim]\n"
+        ),
+        (SENSAI_DISCLOSURE, str(INK_MUTED)),
+    )
+
+
 def render_log_item(item: LogItem, width: int | None = None) -> Text:
     """Turns whatever was waiting into text, on the UI side so the thread that logged never pays for it. `width` is how wide the log pane is, which lets a record's location sit flush right."""
     try:
         if isinstance(item, Text):
             return item
         if isinstance(item, LogEvent):
-            if item.markdown:
-                return render_markdown(item.message, width)
             return render_markup(item.message) if item.markup else Text(item.message)
         return format_record(item, width)
     except Exception as error:
@@ -747,6 +806,11 @@ class CommandSuggester(Suggester):
         self._commands = tuple(commands)
 
     async def get_suggestion(self, value: str) -> str | None:
+        return self.suggest(value)
+
+    def suggest(self, value: str) -> str | None:
+        """The command `value` is the start of, or None. Case does not matter, as in the suggestion the command line shows."""
+        value = value.casefold()
         if value.startswith(self.EXPLAIN):
             rest = value.removeprefix(self.EXPLAIN)
             if not rest:
@@ -765,7 +829,10 @@ class CommandSuggester(Suggester):
 
 
 class CommandInput(Input):
-    """Command line with Up and Down history and Tab completion."""
+    """Command line with Up and Down history, and Tab completion that switches the pane when there is nothing to complete."""
+
+    class SwitchPane(Message):
+        """Tab was pressed with nothing to complete, which switches the pane between the log and SensAI."""
 
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("up", "history_previous", "Previous command", show=False),
@@ -776,9 +843,10 @@ class CommandInput(Input):
     PLACEHOLDER = "Type a command, enter to repeat previous, or help"
 
     def __init__(self, suggestions: Iterable[str], *, id: str | None = None) -> None:
+        self._commands = CommandSuggester(suggestions)
         super().__init__(
             placeholder=self.PLACEHOLDER,
-            suggester=CommandSuggester(suggestions),
+            suggester=self._commands,
             id=id,
         )
         # a blink redraws the screen twice a second, and a terminal drops the underline of the link under the mouse on every redraw, so ctrl+click on a link in the log missed
@@ -794,7 +862,11 @@ class CommandInput(Input):
         self._draft = ""
 
     def action_complete(self) -> None:
-        """Accepts the suggested completion, the same as pressing Right at the end of the line."""
+        """Accepts the suggested completion, the same as pressing Right at the end of the line. With nothing to complete (an empty line, a question, a whole command), asks for the other pane instead."""
+        completion = self._commands.suggest(self.value) if self.value else None
+        if completion is None or len(completion) <= len(self.value):
+            self.post_message(self.SwitchPane())
+            return
         self.action_end()
         self.action_cursor_right()
 
@@ -895,7 +967,7 @@ class ReloadedApp(App[None]):
         logs: LogBuffer | None = None,
         sensai: bool = False,
     ) -> None:
-        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it, `logs` is a buffer that already holds what was logged before the app started, which the log pane shows first and the app goes on filling, and `sensai` is whether SensAI is on, which shows its icon and disclosure in the status bar."""
+        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it, `logs` is a buffer that already holds what was logged before the app started, which the log pane shows first and the app goes on filling, and `sensai` is whether SensAI is on, which shows its icon and disclosure in the status bar and decides what SensAI's pane says first."""
         super().__init__(watch_css=watch_css)
         self.shortcuts = shortcut_bindings(keys or ReloadedKeySettings())
         """The keys bound to actions, in the order the footer shows them."""
@@ -917,6 +989,7 @@ class ReloadedApp(App[None]):
         self._logs = logs if logs is not None else LogBuffer()
         self._quitting = False
         self._sensai = sensai
+        self._sensai_unread = False
         controller.sink = self._deliver
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
@@ -954,9 +1027,12 @@ class ReloadedApp(App[None]):
             self._controller.has_runtime,
             id="controls",
         )
-        log = SelectableLog(id="log", wrap=True, highlight=False, max_lines=10_000)
-        log.border_title = "Log"
-        yield log
+        # one pane, which shows the log or the conversation with SensAI; its title switches it
+        with ContentSwitcher(initial=PANE_IDS["log"], id="panes"):
+            for pane, _name in PANES:
+                yield SelectableLog(
+                    id=PANE_IDS[pane], wrap=True, highlight=False, max_lines=10_000
+                )
         with Horizontal(id="command-row"):
             with Horizontal(id="command-box") as command_box:
                 command_box.border_title = "Command"
@@ -974,6 +1050,10 @@ class ReloadedApp(App[None]):
         self.set_interval(LOG_FLUSH_SECONDS, self._flush_logs)
         self.set_interval(VIEWER_CHECK_SECONDS, self._check_viewer)
         self._set_explain(self._explain_at_start)
+        self._refresh_pane_titles()
+        sensai = self.query_one(f"#{PANE_IDS['sensai']}", SelectableLog)
+        sensai.write(sensai_intro(self._sensai))
+        sensai.border_subtitle = context_subtitle(None)
 
         self._controller.start()
 
@@ -988,13 +1068,17 @@ class ReloadedApp(App[None]):
         value = event.value
         event.input.clear()
         event.input.remember(value.strip())
-        if value.strip():
+        text = self._routed(value)
+        if text is None:
+            return
+        # a question shows up in SensAI's pane once it is asked
+        if text.strip() and ReloadedController.sensai_question(text) is None:
             self._logs.put(
                 Text.assemble(
-                    ("> ", f"bold {ACCENT}"), (value.strip(), f"bold {INK_STRONG}")
+                    ("> ", f"bold {ACCENT}"), (text.strip(), f"bold {INK_STRONG}")
                 )
             )
-        self._controller.submit(value)
+        self._controller.submit(text)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if isinstance(event.input, CommandInput):
@@ -1054,6 +1138,19 @@ class ReloadedApp(App[None]):
                 self.action_help()
             case ExitEvent():
                 await self.action_quit()
+            case ShowPaneEvent(pane=pane):
+                self.action_show_pane(pane)
+            case SensAIEvent():
+                self._write_sensai(message.event)
+            case SensAIClearedEvent():
+                sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
+                if sensai is not None:
+                    sensai.clear()
+                    sensai.write(sensai_intro(self._sensai))
+            case SensAIContextEvent(fraction=fraction, estimated=estimated):
+                sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
+                if sensai is not None:
+                    sensai.border_subtitle = context_subtitle(fraction, estimated)
 
     def on_print(self, event: events.Print) -> None:
         text = event.text.rstrip("\n")
@@ -1078,6 +1175,37 @@ class ReloadedApp(App[None]):
 
     def action_toggle_pause(self) -> None:
         self._controller.toggle_pause()
+
+    def on_command_input_switch_pane(self, _message: CommandInput.SwitchPane) -> None:
+        self.action_show_pane("log" if self._shown_pane() == "sensai" else "sensai")
+
+    def action_compact_sensai(self) -> None:
+        """Summarizes the conversation with SensAI so far, which the `compact` at the bottom of its pane asks for."""
+        self._controller.submit("sensai compact")
+        command = self._find(CommandInput)
+        if command is not None:
+            command.focus()
+
+    def action_show_pane(self, pane: str) -> None:
+        """Shows the log or SensAI's conversation in the pane, which the pane's title and the `log` and `sensai` commands ask for."""
+        switcher = self._find(ContentSwitcher, "#panes")
+        if switcher is None:
+            return
+        shown: Pane = "sensai" if pane == "sensai" else "log"
+        switcher.current = PANE_IDS[shown]
+        if shown == "sensai":
+            self._sensai_unread = False
+        # what typing does changes with the pane, so the box says which it is
+        box = self._find(Horizontal, "#command-box")
+        if box is not None:
+            box.border_title = "Ask SensAI" if shown == "sensai" else "Command"
+        self._refresh_pane_titles()
+        self._refresh_placeholder()
+        self._refresh_explain()
+        # a click on the title would leave the focus on the pane, where typing goes nowhere
+        command = self._find(CommandInput)
+        if command is not None:
+            command.focus()
 
     def action_toggle_explain(self) -> None:
         self._set_explain(not self.query_one("#hint", Static).display)
@@ -1138,13 +1266,74 @@ class ReloadedApp(App[None]):
         except NoMatches:
             return None
 
+    def _shown_pane(self) -> Pane:
+        switcher = self._find(ContentSwitcher, "#panes")
+        if switcher is not None and switcher.current == PANE_IDS["sensai"]:
+            return "sensai"
+        return "log"
+
+    def _routed(self, value: str) -> str | None:
+        """
+        What a line typed into the command box is for the controller, or `None` when it is nothing.
+
+        While SensAI's pane shows, a line that is not one of Reloaded's commands is a question for it, so `sensai` need not be typed, and an empty line does nothing rather than run the last command again.
+        """
+        if self._shown_pane() == "log":
+            return value
+        if not value.strip():
+            return None
+        if ReloadedController.is_command(value):
+            return value
+        return f"sensai {value.strip()}"
+
     def _refresh_explain(self) -> None:
         hint = self._find(Static, "#hint")
         command = self._find(CommandInput)
-        if hint is not None and command is not None and hint.display:
-            hint.update(
-                Text(self._controller.describe(command.value), style=INK_SECONDARY)
+        if hint is None or command is None or not hint.display:
+            return
+        text = self._routed(command.value)
+        sentence = (
+            "Type a question, or a command."
+            if text is None
+            else self._controller.describe(text)
+        )
+        hint.update(Text(sentence, style=INK_SECONDARY))
+
+    def _refresh_pane_titles(self) -> None:
+        title = pane_title(self._shown_pane(), self._sensai_unread)
+        for pane, _name in PANES:
+            widget = self._find(SelectableLog, f"#{PANE_IDS[pane]}")
+            if widget is not None:
+                widget.border_title = title
+
+    def _pane_width(self) -> int:
+        """How wide the pane's text is. Both of its widgets share the place, so the one shown has the width and the hidden one has none."""
+        widths = [
+            widget.scrollable_content_region.width
+            for pane, _name in PANES
+            if (widget := self._find(SelectableLog, f"#{PANE_IDS[pane]}")) is not None
+        ]
+        return max(widths, default=0)
+
+    def _write_sensai(self, event: SensAIEvent) -> None:
+        sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
+        if sensai is None:
+            return
+        width = self._pane_width()
+        if event.question:
+            # a blank line between one exchange and the next
+            sensai.write(Text(""))
+            text = Text.assemble(
+                ("> ", f"bold {ACCENT}"), (event.message, f"bold {INK_STRONG}")
             )
+        elif event.markdown:
+            text = render_markdown(event.message, width)
+            if self._shown_pane() == "log":
+                self._sensai_unread = True
+                self._refresh_pane_titles()
+        else:
+            text = render_markup(event.message)
+        sensai.write(text, width=width or None)
 
     def _refresh_placeholder(self) -> None:
         # with the hint showing, it already says what Enter does
@@ -1152,7 +1341,9 @@ class ReloadedApp(App[None]):
         hint = self._find(Static, "#hint")
         if command is None or hint is None:
             return
-        if hint.display:
+        if self._shown_pane() == "sensai":
+            command.placeholder = "Ask SensAI a question, or type a command"
+        elif hint.display:
             command.placeholder = CommandInput.PLACEHOLDER
         elif self._controller.status().state is RunState.PAUSED:
             command.placeholder = "Press Enter to step, or type a command"
@@ -1170,7 +1361,8 @@ class ReloadedApp(App[None]):
         controls = self._find(ControlBar)
         if controls is not None:
             controls.show(status.state, self._controller.has_runtime)
-        log = self._find(RichLog)
+        # SensAI's pane has its context gauge on that edge instead
+        log = self._find(SelectableLog, f"#{PANE_IDS['log']}")
         if log is not None:
             summary = run_summary(status)
             log.border_subtitle = (
@@ -1185,7 +1377,7 @@ class ReloadedApp(App[None]):
             self.post_message(ControllerMessage(event))
 
     def _flush_logs(self) -> None:
-        log = self._find(RichLog)
+        log = self._find(SelectableLog, f"#{PANE_IDS['log']}")
         if log is None:
             return
         items, dropped = self._logs.take(LOG_LINES_PER_FLUSH)

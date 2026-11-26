@@ -176,6 +176,9 @@
                  @input="$store.dojo.updateField({{ field_expr }}.path, $event.target.value === '' ? null : Number($event.target.value))"
                  :disabled="!$store.dojo.settingsIsLocalhost"
                  class="input-number" />
+          <!-- the value is shown and typed as a percentage, and saved as a fraction (settings-panel.ts) -->
+          <span x-show="{{ field_expr }}.percent"
+                class="pr-2 text-xs text-ink-muted select-none">%</span>
         </div>
         <p x-show="$store.dojo.settingsFieldOutOfRange({{ field_expr }})"
            class="text-xs text-danger-500 text-right mt-0.5"
@@ -519,7 +522,14 @@
          @focusout="$store.dojo.hideSettingsHint()">
       <template x-for="field in item.fields"
                 :key="field.path">
-        <div class="flex-1 min-w-0">
+        <!-- a row has no labels, so each field explains itself in the hint bar while
+             it is under the mouse or being edited; the row around it goes back to the
+             provider's note. focusin is stopped so the row's own handler does not
+             replace it -->
+        <div class="flex-1 min-w-0"
+             @mouseenter="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}, field))"
+             @mouseleave="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}))"
+             @focusin.stop="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}, field))">
           <!-- select: teleported to <body> and positioned from the trigger's
                own getBoundingClientRect(), same as settings_field_row's own
                select widget above (NOT the dict field's compact valueType
@@ -585,14 +595,18 @@
                    class="input-text w-full text-xs" />
           </template>
 
-          <!-- number -->
+          <!-- number: in the text fields' look, since it sits in a row beside them -->
           <template x-if="field.widget === 'number'">
-            <div class="input-number-wrap w-full">
+            <div class="relative w-full">
               <input type="number"
                      :value="field.value"
                      @input="$store.dojo.updateField(field.path, $event.target.valueAsNumber)"
                      :disabled="!$store.dojo.settingsIsLocalhost"
-                     class="input-number text-xs" />
+                     :placeholder="field.title"
+                     class="input-text w-full text-xs"
+                     :class="field.percent ? 'pr-6' : ''" />
+              <span x-show="field.percent"
+                    class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-ink-muted select-none pointer-events-none">%</span>
             </div>
           </template>
 

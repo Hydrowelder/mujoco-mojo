@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   collapseColorAlias,
+  createSettingsPanelState,
   dropdownStyle,
   fieldRangeMessage,
   filterSettingsSections,
@@ -468,7 +469,7 @@ describe("looksLikeHttpUrl", () => {
 describe("listRowHint", () => {
   const list = () => parseSettingsSchema(schema, values(), valueMeta)[1]!.listFields[0]!;
 
-  it("is the docstring of the row's own choice, whichever control it is for", () => {
+  it("is the docstring of the row's own choice for the row around its fields", () => {
     const models = list();
     const row = models.items[0]!;
     row.fields.find((f) => f.widget === "select")!.value = "slow";
@@ -494,6 +495,27 @@ describe("listRowHint", () => {
     choice.value = "unlisted";
 
     expect(listRowHint(row, models)).toBe(choice.description);
+  });
+
+  it("is a field's own description while that field is under the mouse or being edited", () => {
+    const models = list();
+    const row = models.items[0]!;
+    const name = row.fields.find((f) => f.key === "name")!;
+    name.description = "That provider's own name for the model.";
+
+    expect(listRowHint(row, models, name)).toBe("That provider's own name for the model.");
+  });
+
+  it("is still the choice's docstring for the choice itself, and for a field with no description", () => {
+    const models = list();
+    const row = models.items[0]!;
+    const choice = row.fields.find((f) => f.widget === "select")!;
+    choice.value = "slow";
+    const name = row.fields.find((f) => f.key === "name")!;
+    name.description = "";
+
+    expect(listRowHint(row, models, choice)).toBe("Careful.");
+    expect(listRowHint(row, models, name)).toBe("Careful.");
   });
 
   it("is the list's description for a row with no choice in it", () => {
@@ -562,6 +584,96 @@ describe("dropdownStyle", () => {
   });
 });
 
+describe("a row added to a list", () => {
+  const listSchema: SettingsSchema = {
+    type: "object",
+    properties: { sensai: { $ref: "#/$defs/SensAI" } },
+    $defs: {
+      SensAI: {
+        type: "object",
+        title: "SensAI",
+        properties: { models: { type: "array", title: "Models", items: { $ref: "#/$defs/Entry" } } },
+      },
+      Entry: {
+        type: "object",
+        title: "Model",
+        properties: {
+          model_name: { type: "string", title: "Model Name" },
+          retries: { type: "integer", title: "Retries", minimum: 1 },
+          context_window: { anyOf: [{ type: "integer", minimum: 1 }, { type: "null" }], title: "Context Window" },
+        },
+      },
+    },
+  };
+
+  it("starts an optional number empty and a required one at its minimum", () => {
+    const state = createSettingsPanelState();
+    state.settingsSections = parseSettingsSchema(listSchema, { sensai: { models: [] } }, {});
+    state.addListItem("sensai.models");
+
+    expect(serializeSettings(state.settingsSections)).toEqual({
+      sensai: { models: [{ model_name: "", retries: 1, context_window: null }] },
+    });
+  });
+});
+
+describe("a setting stored as a fraction and edited as a percentage", () => {
+  const percentSchema: SettingsSchema = {
+    type: "object",
+    properties: { sensai: { $ref: "#/$defs/SensAI" } },
+    $defs: {
+      SensAI: {
+        type: "object",
+        title: "SensAI",
+        properties: {
+          compact_at: {
+            type: "number",
+            title: "Compact At",
+            minimum: 0.1,
+            maximum: 1,
+            default: 0.8,
+            "x-widget": "percent",
+          },
+        },
+      },
+    },
+  };
+  const parse = (value: number) => parseSettingsSchema(percentSchema, { sensai: { compact_at: value } }, {});
+  const field = (groups: SettingsGroup[]) => findSettingsField(groups, "sensai.compact_at")!;
+
+  it("is shown in percent, with its bounds and default in percent too", () => {
+    const shown = field(parse(0.75));
+    expect(shown.widget).toBe("number");
+    expect(shown.percent).toBe(true);
+    expect([shown.value, shown.default, shown.minimum, shown.maximum]).toEqual([75, 80, 10, 100]);
+  });
+
+  it("shows a fraction that floating point cannot hold exactly as the percentage typed", () => {
+    expect(field(parse(0.15)).value).toBe(15);
+  });
+
+  it("is saved as the fraction the setting holds", () => {
+    const groups = parse(0.75);
+    field(groups).value = 15;
+    expect(serializeSettings(groups)).toEqual({ sensai: { compact_at: 0.15 } });
+  });
+
+  it("is checked and worded against its bounds in percent", () => {
+    const shown = field(parse(0.75));
+    shown.value = 5;
+    expect(isFieldOutOfRange(shown)).toBe(true);
+    expect(fieldRangeMessage(shown)).toBe("Must be between 10% and 100%");
+    shown.value = 100;
+    expect(isFieldOutOfRange(shown)).toBe(false);
+  });
+
+  it("leaves an ordinary number alone", () => {
+    const verbose = findSettingsField(parseSettingsSchema(schema, values(), valueMeta), "general.verbose")!;
+    expect(verbose.percent).toBeFalsy();
+    expect(fieldRangeMessage(verbose)).toBe("Must be between 0 and 3");
+  });
+});
+
 describe("the settings panel's markup", () => {
   const template = readFileSync(resolve(import.meta.dirname, "../../../../partials/_settings_panel.html"), "utf-8");
 
@@ -573,6 +685,11 @@ describe("the settings panel's markup", () => {
     expect(template).not.toContain("coords");
   });
 
+  it("puts a % after the input of a percent setting, in a section and in a list row", () => {
+    expect(template).toContain('<span x-show="{{ field_expr }}.percent"');
+    expect(template).toContain('<span x-show="field.percent"');
+  });
+
   it("marks the pane the lists scroll in, which hides a list whose button has scrolled out of it", () => {
     expect(template).toContain("<div data-settings-pane");
   });
@@ -581,10 +698,27 @@ describe("the settings panel's markup", () => {
     expect(template).toContain("<div data-settings-hint");
   });
 
-  it("shows a list row's choice as the hint while any control in the row is hovered or edited", () => {
+  it("shows a list row's choice as the hint while the row is hovered or edited", () => {
     for (const event of ["@mouseenter", "@focusin"]) {
       expect(template).toContain(`${event}="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}))"`);
     }
     expect(template).toContain('@mouseleave="$store.dojo.hideSettingsHint()"');
+  });
+
+  it("shows a list row field's own description while it is hovered or edited, and its title in an empty number box", () => {
+    expect(template).toContain(
+      '@mouseenter="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}, field))"',
+    );
+    expect(template).toContain(
+      '@focusin.stop="$store.dojo.showSettingsHint($store.dojo.listRowHint(item, {{ list_expr }}, field))"',
+    );
+    expect(template.match(/:placeholder="field\.title"/g)).toHaveLength(2);
+  });
+
+  it("draws a list row's number in the text fields' look, like the fields beside it", () => {
+    const row = template.slice(template.indexOf("{% macro settings_list_rows"));
+    const number = row.slice(row.indexOf("field.widget === 'number'"), row.indexOf("field.widget === 'toggle'"));
+    expect(number).toContain('class="input-text w-full text-xs"');
+    expect(number).not.toContain("input-number");
   });
 });

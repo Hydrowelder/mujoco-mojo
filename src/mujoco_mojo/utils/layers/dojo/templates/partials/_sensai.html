@@ -695,6 +695,19 @@
           </svg>
         </button>
       </div>
+      <!-- how full the context window is with this chat's conversation, and a button
+           that summarizes it so the chat goes on from the summary -->
+      <div class="flex items-center justify-between mt-1.5 px-1 text-xs text-ink-muted">
+        <span x-text="contextText"
+              :title="contextTooltip"
+              class="cursor-help"></span>
+        <button @click="compact()"
+                :disabled="isBusy(activeId) || messages.length === 0"
+                class="hover:text-accent-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-ink-muted"
+                title="Summarize this chat so far, keeping its first and latest questions, so SensAI goes on from the summary">
+          <span x-text="compactingId === activeId ? 'Compacting...' : 'Compact'"></span>
+        </button>
+      </div>
     </div>
   </div>
 

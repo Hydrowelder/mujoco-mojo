@@ -3,6 +3,7 @@ import sys
 from typing import TYPE_CHECKING
 
 import pytest
+from pydantic import BaseModel
 
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
 from mujoco_mojo.typing import ModelProvider
@@ -129,11 +130,20 @@ def test_base_url_reaches_a_provider_that_accepts_one(
     assert str(model.base_url).rstrip("/") == "http://gateway.example/v1"
 
 
+class _NoBaseUrlProvider(BaseModel):
+    """Stands in for a provider whose constructor takes no `base_url`. Every one installed with pydantic-ai 2.75 takes one, so none of them can show the refusal."""
+
+    api_key: str | None = None
+
+
 def test_base_url_for_a_provider_that_cannot_take_one_is_an_error_not_ignored(
     no_provider_env: pytest.MonkeyPatch,
 ) -> None:
     """Ignoring it would send the request to the provider's real endpoint, not the one the user asked for."""
     no_provider_env.setenv("CEREBRAS_API_KEY", "key-123")
+    no_provider_env.setattr(
+        "pydantic_ai.providers.infer_provider_class", lambda _name: _NoBaseUrlProvider
+    )
 
     with pytest.raises(ValueError, match="base_url"):
         ModelProvider.CEREBRAS.build_model(

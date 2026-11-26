@@ -70,7 +70,7 @@ keywords = [
 docs = ["mkdocstrings[python]>=1.0.6", "zensical>=0.1.0"]
 mesh-decomp = ["coacd>=1.0.7"]
 optimize = ["optuna>=4.8.0", "joblib>=1.5.3", "optuna-dashboard>=0.20.0"]
-sensai = ["pydantic-ai>=2.53.0", "requests>=2.32.5"]
+sensai = ["pydantic-ai>=2.75.0", "pydantic-ai-harness>=0.75.0", "requests>=2.32.5"]
 all = ["mujoco-mojo[docs,mesh-decomp,optimize,sensai]"]
 
 [dependency-groups]

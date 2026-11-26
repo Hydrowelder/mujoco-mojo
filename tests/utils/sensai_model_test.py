@@ -4,7 +4,11 @@ from collections.abc import Sequence
 
 import pytest
 from pydantic import BaseModel
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models import Model
+from pydantic_ai.models.fallback import FallbackModel
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.profiles import ModelProfile
 
 from mujoco_mojo.settings import (
     SensAIModelEntry,
@@ -12,6 +16,7 @@ from mujoco_mojo.settings import (
 )
 from mujoco_mojo.typing import ModelProvider
 from mujoco_mojo.utils.sensai import model as sensai_model
+from mujoco_mojo.utils.sensai.model import smallest_context_window
 
 
 class _Settings(BaseModel):
@@ -136,3 +141,42 @@ def test_a_saved_shared_base_url_is_silent_when_nothing_needs_it() -> None:
 
 def test_a_shared_base_url_with_no_models_loads() -> None:
     assert SensAISettings.model_validate({"base_url": "http://x/v1"}).models == []
+
+
+def _window_model(window: int | None) -> FunctionModel:
+    """A model that knows its context window, or does not (`None`), as one served by Ollama usually does not."""
+    profile = ModelProfile(context_window=window) if window is not None else None
+    return FunctionModel(
+        lambda _messages, _info: ModelResponse(parts=[]), profile=profile
+    )
+
+
+def _entry(context_window: int | None = None) -> SensAIModelEntry:
+    return SensAIModelEntry(
+        provider=ModelProvider.OLLAMA,
+        model_name="llama3.1",
+        context_window=context_window,
+    )
+
+
+def test_the_smallest_window_of_the_chain_is_the_one_to_fit() -> None:
+    chain = FallbackModel(_window_model(1_000_000), _window_model(128_000))
+
+    assert smallest_context_window([_entry(), _entry()], chain) == 128_000
+
+
+def test_an_entrys_context_window_is_used_over_what_the_model_knows() -> None:
+    chain = FallbackModel(_window_model(1_000_000), _window_model(None))
+
+    assert smallest_context_window([_entry(), _entry(8192)], chain) == 8192
+    assert smallest_context_window([_entry(500_000), _entry()], chain) == 500_000
+
+
+def test_no_window_known_anywhere_is_none() -> None:
+    chain = FallbackModel(_window_model(None), _window_model(None))
+
+    assert smallest_context_window([_entry(), _entry()], chain) is None
+
+
+def test_a_single_model_is_read_like_a_chain_of_one() -> None:
+    assert smallest_context_window([], _window_model(4096)) == 4096

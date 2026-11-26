@@ -62,6 +62,15 @@
   .input-text {
     @apply input-field w-full shadow-sm px-2 py-1.5;
   }
+  /* a number in a text field's look (a settings list row, where it sits
+     beside text fields), without the browser's spinner */
+  .input-text[type="number"] {
+    appearance: textfield;
+  }
+  .input-text[type="number"]::-webkit-outer-spin-button,
+  .input-text[type="number"]::-webkit-inner-spin-button {
+    appearance: none;
+  }
 
   /* ── Search (a leading magnifying-glass icon + optional trailing
        .input-clear-btn) - the left/right padding a search field needs to

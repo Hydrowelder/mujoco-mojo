@@ -9,7 +9,6 @@ from pydantic_ai.messages import (
     AgentStreamEvent,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
-    RetryPromptPart,
     ToolCallPart,
     ToolReturnPart,
 )
@@ -35,7 +34,7 @@ def returned(name: str, call_id: str, content: Any) -> FunctionToolResultEvent:
 
 def retried(name: str, call_id: str, content: Any) -> FunctionToolResultEvent:
     return FunctionToolResultEvent(
-        part=RetryPromptPart(content, tool_name=name, tool_call_id=call_id)
+        part=ToolReturnPart(name, content, tool_call_id=call_id, outcome="retried")
     )
 
 

@@ -13,7 +13,7 @@ from ..tools.settings_catalog import read_settings as _read_settings
 
 logger = get_logger(__name__)
 
-_SYSTEM_PROMPT = f"""\
+_INSTRUCTIONS = f"""\
 You are the docs agent of SensAI, the assistant in MuJoCo Mojo. You answer questions about \
 how to use MuJoCo Mojo (installing it, starting a project, the generate and runtime \
 scripts, running jobs and Monte Carlo, SLURM, the Dojo, Reloaded, requirements, \
@@ -50,9 +50,10 @@ The pages, by path:
 {table_of_contents()}
 """
 
+# instructions, not a system prompt: pydantic-ai leaves the system prompt out of a run given message history, which Reloaded sends with every question after the first
 docs_agent: Agent[None, str] = Agent(
     output_type=str,
-    system_prompt=_SYSTEM_PROMPT,
+    instructions=_INSTRUCTIONS,
 )
 
 

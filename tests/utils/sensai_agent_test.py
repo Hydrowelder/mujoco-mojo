@@ -21,7 +21,6 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
-    RetryPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -866,13 +865,7 @@ class TestDocsAgent:
         prompts: list[str] = []
 
         def look(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-            first = messages[0]
-            assert isinstance(first, ModelRequest)
-            prompts.extend(
-                str(part.content)
-                for part in first.parts
-                if part.part_kind == "system-prompt"
-            )
+            prompts.append(instructions(messages))
             return ModelResponse(parts=[TextPart("ok")])
 
         run_docs_agent(FunctionModel(look))
@@ -1860,7 +1853,7 @@ class TestSettingVersus:
                     told.extend(
                         str(p.content)
                         for p in last.parts
-                        if isinstance(p, (ToolReturnPart, RetryPromptPart))
+                        if isinstance(p, ToolReturnPart)
                     )
                 return ModelResponse(parts=[ToolCallPart(tool, args)])
 
@@ -1870,9 +1863,7 @@ class TestSettingVersus:
             last = messages[-1]
             assert isinstance(last, ModelRequest)
             told.extend(
-                str(p.content)
-                for p in last.parts
-                if isinstance(p, (ToolReturnPart, RetryPromptPart))
+                str(p.content) for p in last.parts if isinstance(p, ToolReturnPart)
             )
             return ModelResponse(parts=[TextPart("ok")])
 
@@ -2262,6 +2253,216 @@ class TestChatRoute:
         )
         assert response.status_code == 200
         return self.result(response.text)
+
+    def test_a_reply_carries_the_conversation_to_go_on_from_and_how_full_the_context_is(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        model = self.router_model(
+            [call("ask_plot_config_agent", request="rename"), say("Renamed it.")],
+            [call("edit_plot_config", changes={"title": "hello"}), say("Renamed.")],
+        )
+
+        data = self.chat(client, monkeypatch, model, message="rename the plot")
+
+        # the user's own words: the dashboard state goes with the message, not in it,
+        # and the tool calls behind the reply are left out
+        assert [(e["role"], e["content"]) for e in data["conversation"]] == [
+            ("user", "rename the plot"),
+            ("assistant", "Renamed it."),
+        ]
+        # the answer carries the provider's count of the request it came from, instructions
+        # and tool definitions included, which is what the context is measured from
+        assert data["conversation"][-1]["input_tokens"] > 0
+        assert "input_tokens" not in data["conversation"][0]
+        assert 0 < data["context"]["fraction"] < 0.01
+        # a scripted model has no context window of its own, so the window is a guess
+        assert data["context"]["estimated"] is True
+        assert data["compacted"] is False
+
+    def test_the_dashboard_state_goes_as_instructions(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[tuple[str, str]] = []
+
+        def look(messages: list[ModelMessage]) -> ModelResponse:
+            last = messages[-1]
+            assert isinstance(last, ModelRequest)
+            prompt = next(p for p in last.parts if isinstance(p, UserPromptPart))
+            seen.append((str(prompt.content), last.instructions or ""))
+            return ModelResponse(parts=[TextPart("ok")])
+
+        self.chat(client, monkeypatch, self.router_model([look], []), message="hi")
+
+        prompt, told = seen[0]
+        assert prompt == "hi"
+        assert "[Current dashboard state]" in told
+
+    def test_a_count_an_answer_carries_goes_back_to_the_model_with_it(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[int] = []
+
+        def look(messages: list[ModelMessage]) -> ModelResponse:
+            seen.extend(
+                m.usage.input_tokens for m in messages if isinstance(m, ModelResponse)
+            )
+            return ModelResponse(parts=[TextPart("ok")])
+
+        monkeypatch.setattr(
+            sensai_router, "build_fallback_model", lambda: self.router_model([look], [])
+        )
+        response = client.post(
+            "/sensai/chat",
+            json={
+                "message": "and then?",
+                "message_history": [
+                    {"role": "user", "content": "first"},
+                    {
+                        "role": "assistant",
+                        "content": "one",
+                        "input_tokens": 1500,
+                        "output_tokens": 20,
+                    },
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        assert seen == [1500]
+
+    def test_only_the_latest_question_carries_its_instructions(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """They are what the answer's count was made with, and only the latest set counts, so earlier ones would only make the chat's saved conversation heavier."""
+        model = self.router_model([say("ok")], [])
+        monkeypatch.setattr(sensai_router, "build_fallback_model", lambda: model)
+        response = client.post(
+            "/sensai/chat",
+            json={
+                "message": "and then?",
+                "message_history": [
+                    {
+                        "role": "user",
+                        "content": "first",
+                        "instructions": "old instructions",
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "one",
+                        "input_tokens": 900,
+                        "output_tokens": 10,
+                    },
+                ],
+            },
+        )
+
+        conversation = self.result(response.text)["conversation"]
+        questions = [e for e in conversation if e["role"] == "user"]
+        assert "instructions" not in questions[0]
+        assert "You are SensAI" in questions[-1]["instructions"]
+
+    def test_a_summary_in_the_history_is_sent_as_one(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        seen: list[list[str]] = []
+
+        def look(messages: list[ModelMessage]) -> ModelResponse:
+            seen.append(
+                [
+                    type(part).__name__
+                    for message in messages
+                    if isinstance(message, ModelRequest)
+                    for part in message.parts
+                ]
+            )
+            return ModelResponse(parts=[TextPart("ok")])
+
+        monkeypatch.setattr(
+            sensai_router, "build_fallback_model", lambda: self.router_model([look], [])
+        )
+        response = client.post(
+            "/sensai/chat",
+            json={
+                "message": "and then?",
+                "message_history": [
+                    {"role": "user", "content": "first"},
+                    {"role": "summary", "content": "what was said before"},
+                    {"role": "assistant", "content": "latest"},
+                ],
+            },
+        )
+
+        assert response.status_code == 200
+        assert seen[0][:2] == ["UserPromptPart", "CompactionPart"]
+        assert {"role": "summary", "content": "what was said before"} in self.result(
+            response.text
+        )["conversation"]
+
+    @staticmethod
+    def summarizer() -> FunctionModel:
+        """A model that answers a summary request with "summary"."""
+
+        def reply(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            last = messages[-1]
+            asked_for = last.instructions if isinstance(last, ModelRequest) else None
+            assert asked_for and "summarization" in asked_for
+            return ModelResponse(parts=[TextPart("summary")])
+
+        return FunctionModel(reply)
+
+    def test_compact_summarizes_all_but_the_first_and_latest_questions(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sensai_router, "build_fallback_model", self.summarizer)
+        history = [
+            entry
+            for number in range(4)
+            for entry in (
+                {"role": "user", "content": f"question {number}"},
+                {"role": "assistant", "content": f"answer {number}"},
+            )
+        ]
+
+        response = client.post("/sensai/compact", json={"message_history": history})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["compacted"] is True
+        conversation = data["conversation"]
+        assert conversation[0] == {"role": "user", "content": "question 0"}
+        assert {"role": "summary", "content": "summary"} in conversation
+        assert [(e["role"], e["content"]) for e in conversation[-2:]] == [
+            (e["role"], e["content"]) for e in history[-2:]
+        ]
+        assert {"role": "user", "content": "question 1"} not in conversation
+        assert data["context"]["fraction"] > 0
+
+    def test_compact_leaves_a_conversation_with_nothing_to_summarize(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sensai_router, "build_fallback_model", self.summarizer)
+        history = [
+            {"role": "user", "content": "question 0"},
+            {"role": "assistant", "content": "answer 0"},
+        ]
+
+        data = client.post("/sensai/compact", json={"message_history": history}).json()
+
+        assert data["compacted"] is False
+        assert data["conversation"] == history
+
+    def test_compact_is_refused_while_sensai_is_off(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            sensai_router,
+            "MujocoMojoSettings",
+            lambda: _Settings(sensai=SensAISettings(enabled=False)),
+        )
+
+        response = client.post("/sensai/compact", json={"message_history": []})
+
+        assert response.status_code == 403
 
     def test_an_edit_sends_the_changed_plot(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch

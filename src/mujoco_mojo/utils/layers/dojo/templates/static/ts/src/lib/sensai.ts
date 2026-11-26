@@ -39,6 +39,28 @@ export interface SensAIMessage {
   ts: number;
 }
 
+// one entry of the conversation a request carries: a message, or the summary of
+// earlier ones the server made when the conversation filled the context window
+export interface ContextEntry {
+  role: "user" | "assistant" | "summary";
+  content: string;
+  // on the answer that carries them, the provider's count of the context up to it, which
+  // includes what goes with every request (the instructions and the tool definitions):
+  // the server measures the context from it, so it goes back as it came
+  input_tokens?: number;
+  output_tokens?: number;
+  // on the latest question only, the instructions that count was made with, so the
+  // server's estimate swaps them for the next set and does not add both
+  instructions?: string;
+}
+
+// how full the context window is with a chat's conversation, as the server measured
+// it; `estimated` when the window is a guess, for a model whose window is not known
+export interface ContextUsage {
+  fraction: number;
+  estimated: boolean;
+}
+
 export interface SensAIResultPayload {
   message?: string;
   plot_config_update?: object | null;
@@ -49,6 +71,11 @@ export interface SensAIResultPayload {
   tool_calls?: SensAIToolCall[];
   // versus mode as SensAI left it, when the message changed it
   versus_update?: VersusState | null;
+  // the conversation to go on from, with any summary made on the way (read through
+  // parseContext), and how full the context window is with it (parseContextUsage)
+  conversation?: unknown;
+  context?: unknown;
+  compacted?: boolean;
 }
 
 // a `tool_start` event carries the whole call, and a `tool_end` event carries
@@ -86,6 +113,12 @@ export interface SensAITab {
   // how far this chat's list was scrolled when it was last in view, so it comes back
   // to the same place
   scrollTop?: number;
+  // the conversation the server sent back with the last reply, summaries included,
+  // which the next message carries in place of this chat's own messages. a chat that
+  // never had one sends its messages
+  context?: ContextEntry[];
+  // how full the context window is with `context`
+  contextUsage?: ContextUsage;
 }
 
 // how long the list is held at the place a chat is put back to. what is in a chat
@@ -298,10 +331,11 @@ export function chatRequestBody(
   currentPlotConfigJson: string | null,
   manifest: ColumnManifest | null,
   versus: VersusState | null = null,
+  context: ContextEntry[] | undefined = undefined,
 ): object {
   return {
     message,
-    message_history: chatHistory(messages),
+    message_history: context ?? chatHistory(messages),
     // the open trial's signals, so the agent can check the names it uses (empty
     // away from a trial, where there is nothing to check them against)
     all_columns: manifest?.all ?? [],
@@ -314,6 +348,84 @@ export function chatRequestBody(
     // away from a trial, where there is nothing to change)
     versus,
   };
+}
+
+const CONTEXT_ROLES = new Set(["user", "assistant", "summary"]);
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+// a conversation as the server sent it, or null when it is not one
+export function parseContext(value: unknown): ContextEntry[] | null {
+  if (!Array.isArray(value)) return null;
+  const entries: ContextEntry[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== "object" || item === null) return null;
+    const { role, content, input_tokens, output_tokens, instructions } = item as {
+      role?: unknown;
+      content?: unknown;
+      input_tokens?: unknown;
+      output_tokens?: unknown;
+      instructions?: unknown;
+    };
+    if (typeof role !== "string" || !CONTEXT_ROLES.has(role) || typeof content !== "string") return null;
+    const entry: ContextEntry = { role: role as ContextEntry["role"], content };
+    if (isCount(input_tokens)) entry.input_tokens = input_tokens;
+    if (isCount(output_tokens)) entry.output_tokens = output_tokens;
+    if (typeof instructions === "string") entry.instructions = instructions;
+    entries.push(entry);
+  }
+  return entries;
+}
+
+// a reading of the context window as the server sent it, or null when it is not one
+export function parseContextUsage(value: unknown): ContextUsage | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { fraction, estimated } = value as { fraction?: unknown; estimated?: unknown };
+  if (typeof fraction !== "number" || !Number.isFinite(fraction) || fraction < 0) return null;
+  return { fraction, estimated: estimated === true };
+}
+
+// the conversation a chat goes on from after a reply: the server's when it sent one,
+// else the one the chat had with this question and reply added (a reply the server
+// wrote without a model run, such as a plot edit that was given up), or nothing for a
+// chat that never had one, which goes on sending its messages
+export function carriedContext(
+  previous: ContextEntry[] | undefined,
+  question: string,
+  reply: string,
+  sent: unknown,
+): ContextEntry[] | undefined {
+  const fromServer = parseContext(sent);
+  if (fromServer) return fromServer;
+  if (!previous) return undefined;
+  return [...previous, { role: "user", content: question }, { role: "assistant", content: reply }];
+}
+
+// what a chat would send as its conversation with its next message, which is also
+// what the Compact button asks the server to summarize
+export function conversationOf(tab: Pick<SensAITab, "context" | "messages">): ContextEntry[] {
+  return tab.context ?? tab.messages.slice(-HISTORY_LENGTH).map((m) => ({ role: m.role, content: m.content }));
+}
+
+// the latest question in a chat, which a reply answers
+export function latestQuestion(messages: SensAIMessage[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    if (message.role === "user") return message.content;
+  }
+  return "";
+}
+
+// how full the context window is, as the chat shows it: a decimal below 10% so a short
+// conversation does not read as nothing, whole percents above, and `~` before it when
+// the window is a guess; nothing before SensAI has answered, when nothing was measured
+export function contextLabel(usage: ContextUsage | undefined): string {
+  if (!usage) return "";
+  const percent = usage.fraction * 100;
+  const shown = percent === 0 ? "0%" : percent < 10 ? `${percent.toFixed(1)}%` : `${Math.round(percent)}%`;
+  return `Context ${usage.estimated ? "~" : ""}${shown}`;
 }
 
 // the saved chat history, with a timestamp filled in for any message that has
@@ -372,7 +484,7 @@ export function loadSensAITabs(): { tabs: SensAITab[]; activeId: string } {
 }
 
 // saved chats with what an older or damaged save may lack filled in: a title, a list
-// of messages, and a time on each message
+// of messages, and a time on each message, with a conversation that cannot be read dropped
 function normalizeTabs(tabs: SensAITab[]): SensAITab[] {
   return tabs.map((t) => ({
     ...t,
@@ -381,6 +493,9 @@ function normalizeTabs(tabs: SensAITab[]): SensAITab[] {
       ...m,
       ts: m.ts ?? Date.now(),
     })),
+    // a damaged conversation is dropped, and the chat sends its messages again
+    context: parseContext(t.context) ?? undefined,
+    contextUsage: parseContextUsage(t.contextUsage) ?? undefined,
   }));
 }
 
@@ -430,15 +545,20 @@ export function mergeSavedTabs(
     } else if (
       own.title === theirs.title &&
       own.autoTitled === theirs.autoTitled &&
-      JSON.stringify(own.messages) === JSON.stringify(theirs.messages)
+      JSON.stringify(own.messages) === JSON.stringify(theirs.messages) &&
+      JSON.stringify(own.context) === JSON.stringify(theirs.context) &&
+      JSON.stringify(own.contextUsage) === JSON.stringify(theirs.contextUsage)
     ) {
       tabs.push(own);
     } else {
+      // the conversation goes with the messages it was made from
       tabs.push({
         ...own,
         title: theirs.title,
         autoTitled: theirs.autoTitled,
         messages: theirs.messages,
+        context: theirs.context,
+        contextUsage: theirs.contextUsage,
       });
     }
   }

@@ -15,6 +15,7 @@ from pydantic_ai import RunContext, RunUsage
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import (
     AgentStreamEvent,
+    CompactionPart,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
     ModelMessage,
@@ -24,6 +25,8 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
+from pydantic_ai.usage import RequestUsage
+from pydantic_ai_harness.compaction import compact_now
 from sse_starlette.sse import EventSourceResponse
 
 from mujoco_mojo.settings import MujocoMojoSettings, SensAISettings
@@ -36,7 +39,19 @@ from mujoco_mojo.utils.sensai import (
     usage_limits,
 )
 from mujoco_mojo.utils.sensai.agents.chat import PlotEditFailed, chat_agent
+from mujoco_mojo.utils.sensai.compaction import (
+    KEEP_ON_REQUEST,
+    ContextGauge,
+    anchored,
+    context_gauge,
+    conversation_compaction,
+    conversation_only,
+    overhead_tokens,
+    reanchored,
+    summarized,
+)
 from mujoco_mojo.utils.sensai.deps import SensAIDeps
+from mujoco_mojo.utils.sensai.model import smallest_context_window
 from mujoco_mojo.utils.log import get_logger, quiet_in_terminal
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 
@@ -74,10 +89,28 @@ async def post_config(body: SensAISettings) -> SensAISettings:
 
 
 class HistoryEntry(BaseModel):
-    """A single prior turn in the conversation."""
+    """A single prior turn in the conversation, or a summary of earlier ones."""
 
-    role: Literal["user", "assistant"]
+    role: Literal["user", "assistant", "summary"]
     content: str
+    input_tokens: int | None = None
+    """On the answer that carries it, the provider's count of the context up to it, instructions and tool definitions included (see `anchored`), which is how the context is measured from it."""
+    output_tokens: int | None = None
+    instructions: str | None = None
+    """On the latest question only, the instructions it was sent with, which that count includes: the estimate of the next request swaps them for the new ones and does not add them on top."""
+
+
+class ContextReading(BaseModel):
+    """How full the context window is with a chat's conversation, for the chat to show."""
+
+    fraction: float
+    """The share of the window the conversation takes up."""
+    estimated: bool
+    """Whether the window is a guess, for a model whose window is not known."""
+
+    @classmethod
+    def of(cls, gauge: ContextGauge) -> ContextReading:
+        return cls(fraction=gauge.fraction, estimated=not gauge.known_window)
 
 
 # the plot agent reads the config itself, so the chat agent only needs to know roughly what is plotted
@@ -85,7 +118,7 @@ _SIGNALS_IN_CONTEXT = 10
 
 
 def _build_context_block(deps: SensAIDeps) -> str:
-    """Build a context block containing live dashboard state to inject into the prompt."""
+    """The live dashboard state, which goes with a message as the run's instructions and not in the message, so the conversation a chat keeps is what the user typed."""
     lines: list[str] = ["[Current dashboard state]"]
 
     job = deps.job_status
@@ -115,14 +148,61 @@ def _build_context_block(deps: SensAIDeps) -> str:
 
 
 def _to_model_messages(history: list[HistoryEntry]) -> list[ModelMessage]:
-    """Convert simple role/content pairs to pydantic-ai ModelMessage objects."""
+    """Convert simple role/content pairs to pydantic-ai ModelMessage objects. A summary is a `CompactionPart`, which a model with no compaction of its own is sent as text."""
     messages: list[ModelMessage] = []
     for entry in history:
         if entry.role == "user":
-            messages.append(ModelRequest(parts=[UserPromptPart(content=entry.content)]))
+            messages.append(
+                ModelRequest(
+                    parts=[UserPromptPart(content=entry.content)],
+                    instructions=entry.instructions,
+                )
+            )
+        elif entry.role == "summary":
+            messages.append(ModelRequest(parts=[CompactionPart(content=entry.content)]))
+        elif entry.input_tokens:
+            usage = RequestUsage(
+                input_tokens=entry.input_tokens, output_tokens=entry.output_tokens or 0
+            )
+            messages.append(
+                ModelResponse(parts=[TextPart(content=entry.content)], usage=usage)
+            )
         else:
             messages.append(ModelResponse(parts=[TextPart(content=entry.content)]))
     return messages
+
+
+def _to_history(conversation: Sequence[ModelMessage]) -> list[HistoryEntry]:
+    """A conversation (from `conversation_only`) as the role/content entries the browser keeps and sends back with the next message."""
+    entries: list[HistoryEntry] = []
+    for message in conversation:
+        start = len(entries)
+        for part in message.parts:
+            if isinstance(part, CompactionPart):
+                entries.append(HistoryEntry(role="summary", content=part.content or ""))
+            elif isinstance(part, UserPromptPart):
+                content = (
+                    part.content if isinstance(part.content, str) else str(part.content)
+                )
+                entries.append(HistoryEntry(role="user", content=content))
+            elif isinstance(part, TextPart):
+                entries.append(HistoryEntry(role="assistant", content=part.content))
+        question = next((e for e in entries[start:] if e.role == "user"), None)
+        if isinstance(message, ModelRequest) and message.instructions and question:
+            # only the latest instructions count, so only the latest go to the browser
+            for entry in entries[:start]:
+                entry.instructions = None
+            question.instructions = message.instructions
+        # a provider count goes on the answer it came with, on its last part
+        if (
+            isinstance(message, ModelResponse)
+            and message.usage.input_tokens
+            and entries
+            and entries[-1].role == "assistant"
+        ):
+            entries[-1].input_tokens = message.usage.input_tokens
+            entries[-1].output_tokens = message.usage.output_tokens
+    return entries
 
 
 class ChatRequest(BaseModel):
@@ -332,10 +412,10 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
     )
 
     model = build_fallback_model()
+    window = smallest_context_window(settings.sensai.models, model)
 
     message_history = _to_model_messages(body.message_history)
     context_block = _build_context_block(deps)
-    augmented_message = f"{context_block}\n\n{body.message}"
 
     async def event_stream() -> AsyncIterator[dict[str, Any]]:
         # undo path: restore previous plot config via client-side history
@@ -370,22 +450,31 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
         capture = _ToolResultCapture(queue, trace)
         accumulated = ""
         answering_model: str | None = None
+        # what the chat goes on from, with any summary made on the way; None when the run
+        # never finished (the plot agent gave up), so the chat adds the exchange itself
+        conversation: list[ModelMessage] | None = None
         stream_exc: Exception | None = None
         # one count for the whole message: the specialists' runs add to it, and it is
         # what the request limit is checked against
         usage = RunUsage()
 
         async def _produce_text() -> None:
-            nonlocal accumulated, answering_model, stream_exc
+            nonlocal accumulated, answering_model, conversation, stream_exc
             try:
                 async with chat_agent.run_stream(
-                    augmented_message,
+                    body.message,
                     model=model,
                     deps=deps,
                     message_history=message_history,
+                    instructions=context_block,
                     event_stream_handler=capture,
                     usage=usage,
                     usage_limits=usage_limits(deps.max_requests),
+                    capabilities=[
+                        conversation_compaction(
+                            settings.sensai.compact_at, context_window=window
+                        )
+                    ],
                 ) as streamed:
                     async for delta in streamed.stream_text(
                         delta=True, debounce_by=None
@@ -398,6 +487,10 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                             }
                         )
                     answering_model = _answering_model(streamed.all_messages())
+                    conversation = anchored(
+                        conversation_only(streamed.all_messages()),
+                        streamed.new_messages(),
+                    )
             except PlotEditFailed as exc:
                 # the plot agent gave up: its reason is the reply, as it is, with no
                 # model asked to rephrase it (that is what kept re-asking the plot agent)
@@ -479,8 +572,86 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
                     "routed_to": capture.routed_to,
                     "model": answering_model,
                     "tool_calls": _tool_calls(trace),
+                    **_conversation_fields(message_history, conversation, window),
                 }
             ),
         }
 
     return EventSourceResponse(event_stream())
+
+
+def _conversation_fields(
+    before: list[ModelMessage],
+    conversation: list[ModelMessage] | None,
+    window: int | None,
+) -> dict[str, Any]:
+    """What a reply tells the chat about its conversation: what to send with the next message, how full the context window is with it, and whether part of it was summarized on the way. Nothing when the run did not finish."""
+    if conversation is None:
+        return {}
+    return {
+        "conversation": [
+            entry.model_dump(exclude_none=True) for entry in _to_history(conversation)
+        ],
+        "context": ContextReading.of(context_gauge(conversation, window)).model_dump(),
+        "compacted": summarized(before, conversation),
+    }
+
+
+class CompactRequest(BaseModel):
+    """Request body for the compact endpoint."""
+
+    message_history: list[HistoryEntry] = Field(default_factory=list)
+    """The chat's conversation, as the chat would send it with its next message."""
+
+
+class CompactResponse(BaseModel):
+    """A chat's conversation after a summary asked for by the user."""
+
+    conversation: list[HistoryEntry]
+    """What the chat goes on from: the conversation as it was when there was nothing to summarize."""
+    context: ContextReading
+    compacted: bool
+    """Whether anything was summarized."""
+
+
+@router.post("/compact", response_model_exclude_none=True)
+async def post_compact(body: CompactRequest) -> CompactResponse:
+    """Summarizes a chat's conversation, all but its first question and its latest question and answer, which the chat's Compact button asks for."""
+    settings = MujocoMojoSettings()
+    if not settings.sensai.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="SensAI is not enabled. Set sensai.enabled = true in settings.",
+        )
+    try:
+        model = build_fallback_model()
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    window = smallest_context_window(settings.sensai.models, model)
+    history = _to_model_messages(body.message_history)
+    try:
+        compacted = conversation_only(
+            await compact_now(
+                conversation_compaction(
+                    settings.sensai.compact_at, KEEP_ON_REQUEST, context_window=window
+                ),
+                history,
+                model=model,
+            )
+        )
+    except Exception as exc:
+        logger.warning("SensAI could not summarize a chat", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not summarize the conversation: {exc}",
+        ) from exc
+    done = len(compacted) < len(history)
+    # the summary leaves no provider count that fits, so what goes with every request is carried over
+    conversation = reanchored(compacted, overhead_tokens(history)) if done else history
+    return CompactResponse(
+        conversation=_to_history(conversation),
+        context=ContextReading.of(context_gauge(conversation, window)),
+        compacted=done,
+    )

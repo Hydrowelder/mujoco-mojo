@@ -12,7 +12,6 @@ from pydantic_ai.messages import (
     AgentStreamEvent,
     FunctionToolCallEvent,
     FunctionToolResultEvent,
-    RetryPromptPart,
     ToolReturnPart,
 )
 
@@ -26,7 +25,7 @@ CHAT_AGENT = "chat"
 """The `agent` of a call the chat agent made itself, which is a hand-off to a specialist. A specialist's own calls carry the specialist's route (`job_status`, `plot_config`, ...)."""
 
 ToolStatus = Literal["running", "ok", "rejected", "failed"]
-"""How a call went: still running, returned a result, turned away by the tool with a reason the model was told (a refused plot edit, bad arguments), or never returned (the specialist gave up or the message hit its request limit)."""
+"""How a call went: still running, returned a result, turned away by the tool with a reason the model was told (a refused plot edit, bad arguments), or no result (the tool raised or was denied, the specialist gave up, or the message hit its request limit)."""
 
 
 class ToolCallRecord(BaseModel):
@@ -124,12 +123,17 @@ class ToolTrace:
             if record is None:
                 return
             part = event.part
-            if isinstance(part, ToolReturnPart):
-                record.status = "ok"
-                text = part.model_response_str()
-            else:
-                record.status = "rejected"
-                text = _retry_reason(part)
+            if not isinstance(part, ToolReturnPart):
+                return
+            match part.outcome:
+                case "success":
+                    record.status = "ok"
+                case "retried":
+                    record.status = "rejected"
+                case _:
+                    record.status = "failed"
+            # the content as the tool gave it: the model's copy of a refusal is wrapped in {"error": ...}
+            text = part.model_response_str(wrap_if_error=False)
             record.result = _one_line(text, RESULT_LENGTH)
             await self._send(
                 "tool_end",
@@ -139,8 +143,3 @@ class ToolTrace:
     async def _send(self, event: str, payload: dict[str, Any]) -> None:
         if self.emit is not None:
             await self.emit(event, payload)
-
-
-def _retry_reason(part: RetryPromptPart) -> str:
-    """Why the model was asked to try again: the tool's own message when it wrote one, else the library's description of the errors (bad arguments)."""
-    return part.content if isinstance(part.content, str) else part.model_response()
