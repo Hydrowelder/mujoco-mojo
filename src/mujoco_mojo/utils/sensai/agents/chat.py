@@ -2,25 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from pydantic_ai import (
     Agent,
     RunContext,
     UnexpectedModelBehavior,
-    UsageLimits,
 )
-from pydantic_ai.agent import EventStreamHandler
 from pydantic_ai.models import Model
+from pydantic_ai.tools import ToolDefinition, ToolPrepareFunc
 
+from mujoco_mojo.settings import SensAIFeatures
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.log import get_logger
 
-from .column_manifest_agent import column_manifest_agent
-from .deps import SensAIDeps
-from .docs_agent import docs_agent
-from .job_status_agent import job_status_agent
-from .plot_config_agent import plot_config_agent
+from ..deps import SensAIDeps
+from ..model import usage_limits
+from ..tool_trace import EventHandler
+from .column_manifest import column_manifest_agent
+from .docs import docs_agent
+from .job_status import job_status_agent
+from .plot_config import plot_config_agent
 
-_SYSTEM_PROMPT = """\
+_INSTRUCTIONS = """\
 You are SensAI, an AI assistant inside the MuJoCo Mojo Dojo dashboard. You don't answer job, \
 signal, plot, or how-to-use-Mojo questions yourself - you route every such request to the \
 matching specialist tool and then reply to the user in a few words describing what was \
@@ -32,7 +36,9 @@ confirmation. Keep your reply to 1-3 sentences, markdown allowed (bold, lists), 
 code blocks. If a specialist reports nothing is loaded (e.g. no job or plot config), say so \
 plainly instead of inventing details. When a specialist gives numbers or trial numbers, repeat \
 them exactly.
+"""
 
+_DOCS_ROUTING = """\
 Questions about how to use MuJoCo Mojo itself (installing it, writing the generate or \
 runtime scripts, running jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the \
 examples, which setting does what) and what changed in a release go to ask_docs_agent. Its answer comes from the Mojo \
@@ -47,20 +53,49 @@ class PlotEditFailed(Exception):
     """The plot agent could not make the change. The message is what to tell the user, and the chat agent is not asked to put it in its own words: a model that was told the change failed would keep sending the same request to the plot agent again."""
 
 
-def usage_limits(max_requests: int) -> UsageLimits:
-    """
-    The cap on model requests for one chat message, to pass to the chat agent's run and to each specialist's run so that the specialists count against the same total (they share the run's `usage`).
-
-    `max_requests` is `dojo.sensai.max_requests`. A request takes one to three (route it, edit, answer) and a refused edit adds one to three more, so the default of 12 leaves room to correct a mistake or two. When a model loops, or rate limits make every request cost several attempts, it is what stops the message from sending dozens.
-    """
-    return UsageLimits(request_limit=max_requests)
-
-
+# instructions, not a system prompt: pydantic-ai leaves the system prompt out of a run given message history, which every message after a chat's first one is
 chat_agent: Agent[SensAIDeps, str] = Agent(
     deps_type=SensAIDeps,
     output_type=str,
-    system_prompt=_SYSTEM_PROMPT,
+    instructions=_INSTRUCTIONS,
 )
+
+
+def turned_off(features: SensAIFeatures) -> list[str]:
+    """The features the user turned off, by the titles the settings panel shows them under."""
+    fields = type(features).model_fields
+    return [
+        fields[name].title or name
+        for name, on in features.model_dump().items()
+        if not on
+    ]
+
+
+@chat_agent.instructions
+def _feature_instructions(ctx: RunContext[SensAIDeps]) -> str:
+    """Where docs questions go, when the docs agent is on, and which features are off, so a request for one is answered with that and not with whatever tool is left."""
+    features = ctx.deps.features
+    parts = [_DOCS_ROUTING] if features.docs else []
+    if off := turned_off(features):
+        parts.append(
+            f"These features are turned off in the user's settings, so you have no tool for them: {', '.join(off)}. "
+            "When asked for one, say it is turned off and can be turned on in the settings, under SensAI > Features. "
+            "Do not try to answer it another way."
+        )
+    return "\n".join(parts)
+
+
+def _offered_when(
+    feature: Callable[[SensAIFeatures], bool],
+) -> ToolPrepareFunc[SensAIDeps]:
+    """A tool's `prepare` that offers it to the model only while `feature` is on in `sensai.features`."""
+
+    async def prepare(
+        ctx: RunContext[SensAIDeps], tool_def: ToolDefinition
+    ) -> ToolDefinition | None:
+        return tool_def if feature(ctx.deps.features) else None
+
+    return prepare
 
 
 def _delegate_model(ctx: RunContext[SensAIDeps]) -> Model | None:
@@ -73,15 +108,13 @@ def _delegate_model(ctx: RunContext[SensAIDeps]) -> Model | None:
     return ctx.model if isinstance(ctx.model, Model) else None
 
 
-def _watch(
-    ctx: RunContext[SensAIDeps], route: str
-) -> EventStreamHandler[SensAIDeps] | None:
+def _watch(ctx: RunContext[SensAIDeps], route: str) -> EventHandler | None:
     """The handler that records the tool calls of the specialist at `route` for the chat to show, or None when this message is not being traced (a run made outside the Dojo's chat route)."""
     trace = ctx.deps.trace
     return trace.handler(route) if trace is not None else None
 
 
-@chat_agent.tool
+@chat_agent.tool(prepare=_offered_when(lambda features: features.job_status))
 async def ask_job_status_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
     Forward a job-status request to the job-status agent and return its answer. It knows the job's progress, trials, timing, errors and logs, and the input distributions the trials were sampled from and what each trial drew.
@@ -105,7 +138,7 @@ async def ask_job_status_agent(ctx: RunContext[SensAIDeps], request: str) -> str
     return result.output
 
 
-@chat_agent.tool
+@chat_agent.tool(prepare=_offered_when(lambda features: features.signals))
 async def ask_column_manifest_agent(
     ctx: RunContext[SensAIDeps], request: str
 ) -> ColumnManifest:
@@ -131,7 +164,7 @@ async def ask_column_manifest_agent(
     return result.output
 
 
-@chat_agent.tool
+@chat_agent.tool(prepare=_offered_when(lambda features: features.docs))
 async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
     Forward a question about how to use MuJoCo Mojo, or what changed in a release, to the docs agent and return its answer.
@@ -139,7 +172,7 @@ async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     Use this for "how do I..." and "what is..." questions about Mojo itself: installing it, starting a project, the generate and runtime scripts, running Monte Carlo jobs, SLURM, the Dojo, Reloaded, requirements, optimization, the examples, which setting does what, and what changed in a release. It answers from the Mojo docs (the user guides, the command line reference and the changelog) and the list of settings, and links the page.
 
     Args:
-        ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `docs_agent` has no `model=` of its own to fall back on; `ctx.deps`/`ctx.usage` share dashboard state and token accounting with the nested run the same way.
+        ctx: The calling agent's run context - `ctx.model` (the same `FallbackModel` this run was given) has to be passed through explicitly, since `docs_agent` has no `model=` of its own to fall back on; `ctx.usage` shares token accounting with the nested run the same way. The docs agent reads no dashboard state, so `ctx.deps` is not passed on.
         request: The question, in natural language, such as "how do I submit a job to SLURM?".
 
     Returns:
@@ -149,7 +182,6 @@ async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     result = await docs_agent.run(
         request,
         model=_delegate_model(ctx),
-        deps=ctx.deps,
         usage=ctx.usage,
         usage_limits=usage_limits(ctx.deps.max_requests),
         event_stream_handler=_watch(ctx, "docs"),
@@ -157,7 +189,7 @@ async def ask_docs_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     return result.output
 
 
-@chat_agent.tool
+@chat_agent.tool(prepare=_offered_when(lambda features: features.plot))
 async def ask_plot_config_agent(ctx: RunContext[SensAIDeps], request: str) -> str:
     """
     Forward a plot request to the plot-config agent and return what it did or found.

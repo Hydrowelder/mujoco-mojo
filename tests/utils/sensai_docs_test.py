@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from mujoco_mojo.meta import DOCS_SOURCE_DIR
-from mujoco_mojo.utils.layers.dojo.sensai.docs_catalog import (
+from mujoco_mojo.utils.sensai.tools.docs_catalog import (
     SITE_URL,
     docs_pages,
     docs_url,

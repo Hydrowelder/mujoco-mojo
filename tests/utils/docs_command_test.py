@@ -65,7 +65,7 @@ def test_there_is_one_definition_of_where_the_docs_are(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The folder the command prints, the folder SensAI reads its docs from and the folder the generator writes have to be the same one."""
-    from mujoco_mojo.utils.layers.dojo.sensai import docs_catalog
+    from mujoco_mojo.utils.sensai.tools import docs_catalog
 
     monkeypatch.syspath_prepend(str(SCRIPTS))
     generator = importlib.import_module("gen_docs_source")

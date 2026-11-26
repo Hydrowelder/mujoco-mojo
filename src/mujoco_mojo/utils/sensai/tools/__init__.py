@@ -1,0 +1,1 @@
+"""What the agents' tools do, kept apart from the agents: each module here works things out from the docs, the settings, a job or a plot config and returns plain data or text, so it can be tested and reused without a model. An agent module registers thin tool functions that call these."""

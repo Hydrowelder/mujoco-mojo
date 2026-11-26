@@ -106,7 +106,7 @@ def change_versus(
     added = len(counted - before)
     if added > room:
         raise VersusError(
-            f"That range would add {added} trials, and this message may add at most {room} more. Use a smaller range, and tell the user they can ask again for the rest or raise dojo.sensai.max_versus_trials in settings."
+            f"That range would add {added} trials, and this message may add at most {room} more. Use a smaller range, and tell the user they can ask again for the rest or raise sensai.max_versus_trials in settings."
         )
 
     left_out = 0

@@ -333,6 +333,7 @@ class AppProbe:
     keys: ReloadedKeySettings | None = None
     subtitle: str = ""
     logs: LogBuffer | None = None
+    sensai: bool = False
     fail_with: Exception | None = None
     seen: dict[str, object] = field(default_factory=dict)
 
@@ -343,11 +344,13 @@ class AppProbe:
         keys: ReloadedKeySettings | None = None,
         subtitle: str = "",
         logs: LogBuffer | None = None,
+        sensai: bool = False,
     ) -> "AppProbe":
         self.backend = backend
         self.keys = keys
         self.subtitle = subtitle
         self.logs = logs
+        self.sensai = sensai
         return self
 
     def run(self) -> None:

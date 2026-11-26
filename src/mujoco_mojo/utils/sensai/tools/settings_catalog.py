@@ -1,7 +1,7 @@
 """
 The settings of MuJoCo Mojo as SensAI's docs agent reads them: one entry for each setting, in words.
 
-The settings are described only on their fields, each with a title, a description, a default and sometimes a list of choices, which is also what the settings panel shows. This reads them off the settings schema instead of from a page that would have to be kept in step with the code. A setting is found by the section or key prefix it sits under (`dojo`, `dojo.sensai`), or by words in its key, label or description.
+The settings are described only on their fields, each with a title, a description, a default and sometimes a list of choices, which is also what the settings panel shows. This reads them off the settings schema instead of from a page that would have to be kept in step with the code. A setting is found by the section or key prefix it sits under (`reloaded`, `reloaded.keys`), or by words in its key, label or description.
 
 A secret setting is listed too, marked as one the settings panel does not show: a schema carries a field's description and default, never the value it holds, and the panel's omission is exactly why a user may need to be told the setting exists.
 """
@@ -209,7 +209,7 @@ def settings() -> tuple[Setting, ...]:
 
 
 def _groups(found: Sequence[Setting]) -> Counter[str]:
-    """How many settings are in each section, and in each group inside one (`dojo` and `dojo.sensai`)."""
+    """How many settings are in each section, and in each group inside one (`reloaded` and `reloaded.keys`)."""
     counts: Counter[str] = Counter()
     for setting in found:
         parts = setting.key.split(".")
@@ -276,7 +276,7 @@ def _written(found: Sequence[Setting]) -> str:
     kept = text[:_READ_LIMIT]
     kept = kept[: kept.rfind("\n\n")]
     shown = kept.count("\n\n") + 1
-    return f"{kept}\n\n(cut after {shown} of {len(found)} settings: ask for a smaller section, such as `dojo.sensai`)"
+    return f"{kept}\n\n(cut after {shown} of {len(found)} settings: ask for a smaller section, such as `reloaded.keys`)"
 
 
 def read_from(found: Sequence[Setting], section: str = "") -> str:
@@ -293,5 +293,5 @@ def read_from(found: Sequence[Setting], section: str = "") -> str:
 
 
 def read_settings(section: str = "") -> str:
-    """The settings of this install, written out: all of a section (`dojo`, `dojo.sensai`), or the ones that match some words. With no section, the list of sections."""
+    """The settings of this install, written out: all of a section (`reloaded`, `reloaded.keys`), or the ones that match some words. With no section, the list of sections."""
     return read_from(settings(), section)

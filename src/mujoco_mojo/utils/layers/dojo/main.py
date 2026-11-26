@@ -9,6 +9,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 import mujoco_mojo.utils.layers.dojo.shared as shared
 from mujoco_mojo.__about__ import __version__
 from mujoco_mojo.meta import DOCS_ASSETS_DIR
+from mujoco_mojo.settings import SENSAI_DISCLOSURE
 from mujoco_mojo.utils.log import get_logger
 
 from .favicons import CACHE_DIR as FAVICON_CACHE_DIR
@@ -198,4 +199,5 @@ dojo_app.include_router(
 # read once at import time: unlike the settings.toml-backed globals above,
 # whether pydantic-ai is installed can't change without a process restart
 shared.template_globals["sensai_available"] = _sensai_router is not None
+shared.template_globals["sensai_disclosure"] = SENSAI_DISCLOSURE
 shared.template_globals["mojo_version"] = __version__

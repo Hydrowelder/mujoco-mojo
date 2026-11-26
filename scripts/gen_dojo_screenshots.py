@@ -202,7 +202,7 @@ def clean_environment(home: Path) -> dict[str, str]:
         # the What's Changed window opens over the page on a first launch
         MUJOCO_MOJO_DOJO__SHOW_WHATS_CHANGED="false",
         # the chat button is only drawn when SensAI is on; the chat shots fill the chat themselves, so no model is called
-        MUJOCO_MOJO_DOJO__SENSAI__ENABLED="true",
+        MUJOCO_MOJO_SENSAI__ENABLED="true",
         MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl"),
     )
     return env

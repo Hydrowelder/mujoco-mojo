@@ -450,7 +450,7 @@ def test_an_alias_can_be_explained_like_the_command(
     controller: ReloadedController,
 ) -> None:
     assert controller.describe("g") == "Generates the model only."
-    assert controller.describe("g?") == "Prints what that would do."
+    assert controller.describe("explain g") == "Prints what that would do."
     assert controller.describe("explain generate") == "Prints what that would do."
 
 
@@ -892,7 +892,7 @@ def test_describe_has_no_side_effects(
 
 @pytest.mark.parametrize(
     "typed",
-    ["explain seed 42", "EXPLAIN seed 42", "seed 42?", "seed 42 ?", "explain seed 42?"],
+    ["explain seed 42", "EXPLAIN seed 42", "explain seed 42?"],
 )
 def test_explain_prints_the_sentence_and_changes_nothing(
     controller: ReloadedController,
@@ -903,29 +903,29 @@ def test_explain_prints_the_sentence_and_changes_nothing(
     controller.submit(typed)
 
     assert any("seed 42" in m and "Sets the seed to 42." in m for m in log.messages())
+    assert "sensai <question>" in log.messages()[-1]
     assert session.seed == 1
     assert session.calls == []
     assert controller.status().state is RunState.IDLE
 
 
-def test_a_question_mark_explains_a_run_instead_of_starting_it(
+def test_a_question_mark_after_a_command_does_not_explain_it(
     controller: ReloadedController, session: FakeSession, log: EventLog
 ) -> None:
-    controller.submit("run?")
+    """A question for SensAI ends in `?`, so a trailing `?` is not a way to ask for an explanation."""
     controller.submit("gen?")
 
     assert session.calls == []
-    assert any("Generates, then runs at 1x." in m for m in log.messages())
-    assert any("Generates the model only." in m for m in log.messages())
+    assert controller.describe("seed 42?") == "Seed must be an integer or none."
+    assert any("Unknown command" in m for m in log.messages())
+    assert not any("Generates the model only." in m for m in log.messages())
 
 
 @pytest.mark.parametrize(
     ("typed", "sentence"),
     [
         ("explain seed", "Sets the seed, e.g. seed 42 or seed none."),
-        ("seed?", "Sets the seed, e.g. seed 42 or seed none."),
         ("explain trial", "Sets the trial number, e.g. trial 3."),
-        ("trial?", "Sets the trial number, e.g. trial 3."),
     ],
 )
 def test_explaining_a_command_that_takes_a_number_does_not_need_the_number(
@@ -975,7 +975,7 @@ def test_explain_still_works_while_a_run_is_in_progress(
     controller.submit("gen")
     assert session.started.wait(5)
 
-    controller.submit("seed 42?")
+    controller.submit("explain seed 42")
 
     assert any("A run is in progress. Try pause or stop." in m for m in log.messages())
     assert session.seed == 1
@@ -988,7 +988,6 @@ def test_the_hint_for_an_explain_is_what_enter_will_do(
     controller: ReloadedController, session: FakeSession
 ) -> None:
     assert controller.describe("explain seed 42") == "Prints what that would do."
-    assert controller.describe("seed 42?") == "Prints what that would do."
     assert controller.describe("explain") == "Prints what Enter would do."
     assert controller.describe("?") == "Opens help."
     assert controller.describe("qu") == "Press Tab to complete quit."

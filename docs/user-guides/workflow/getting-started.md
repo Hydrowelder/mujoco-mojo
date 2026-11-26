@@ -28,7 +28,7 @@ Install `mujoco-mojo` using your preferred package manager. We recommend `uv` fo
 
     - `mujoco-mojo[optimize]` for Optuna-based optimization
     - `mujoco-mojo[mesh-decomp]` for CoACD mesh decomposition
-    - `mujoco-mojo[sensai]` for the Dojo's SensAI assistant
+    - `mujoco-mojo[sensai]` for the SensAI assistant in the Dojo and Reloaded
     - `mujoco-mojo[docs]` to build this documentation on your own machine (see [Reading the Docs Offline](#reading-the-docs-offline))
 
     Install `mujoco-mojo[all]` to get all of them.

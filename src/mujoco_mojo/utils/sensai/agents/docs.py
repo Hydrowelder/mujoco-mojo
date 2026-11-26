@@ -1,4 +1,4 @@
-"""SensAI domain agent for questions about how to use MuJoCo Mojo, answered from the docs that ship with the package."""
+"""SensAI domain agent for questions about how to use MuJoCo Mojo, answered from the docs that ship with the package. It reads no dashboard or session state, so it runs the same in the Dojo and in Reloaded."""
 
 from __future__ import annotations
 
@@ -6,16 +6,15 @@ from pydantic_ai import Agent
 
 from mujoco_mojo.utils.log import get_logger
 
-from .deps import SensAIDeps
-from .docs_catalog import read_docs as _read_docs
-from .docs_catalog import search_docs as _search_docs
-from .docs_catalog import table_of_contents
-from .settings_catalog import read_settings as _read_settings
+from ..tools.docs_catalog import read_docs as _read_docs
+from ..tools.docs_catalog import search_docs as _search_docs
+from ..tools.docs_catalog import table_of_contents
+from ..tools.settings_catalog import read_settings as _read_settings
 
 logger = get_logger(__name__)
 
 _SYSTEM_PROMPT = f"""\
-You are the docs agent inside the MuJoCo Mojo Dojo dashboard. You answer questions about \
+You are the docs agent of SensAI, the assistant in MuJoCo Mojo. You answer questions about \
 how to use MuJoCo Mojo (installing it, starting a project, the generate and runtime \
 scripts, running jobs and Monte Carlo, SLURM, the Dojo, Reloaded, requirements, \
 optimization, the examples, the settings) and about what changed in a release, from the \
@@ -51,8 +50,7 @@ The pages, by path:
 {table_of_contents()}
 """
 
-docs_agent: Agent[SensAIDeps, str] = Agent(
-    deps_type=SensAIDeps,
+docs_agent: Agent[None, str] = Agent(
     output_type=str,
     system_prompt=_SYSTEM_PROMPT,
 )
@@ -103,7 +101,7 @@ def read_settings(section: str = "") -> str:
     Reads the settings of MuJoCo Mojo: each one's key, the label the settings panel shows for it, the values it takes, its default and what it does.
 
     Args:
-        section: Leave it out to list the sections. To read one, its name such as "dojo" or "dojo.sensai". To find settings by words instead, a few words such as "fullscreen" or "play a sound when the job ends".
+        section: Leave it out to list the sections. To read one, its name such as "dojo" or "sensai". To find settings by words instead, a few words such as "fullscreen" or "play a sound when the job ends".
 
     Returns:
         The settings of that section, or the ones that match the words, and how to change a setting with a link to the settings panel. Nothing matched is answered with the list of sections.

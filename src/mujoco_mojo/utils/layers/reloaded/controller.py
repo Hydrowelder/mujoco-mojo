@@ -46,6 +46,7 @@ COMMAND_SUGGESTIONS = (
     "stop",
     "help",
     "explain ",
+    "sensai ",
     "generate",
     "quit",
     "runtime",
@@ -68,6 +69,9 @@ _MANUAL_HELP = (
 _INVALID_TARGET = (
     "[bold red]Invalid target.[/bold red] Use: run until time <N> or run until step <N>"
 )
+_EXPLAIN_IS_NOT_AI = "[dim][cyan]✦[/cyan] explain only says what a command does. For an answer from AI, ask [bold]sensai <question>[/bold].[/dim]"
+_SENSAI_USAGE = "[dim]Ask a question after it, as in [bold]sensai how do I add a requirement?[/bold][/dim]"
+_SENSAI_MISSING = '[bold red]SensAI is not installed.[/bold red] Install it with [bold]pip install "mujoco-mojo\\[sensai]"[/bold].'
 _BUSY_HINT = (
     "[dim]A run is in progress - type [bold]stop[/bold] to cancel it, or "
     "[bold]pause[/bold], [bold]step[/bold], [bold]speed[/bold], or [bold]run[/bold] to control it.[/dim]"
@@ -89,6 +93,7 @@ _COMMAND_WORDS = (
     "help",
     "quit",
     "explain",
+    "sensai",
 )
 _ALIASES = {
     "gen": ("g", "generate"),
@@ -163,6 +168,8 @@ class LogEvent:
     message: str
     markup: bool = True
     """Whether `message` is rich markup (the default) or plain text."""
+    markdown: bool = False
+    """Whether `message` is markdown, such as a SensAI answer, for the log pane to draw as formatted text. `markup` does not apply then."""
 
 
 @dataclass(frozen=True)
@@ -247,6 +254,10 @@ class ReloadedController:
     _last_outcome: Outcome | None = field(default=None, init=False, repr=False)
     _job_thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _watcher: FileWatcher | None = field(default=None, init=False, repr=False)
+    _sensai_thread: threading.Thread | None = field(
+        default=None, init=False, repr=False
+    )
+    _pointed_to_sensai: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._last_command = "run" if self.session.runtime else "gen"
@@ -332,7 +343,10 @@ class ReloadedController:
             ),
             ("dojo", "Print the command that opens the Dojo for this session"),
             ("explain <cmd>", "Say what a command would do, without running it"),
-            ("<cmd>?", "The same, written as a question (a lone ? opens help)"),
+            (
+                "sensai <question>",
+                "Ask SensAI how to use Mojo. It answers from the docs, and a run can go on meanwhile",
+            ),
             (_words("stop"), "Abort the run in progress"),
             (_words("help"), "Show this list"),
             ("quit", "Close Reloaded. To end a run, use stop"),
@@ -347,6 +361,14 @@ class ReloadedController:
         """
         raw = text.strip().lower()
         status = self.status()
+
+        question = self._sensai_question(text)
+        if question is not None:
+            if self._sensai_busy():
+                return "SensAI is still on the last question."
+            if not question:
+                return "Asks SensAI, e.g. sensai how do I pause?"
+            return "Asks SensAI. It answers from the docs."
 
         target = self._explain_target(text)
         if target is not None:
@@ -566,6 +588,12 @@ class ReloadedController:
         """Handles one line typed by the user. An empty line repeats the last command."""
         raw = text.strip().lower()
 
+        # before the run check, since asking does not touch a run
+        question = self._sensai_question(text)
+        if question is not None:
+            self.ask_sensai(question)
+            return
+
         target = self._explain_target(text)
         if target is not None:
             self._explain(target)
@@ -654,20 +682,72 @@ class ReloadedController:
 
     @staticmethod
     def _explain_target(text: str) -> str | None:
-        """The command to explain if `text` asks for an explanation (`explain seed 42`, `seed 42?`), the empty string for a bare `explain`, or `None` if it is an ordinary command."""
+        """The command to explain if `text` asks for an explanation (`explain seed 42`), the empty string for a bare `explain`, or `None` if it is an ordinary command. A command ending in `?` is not one, since a question for SensAI ends that way."""
         stripped = text.strip()
         lowered = stripped.lower()
         if lowered == "explain":
             return ""
         if lowered.startswith("explain "):
             return stripped[len("explain ") :].strip().removesuffix("?").strip()
-        if lowered.endswith("?") and lowered != "?":
-            return stripped.removesuffix("?").strip()
         return None
+
+    @staticmethod
+    def _sensai_question(text: str) -> str | None:
+        """The question in `sensai <question>` as it was typed, the empty string for `sensai` alone, or `None` if `text` is another command."""
+        word, _, question = text.strip().partition(" ")
+        return question.strip() if word.lower() == "sensai" else None
+
+    def _sensai_busy(self) -> bool:
+        thread = self._sensai_thread
+        return thread is not None and thread.is_alive()
+
+    def ask_sensai(self, question: str) -> None:
+        """Puts `question` to SensAI on a thread of its own and logs the answer. One question is answered at a time, and a run can go on meanwhile."""
+        if not question:
+            self._log(_SENSAI_USAGE)
+            return
+        with self._lock:
+            busy = self._sensai_busy()
+            if not busy:
+                self._sensai_thread = threading.Thread(
+                    target=self._sensai_job,
+                    args=(question,),
+                    daemon=True,
+                    name="reloaded-sensai",
+                )
+                self._sensai_thread.start()
+        if busy:
+            self._log("[dim]SensAI is still answering the last question.[/dim]")
+
+    def _sensai_job(self, question: str) -> None:
+        self._log("[dim]Asking SensAI...[/dim]")
+        try:
+            # pydantic-ai is the optional `sensai` extra, and importing it here keeps it out of Reloaded's start
+            from . import sensai
+        except ImportError:
+            self._log(_SENSAI_MISSING)
+            return
+        try:
+            answer = sensai.ask(question)
+        except sensai.NoAnswer as exc:
+            self._log(f"[bold red]SensAI:[/bold red] {escape(str(exc))}")
+            return
+        except Exception as exc:
+            # a thread that dies prints its traceback over the terminal UI
+            logger.exception(exc)
+            self._log(f"[bold red]SensAI failed:[/bold red] {escape(str(exc))}")
+            return
+        model = f" [dim]({escape(answer.model)})[/dim]" if answer.model else ""
+        self._log(f"[bold]SensAI[/bold]{model}")
+        self._emit(LogEvent(message=answer.text, markdown=True))
 
     def _explain(self, target: str) -> None:
         label = escape(target) if target else "Enter"
         self._log(f"[bold]{label}[/bold]: {escape(self.describe(target))}")
+        # once a session: by the second explain the user knows
+        if not self._pointed_to_sensai:
+            self._pointed_to_sensai = True
+            self._log(_EXPLAIN_IS_NOT_AI)
 
     def run(self, arg: str = "") -> None:
         """

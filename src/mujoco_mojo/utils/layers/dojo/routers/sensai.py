@@ -29,21 +29,22 @@ from sse_starlette.sse import EventSourceResponse
 from mujoco_mojo.settings import MujocoMojoSettings, SensAISettings
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig, VersusState
-from mujoco_mojo.utils.layers.dojo.sensai import (
+from mujoco_mojo.utils.sensai import (
     CHAT_AGENT,
-    PlotEditFailed,
-    SensAIDeps,
     ToolTrace,
     build_fallback_model,
-    chat_agent,
     usage_limits,
 )
-from mujoco_mojo.utils.log import get_logger
+from mujoco_mojo.utils.sensai.agents.chat import PlotEditFailed, chat_agent
+from mujoco_mojo.utils.sensai.deps import SensAIDeps
+from mujoco_mojo.utils.log import get_logger, quiet_in_terminal
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata
 
 from .. import shared
 
 logger = get_logger(__name__)
+# the chat shows what a message did, so the console does not have to
+quiet_in_terminal(__name__)
 
 router = APIRouter()
 
@@ -56,18 +57,15 @@ router = APIRouter()
 @router.get("/config")
 async def get_config() -> SensAISettings:
     """Returns the current SensAI settings."""
-    return MujocoMojoSettings().dojo.sensai
+    return MujocoMojoSettings().sensai
 
 
 @router.post("/config")
 async def post_config(body: SensAISettings) -> SensAISettings:
     """Persists updated SensAI settings to disk."""
-    settings = MujocoMojoSettings()
-    updated = settings.model_copy(
-        update={"dojo": settings.dojo.model_copy(update={"sensai": body})}
-    )
+    updated = MujocoMojoSettings().model_copy(update={"sensai": body})
     updated.save()
-    return updated.dojo.sensai
+    return updated.sensai
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +219,7 @@ def _stopped_message(delegate: str | None, max_requests: int) -> str:
     while_, advice = _STOPPED_WHILE.get(
         delegate or "", ("", " Try rephrasing your request.")
     )
-    return f"SensAI stopped after {max_requests} model requests without finishing{while_}.{advice} The limit is dojo.sensai.max_requests in settings."
+    return f"SensAI stopped after {max_requests} model requests without finishing{while_}.{advice} The limit is sensai.max_requests in settings."
 
 
 def _tool_calls(trace: ToolTrace) -> list[dict[str, Any]]:
@@ -300,10 +298,10 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
     """Runs the SensAI agents and streams the response as SSE."""
     settings = MujocoMojoSettings()
 
-    if not settings.dojo.sensai.enabled:
+    if not settings.sensai.enabled:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="SensAI is not enabled. Set dojo.sensai.enabled = true in settings.",
+            detail="SensAI is not enabled. Set sensai.enabled = true in settings.",
         )
 
     current_plot_config: PlotConfig | None = None
@@ -328,8 +326,9 @@ async def post_chat(body: ChatRequest) -> EventSourceResponse:
         column_manifest=column_manifest,
         current_plot_config=current_plot_config,
         versus=body.versus,
-        max_requests=settings.dojo.sensai.max_requests,
-        max_versus_trials=settings.dojo.sensai.max_versus_trials,
+        max_requests=settings.sensai.max_requests,
+        max_versus_trials=settings.sensai.max_versus_trials,
+        features=settings.sensai.features,
     )
 
     model = build_fallback_model()

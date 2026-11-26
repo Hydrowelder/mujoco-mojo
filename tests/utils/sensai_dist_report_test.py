@@ -16,7 +16,7 @@ from mujoco_mojo.utils.defaults import (
     STOCHAS_DIR_NAME,
     STOCHAS_DISTS_FNAME,
 )
-from mujoco_mojo.utils.layers.dojo.sensai.dist_report import (
+from mujoco_mojo.utils.sensai.tools.dist_report import (
     describe_distributions,
     describe_input_outliers,
     describe_trial_inputs,

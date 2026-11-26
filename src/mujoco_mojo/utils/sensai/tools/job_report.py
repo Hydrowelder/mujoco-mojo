@@ -26,7 +26,7 @@ from mujoco_mojo.utils.statusing import (
     TrialStatus,
 )
 
-from ..trial_log import find_log_file, parse_log_file
+from mujoco_mojo.utils.layers.dojo.trial_log import find_log_file, parse_log_file
 
 __all__ = [
     "LogLevel",

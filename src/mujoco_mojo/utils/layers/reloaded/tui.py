@@ -14,10 +14,12 @@ from typing import ClassVar, Literal
 from rich.console import Console, Group, RenderableType
 from rich.errors import MarkupError
 from rich.logging import RichHandler
+from rich.markdown import Markdown
 from rich.segment import Segment
 from rich.style import Style
 from rich.table import Table
 from rich.text import Text
+from rich.theme import Theme
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
@@ -33,7 +35,7 @@ from textual.suggester import Suggester
 from textual.widget import Widget
 from textual.widgets import Button, Footer, Input, RichLog, Static
 
-from mujoco_mojo.settings import ReloadedKeySettings
+from mujoco_mojo.settings import SENSAI_DISCLOSURE, ReloadedKeySettings
 from mujoco_mojo.utils.log import TerminalFilter
 
 from .backends.base import ViewerBackend
@@ -286,6 +288,44 @@ def record_location(record: logging.LogRecord) -> str:
 _WRAP_CONSOLE = Console(file=io.StringIO())
 """Only used to ask Rich where it would break a line, never to print."""
 
+_MARKDOWN_CONSOLE = Console(
+    file=io.StringIO(),
+    theme=Theme(
+        {
+            "markdown.code": f"bold {ACCENT}",
+            "markdown.link": str(LINK),
+            "markdown.link_url": f"underline {LINK}",
+        }
+    ),
+)
+"""Only used to lay markdown out as lines of styled text, never to print."""
+
+MARKDOWN_WIDTH = 80
+"""The width markdown is laid out at before the log pane has one."""
+
+
+def render_markdown(text: str, width: int | None = None) -> Text:
+    """
+    Markdown, such as a SensAI answer, as text for the log pane: emphasis, lists, code and tables drawn the way Rich draws them, at the pane's `width`.
+
+    A link is drawn as its text followed by its address in parentheses, not as a terminal hyperlink, so the terminal finds the address to open and a copied line keeps it.
+    """
+    options = _MARKDOWN_CONSOLE.options.update_width(width or MARKDOWN_WIDTH)
+    lines = _MARKDOWN_CONSOLE.render_lines(
+        Markdown(text, hyperlinks=False, code_theme="ansi_dark"), options, pad=False
+    )
+    out = Text()
+    for number, line in enumerate(lines):
+        row = Text()
+        for segment in line:
+            row.append(segment.text, segment.style)
+        # Rich pads every line out to the width
+        row.rstrip()
+        if number:
+            out.append("\n")
+        out.append_text(row)
+    return out
+
 
 def right_aligned(text: Text, tail: Text, width: int | None) -> Text:
     """`text` followed by `tail` flush with the right edge of a pane `width` cells wide: on the last row `text` takes up once it is wrapped if there is room, and on a row of its own if there is not. With no width to go by, `tail` just follows after two spaces."""
@@ -333,6 +373,8 @@ def render_log_item(item: LogItem, width: int | None = None) -> Text:
         if isinstance(item, Text):
             return item
         if isinstance(item, LogEvent):
+            if item.markdown:
+                return render_markdown(item.message, width)
             return render_markup(item.message) if item.markup else Text(item.message)
         return format_record(item, width)
     except Exception as error:
@@ -542,6 +584,10 @@ class ParamField(Horizontal):
         self.app.query_one(CommandInput).focus()
 
 
+SENSAI_ICON = "✦"
+"""The mark at the right end of the status bar while SensAI is on, whose tooltip is `SENSAI_DISCLOSURE`. A sparkle, as on the Dojo's SensAI button."""
+
+
 class StatusBar(Horizontal):
     """State badge and the session's parameters, with the editable ones a click away."""
 
@@ -560,18 +606,25 @@ class StatusBar(Horizontal):
         *,
         title: str,
         subtitle: str = "",
+        sensai: bool = False,
         id: str | None = None,
     ) -> None:
+        """`sensai` is whether SensAI is on, which puts its icon and disclosure at the right end."""
         super().__init__(id=id)
         self._status = status
         self._title = title
         self._subtitle = subtitle
+        self._sensai = sensai
 
     def compose(self) -> ComposeResult:
         yield Static(id="badge")
         for key, kind in self.LAYOUT:
             yield ParamField(key, kind)
         yield Static(id="title")
+        if self._sensai:
+            icon = Static(SENSAI_ICON, id="sensai")
+            icon.tooltip = SENSAI_DISCLOSURE
+            yield icon
 
     def on_mount(self) -> None:
         self.show(self._status)
@@ -728,6 +781,8 @@ class CommandInput(Input):
             suggester=CommandSuggester(suggestions),
             id=id,
         )
+        # a blink redraws the screen twice a second, and a terminal drops the underline of the link under the mouse on every redraw, so ctrl+click on a link in the log missed
+        self.set_reactive(CommandInput.cursor_blink, False)
         self._history: list[str] = []
         self._cursor: int | None = None
         self._draft = ""
@@ -838,8 +893,9 @@ class ReloadedApp(App[None]):
         explain: bool = True,
         rain_seconds: float = 1.5,
         logs: LogBuffer | None = None,
+        sensai: bool = False,
     ) -> None:
-        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it, and `logs` is a buffer that already holds what was logged before the app started, which the log pane shows first and the app goes on filling."""
+        """`keys` are the keyboard shortcuts, `watch_css` re-applies `tui.tcss` the moment it is saved, for working on the layout, `explain` sets whether the hint on what the typed command does starts out showing, `rain_seconds` is how long the digital rain plays on the way out, where 0 skips it, `logs` is a buffer that already holds what was logged before the app started, which the log pane shows first and the app goes on filling, and `sensai` is whether SensAI is on, which shows its icon and disclosure in the status bar."""
         super().__init__(watch_css=watch_css)
         self.shortcuts = shortcut_bindings(keys or ReloadedKeySettings())
         """The keys bound to actions, in the order the footer shows them."""
@@ -860,6 +916,7 @@ class ReloadedApp(App[None]):
         self._log_handler: TuiLogHandler | None = None
         self._logs = logs if logs is not None else LogBuffer()
         self._quitting = False
+        self._sensai = sensai
         controller.sink = self._deliver
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
@@ -888,6 +945,7 @@ class ReloadedApp(App[None]):
             self._controller.status(),
             title=APP_TITLE,
             subtitle=self.sub_title,
+            sensai=self._sensai,
             id="status",
         )
         yield ControlBar(

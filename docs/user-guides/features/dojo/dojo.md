@@ -115,7 +115,7 @@ Dojo is split into environments depending on your current needs:
 
 ### SensAI
 
-**An Assistant for the Dashboard.** Ask about your job, change your plot, or find out how to do something in Mojo, in plain language. [SensAI](sensai.md) is optional and needs a language model of your choice.
+**An Assistant for the Dashboard.** Ask about your job, change your plot, or find out how to do something in Mojo, in plain language, in the [SensAI chat](sensai.md). [SensAI](../sensai.md) is optional and needs a language model of your choice.
 
 ---
 
@@ -129,7 +129,7 @@ The gear in the toolbar opens the settings panel, an editor for your global sett
     <figcaption>The settings panel, opened with the gear in the toolbar, with its sections on the left and the description of the field under the mouse at the bottom.</figcaption>
 </figure>
 
-- **Sections and search:** the left side lists a section for each group of settings (general, visualization, Dojo, Reloaded, run and SLURM). The search box filters every section by the name and the description of a setting.
+- **Sections and search:** the left side lists a section for each group of settings (general, visualization, Dojo, Reloaded, SensAI, run and SLURM). The search box filters every section by the name and the description of a setting.
 - **Hints:** hover over or edit a field and the bar at the bottom of the panel describes it, including the values it accepts.
 - **Widgets that fit the setting:** a switch for a yes/no setting, a list for a choice, a masked box for a password or a key, a color field that accepts a name or a hex value, and an editable list for entries such as the SensAI models.
 - **Reset:** every field that differs from its default has a small button to put it back. **Restore Defaults** at the top resets them all.

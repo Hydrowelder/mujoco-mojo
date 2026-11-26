@@ -8,7 +8,7 @@ import json
 import textwrap
 import tomllib
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -318,10 +318,10 @@ class VisualizationSettings(BaseModel):
 
 
 DEFAULT_MAX_REQUESTS = 12
-"""The default of `dojo.sensai.max_requests`."""
+"""The default of `sensai.max_requests`."""
 
 DEFAULT_MAX_VERSUS_TRIALS = 50
-"""The default of `dojo.sensai.max_versus_trials`."""
+"""The default of `sensai.max_versus_trials`."""
 
 
 class SensAIModelEntry(BaseModel):
@@ -346,8 +346,42 @@ class SensAIModelEntry(BaseModel):
     )
 
 
+SENSAI_DISCLOSURE = "SensAI is an AI assistant and can make mistakes. Please verify its answers and any changes it makes before relying on them."
+"""What SensAI says about itself wherever it can be used: the Dojo's chat window and Reloaded's status bar show it on a small icon."""
+
+
+class SensAIFeatures(BaseModel):
+    """What SensAI may do, one switch for each of its specialists. A specialist that is off is not offered to SensAI at all, and SensAI tells the user it is turned off when asked for it."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, title="Features")
+
+    docs: bool = Field(
+        default=True,
+        title="Docs",
+        description="Answer how to use Mojo, what a setting does and what changed in a release, from the docs that ship with Mojo. The only feature Reloaded has.",
+    )
+
+    job_status: bool = Field(
+        default=True,
+        title="Job Status",
+        description="Answer questions about the job open in the Dojo: its progress, its trials and their timing, errors and logs, and the inputs each trial drew.",
+    )
+
+    signals: bool = Field(
+        default=True,
+        title="Signals",
+        description="Answer which signals the trial open in the Dojo recorded. Plot can still find signals to add without it.",
+    )
+
+    plot: bool = Field(
+        default=True,
+        title="Plot",
+        description="Read and change the trial viewer's plot, load saved plot profiles, and compare trials in versus mode.",
+    )
+
+
 class SensAISettings(BaseModel):
-    """Settings for the SensAI assistant embedded in the Dojo dashboard."""
+    """Settings for SensAI, the assistant in the Dojo and in Reloaded."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -382,7 +416,7 @@ class SensAISettings(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _drop_removed_shared_base_url(cls, data: Any) -> Any:
-        """`dojo.sensai.base_url` was removed in favor of a `base_url` on each model, and `save()` wrote it into every settings file, so a file that still names it would otherwise stop every `mujoco-mojo` command from starting. It is dropped, with a warning when an Ollama model has no URL of its own and so now needs one."""
+        """SensAI's shared `base_url` was removed in favor of a `base_url` on each model, and `save()` wrote it into every settings file, so a file that still names it would otherwise stop every `mujoco-mojo` command from starting. It is dropped, with a warning when an Ollama model has no URL of its own and so now needs one."""
         if not isinstance(data, dict) or "base_url" not in data:
             return data
         data = dict(data)
@@ -395,7 +429,7 @@ class SensAISettings(BaseModel):
             for entry in entries
         ):
             warnings.warn(
-                "`dojo.sensai.base_url` was removed. Set `base_url` on each Ollama model in `dojo.sensai.models` instead, e.g. `http://localhost:11434/v1`.",
+                "SensAI's shared `base_url` was removed. Set `base_url` on each Ollama model in `sensai.models` instead, e.g. `http://localhost:11434/v1`.",
                 stacklevel=2,
             )
         return data
@@ -416,6 +450,50 @@ class SensAISettings(BaseModel):
         description="The most trials one message may add to versus mode, since each loads its data. Pins past it are left out and a later message adds the next batch.",
     )
 
+    features: SensAIFeatures = Field(
+        default_factory=SensAIFeatures,
+        description="What SensAI may do, one switch for each of its specialists.",
+    )
+
+
+def move_sensai_settings(
+    data: MutableMapping[str, Any], *, old_wins: bool = False
+) -> None:
+    """
+    Moves SensAI's settings, in place, from `dojo.sensai`, where they were before they had a section of their own, to `sensai`, so a settings file or variable written before the move still loads. `data` is settings as a dict or a parsed `tomlkit` document.
+
+    A key under both is taken from `sensai`, unless `old_wins`. A `dojo` table left empty is removed.
+    """
+    dojo = data.get("dojo")
+    if not isinstance(dojo, MutableMapping) or "sensai" not in dojo:
+        return
+    old = dojo.pop("sensai")
+    if not dojo:
+        del data["dojo"]
+    new = data.setdefault("sensai", old)
+    if new is old or not (isinstance(new, MutableMapping) and isinstance(old, Mapping)):
+        return
+    for key, value in old.items():
+        if old_wins or key not in new:
+            new[key] = value
+
+
+def _with_sections_copied(data: Mapping[str, Any]) -> dict[str, Any]:
+    """A copy of `data` deep enough that `move_sensai_settings` changes nothing it was given."""
+    return {
+        key: dict(value) if isinstance(value, Mapping) else value
+        for key, value in data.items()
+    }
+
+
+class _SettingsFile(TomlConfigSettingsSource):
+    """A `settings.toml` with SensAI's settings moved out of `[dojo.sensai]` as it is read. Each file is moved on its own, so a project file written before the move still outranks the global file, which `save()` writes a `[sensai]` table into."""
+
+    def __call__(self) -> dict[str, Any]:
+        data = _with_sections_copied(super().__call__())
+        move_sensai_settings(data)
+        return data
+
 
 class DojoSettings(BaseModel):
     """Settings for the Dojo dashboard."""
@@ -432,11 +510,6 @@ class DojoSettings(BaseModel):
         json_schema_extra={
             "x-icon": '<circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><line x1="3" y1="12" x2="21" y2="12"/>',
         },
-    )
-
-    sensai: SensAISettings = Field(
-        default_factory=SensAISettings,
-        description="Settings for the SensAI assistant.",
     )
 
     chime_enabled: bool = Field(
@@ -1020,7 +1093,7 @@ def _merge_into_toml(
     """
     Writes `data` into an existing `tomlkit` document or table, key by key, so any comments and formatting attached to a key that already exists survive.
 
-    A key present in `doc` but absent from `data` is normally left alone rather than deleted - for a fixed-schema section (e.g. `[dojo.sensai]`), a key can only be absent from `data` because `exclude_none` omitted an unset `Optional` field, and leaving whatever was last written for it untouched is the right call. That reasoning doesn't hold for a free-form (`RootModel`-backed) table like `[slurm]`: every key in `data` there *is* the complete, authoritative set of entries the caller wants, so a table for one of those fields is fully replaced instead (stale keys deleted) - otherwise, removing an entry via the Dojo settings panel wouldn't actually delete it from settings.toml, and it would silently reappear on the next load.
+    A key present in `doc` but absent from `data` is normally left alone rather than deleted - for a fixed-schema section (e.g. `[sensai]`), a key can only be absent from `data` because `exclude_none` omitted an unset `Optional` field, and leaving whatever was last written for it untouched is the right call. That reasoning doesn't hold for a free-form (`RootModel`-backed) table like `[slurm]`: every key in `data` there *is* the complete, authoritative set of entries the caller wants, so a table for one of those fields is fully replaced instead (stale keys deleted) - otherwise, removing an entry via the Dojo settings panel wouldn't actually delete it from settings.toml, and it would silently reappear on the next load.
 
     Args:
         doc: A parsed `tomlkit` document or table to update in place.
@@ -1254,7 +1327,7 @@ class MujocoMojoSettings(BaseSettings):
     """
     Global user-level settings persisted to `~/.mujoco-mojo/settings.toml`, layered with an optional project-local override file, found by searching the current directory and its parents - the same User-settings-vs-Workspace-settings model VS Code uses.
 
-    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, the nearest `.mujoco-mojo/settings.toml` in the current directory or a parent) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_DOJO__SENSAI__MODEL_NAME=llama3.2:3b`.
+    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, the nearest `.mujoco-mojo/settings.toml` in the current directory or a parent) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_SENSAI__MAX_REQUESTS=20`.
     """
 
     model_config = SettingsConfigDict(
@@ -1298,6 +1371,11 @@ class MujocoMojoSettings(BaseSettings):
         description="Settings for `mujoco-mojo reloaded`.",
     )
 
+    sensai: SensAISettings = Field(
+        default_factory=SensAISettings,
+        description="Settings for SensAI, the assistant in the Dojo and in Reloaded.",
+    )
+
     run: RunSettings = Field(
         default_factory=RunSettings,
         description="Settings for `mujoco-mojo run`'s subcommands.",
@@ -1321,9 +1399,19 @@ class MujocoMojoSettings(BaseSettings):
             init_settings,
             env_settings,
             dotenv_settings,
-            TomlConfigSettingsSource(settings_cls, toml_file=project_settings_file()),
-            TomlConfigSettingsSource(settings_cls, toml_file=GLOBAL_SETTINGS_FILE),
+            _SettingsFile(settings_cls, toml_file=project_settings_file()),
+            _SettingsFile(settings_cls, toml_file=GLOBAL_SETTINGS_FILE),
         )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_sensai_from_dojo(cls, data: Any) -> Any:
+        """Moves `dojo.sensai` from an environment variable or a `.env` file to `sensai` (see `move_sensai_settings`). The settings files are moved as they are read (`_SettingsFile`), so what is left here outranks them and wins over what they put under `sensai`."""
+        if not isinstance(data, Mapping):
+            return data
+        data = _with_sections_copied(data)
+        move_sensai_settings(data, old_wins=True)
+        return data
 
     @classmethod
     def defaults(cls) -> MujocoMojoSettings:
@@ -1352,7 +1440,7 @@ class MujocoMojoSettings(BaseSettings):
         Validated by overlaying the new value onto the full currently-effective settings (project + global + env + defaults) and calling `model_validate` on the result - `model_config` forbids extra fields on every fixed-shape settings group, so a typo'd leaf and a wrong-typed value both raise `pydantic.ValidationError` before anything is written. The *validated and re-dumped* leaf value is what actually gets persisted, not the raw `value` argument, so e.g. the CLI's loosely-typed input string `"true"` for a `bool` field is written to TOML as a real boolean, not a quoted string. Only that one changed leaf is written into the project file, keeping it a small, deliberate diff rather than a full mirror of every setting - contrast with `save()`, which always persists every field (correct for the global file, wrong here).
 
         Args:
-            key: Dotted path, e.g. "dojo.sensai.max_requests", "assets.symlink", or "slurm.sbatch.account".
+            key: Dotted path, e.g. "sensai.max_requests", "assets.symlink", or "slurm.sbatch.account".
             value: The value to set, already parsed to its target Python type.
 
         Returns:
@@ -1403,6 +1491,8 @@ class MujocoMojoSettings(BaseSettings):
         path = project_settings_file()
         if path.exists():
             doc = tomlkit.parse(path.read_text(encoding="utf-8"))
+            # written before SensAI had a section of its own, the old table would sit next to the new key
+            move_sensai_settings(doc)
         else:
             # model_construct() bypasses BaseSettings' usual env/TOML-reading
             # __init__ entirely - safe here since save(project=True) never
@@ -1463,6 +1553,7 @@ class MujocoMojoSettings(BaseSettings):
                     doc = tomlkit.parse(f"#:schema {SCHEMA_FILENAME}\n")
 
                 if not project:
+                    move_sensai_settings(doc)
                     # mode="json" turns any SecretStr field (e.g. dojo.password)
                     # into its masked "**********" string rather than a raw object
                     # tomlkit can't write at all - the real value is never persisted

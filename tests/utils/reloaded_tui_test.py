@@ -23,7 +23,7 @@ from textual.widgets import RichLog, Static
 
 import mujoco_mojo.utils.layers.reloaded.tui as tui_module
 
-from mujoco_mojo.settings import ReloadedKeySettings
+from mujoco_mojo.settings import SENSAI_DISCLOSURE, ReloadedKeySettings
 from mujoco_mojo.utils.layers.reloaded.backends.base import ConnectionInfo
 from mujoco_mojo.utils.layers.reloaded.rain import RainScreen
 from mujoco_mojo.utils.layers.reloaded.controller import (
@@ -56,6 +56,7 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     record_full_location,
     record_location,
     render_log_item,
+    render_markdown,
     render_markup,
     run_summary,
     selected_text,
@@ -76,6 +77,7 @@ def make_app(
     explain: bool = True,
     keys: ReloadedKeySettings | None = None,
     rain_seconds: float = 0.0,
+    sensai: bool = False,
 ) -> tuple[ReloadedApp, FakeSession]:
     session = session if session is not None else FakeSession()
     backend = backend if backend is not None else FakeBackend()
@@ -87,6 +89,7 @@ def make_app(
         subtitle="test",
         explain=explain,
         rain_seconds=rain_seconds,
+        sensai=sensai,
     )
     return app, session
 
@@ -885,8 +888,8 @@ def test_the_command_line_runs_remembers_completes_and_explains(tmp_path: Path) 
             assert hint.region.y == command.region.y
             assert box.region.right - hint.region.right <= 2
 
-            # a trailing question mark explains instead of doing it
-            command.value = "seed 42?"
+            # explain says what a command does instead of doing it, and points to sensai for AI
+            command.value = "explain seed 42"
             await wait_until(
                 pilot, lambda: "Prints what that would do." in hint_text(app)
             )
@@ -894,6 +897,7 @@ def test_the_command_line_runs_remembers_completes_and_explains(tmp_path: Path) 
             await wait_until(
                 pilot, lambda: "seed 42: Sets the seed to 42." in log_text(app)
             )
+            await wait_until(pilot, lambda: "sensai <question>" in log_text(app))
             assert session.seed == 1
             assert session.calls == [False]
 
@@ -1040,3 +1044,69 @@ def test_closing_the_viewer_window_closes_reloaded(
 
     run(scenario())
     assert app.return_code == 0
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_the_sensai_icon_and_its_disclosure_show_only_while_sensai_is_on(
+    tmp_path: Path, on: bool
+) -> None:
+    async def scenario() -> None:
+        app, _ = make_app(tmp_path, sensai=on)
+        async with app.run_test(size=(140, 30)):
+            icons = list(app.query("#sensai"))
+            assert len(icons) == (1 if on else 0)
+            if on:
+                assert icons[0].tooltip == SENSAI_DISCLOSURE
+                # the right end of the top row
+                assert icons[0].region.right == app.size.width - 1
+                assert icons[0].region.y == 0
+
+    run(scenario())
+
+
+def test_the_command_line_cursor_does_not_blink(tmp_path: Path) -> None:
+    """A blink redraws the screen twice a second, and a terminal drops the underline of the link under the mouse on every redraw, so ctrl+click on a link in the log missed."""
+
+    async def scenario() -> None:
+        app, _ = make_app(tmp_path)
+        async with app.run_test():
+            assert app.query_one(CommandInput).cursor_blink is False
+
+    run(scenario())
+
+
+class TestMarkdownInTheLog:
+    """A SensAI answer is markdown, which the log pane draws as formatted text."""
+
+    ANSWER = "Press **F12** or type `pause`.\n\n- Type `run` to carry on.\n\nSee [Reloaded](https://x.test/reloaded/#keys)."
+
+    def test_the_marks_become_styles(self) -> None:
+        text = render_markdown(self.ANSWER, 60)
+
+        assert "**" not in text.plain and "`" not in text.plain
+        styled = {
+            text.plain[span.start : span.end]: str(span.style) for span in text.spans
+        }
+        assert "bold" in styled["F12"]
+        assert "bold" in styled["pause"]
+
+    def test_a_link_keeps_its_address_on_one_line_for_the_terminal_to_open(
+        self,
+    ) -> None:
+        text = render_markdown(self.ANSWER, 60)
+
+        assert (
+            "See Reloaded (https://x.test/reloaded/#keys)." in text.plain.splitlines()
+        )
+
+    def test_it_is_laid_out_at_the_width_with_no_padding(self) -> None:
+        long = " ".join(["word"] * 40)
+        lines = render_markdown(long, 30).plain.splitlines()
+
+        assert len(lines) > 1
+        assert all(len(line) <= 30 and line == line.rstrip() for line in lines)
+
+    def test_a_markdown_event_is_drawn_as_markdown(self) -> None:
+        drawn = render_log_item(LogEvent(message=self.ANSWER, markdown=True), 60)
+
+        assert drawn.plain == render_markdown(self.ANSWER, 60).plain

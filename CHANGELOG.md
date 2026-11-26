@@ -3,11 +3,20 @@
 ## Version 2.8.6 (2026-11-25)
 
 - Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
+- Added a `sensai` command to Reloaded, which answers questions about using Mojo from the docs
+- Added `sensai.features` to turn off any of SensAI's specialists (docs, job status, signals, plot)
+- SensAI's settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
+- Reloaded shows SensAI's disclaimer on an icon in the status bar while SensAI is on
+- Reloaded's `explain` now points to `sensai` for an AI answer
+- Fixed SensAI losing its routing rules after the first message of a chat
+- Fixed links in Reloaded's log being hard to ctrl+click
+
+> [!WARNING]
+> - **Breaking:** A Reloaded command ending in `?` no longer explains it, since questions for `sensai` end that way. Use `explain <cmd>`
 
 ## Version 2.8.5 (2026-11-24)
 
 - Fixed the browser viewer being reported as unavailable with MuJoCo 4.0.1
-- Updated the locked MuJoCo to 4.0.1
 - Turned contacts back on in the berthing example, with the arm's own parts kept from colliding with each other
 
 ## Version 2.8.4 (2026-11-22)

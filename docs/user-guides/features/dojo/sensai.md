@@ -1,96 +1,10 @@
-# SensAI
+# SensAI Chat
 
 !!! abstract
 
-    **SensAI** is an assistant built into the Dojo. Ask it about your job (_which trial took the longest?_), what your trials were sampled from (_what is the wind speed drawn from?_), tell it to change your plot (_plot the x position of box2 and make it red_) or to compare trials in [versus mode](mosaic.md#versus-mode) (_compare the trials where wind speed was 2 or more standard deviations out_), ask what a trial recorded, ask how to do something in Mojo (_how do I add a requirement?_), or ask what a setting does (_how do I start the Dojo in fullscreen?_). It answers in plain language, using the same data the Dojo shows you.
+    The **SensAI chat** is [SensAI](../sensai.md) in the Dojo. Ask it about your job (_which trial took the longest?_), what your trials were sampled from (_what is the wind speed drawn from?_), tell it to change your plot (_plot the x position of box2 and make it red_) or to compare trials in [versus mode](mosaic.md#versus-mode) (_compare the trials where wind speed was 2 or more standard deviations out_), ask what a trial recorded, ask how to do something in Mojo (_how do I add a requirement?_), or ask what a setting does (_how do I start the Dojo in fullscreen?_). It answers in plain language, using the same data the Dojo shows you.
 
-    SensAI is **optional** and still **experimental**. It is an AI assistant and can make mistakes, so please verify its answers and any changes it makes before relying on them. It talks to a language model that you choose and provide a key for; nothing is sent anywhere until you turn it on.
-
----
-
-## Setting it up
-
-SensAI needs the `sensai` extra, and a model.
-
-**1. Install the extra.**
-
-``` bash linenums="0"
-uv add "mujoco-mojo[sensai]"      # or: pip install "mujoco-mojo[sensai]"
-```
-
-**2. Turn it on and name a model.** The easiest way is the [settings panel](dojo.md#settings) (the gear in the Dojo's toolbar): open **Dojo > SensAI**, switch **Enabled** on and add an entry under **Models**. You can also set it in `~/.mujoco-mojo/settings.toml`:
-
-``` toml
-[dojo.sensai]
-enabled = true
-models = [
-    { provider = "Google", model_name = "gemini-3.5-flash-lite" },
-]
-```
-
-**3. Give the provider your key** in the environment variable that provider reads. The best place for it is a `.env` file in your project, which Mojo reads for you every time it starts:
-
-``` bash linenums="0"
-# .env
-GOOGLE_API_KEY="..."
-```
-
-Then start the Dojo as usual:
-
-``` bash linenums="0"
-mujoco-mojo dojo ./mojo-models
-```
-
-Mojo looks for the `.env` from where it is installed and upward, not from the folder you run the command in, so it finds the one in the project that holds your virtual environment. If Mojo is installed somewhere else, such as a tool install, put the file in a folder above that install, or set the variable in your shell instead. Add `.env` to your `.gitignore`, so the key is never committed.
-
-To use a key for one session only, set it in your shell before you start the Dojo. A variable set in the shell takes priority over the `.env`:
-
-``` bash linenums="0"
-export GOOGLE_API_KEY="..."
-mujoco-mojo dojo ./mojo-models
-```
-
-SensAI reads the key from the environment and never stores it in the settings file. Once SensAI is enabled, a sparkle button appears at the bottom right of every Dojo page.
-
-### Choosing models
-
-`models` is a list, and the order matters: SensAI tries the first entry, and **falls back** to the next when a model cannot answer, for example when you hit a free tier's rate limit. Each entry has:
-
-| Field        | Meaning                                                                                                                                       |
-| :----------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
-| `provider`   | Who serves the model. One of the providers below.                                                                                             |
-| `model_name` | That provider's own name for the model, such as `gemini-3.5-flash-lite`.                                                                      |
-| `base_url`   | Optional. Send this entry's requests to this address instead of the provider's usual one, for example a gateway or a proxy. Ollama needs one. |
-
-The Provider menu in the settings panel shows the variable for each choice.
-
-???+ example "Example: A local model with Ollama, and a cloud model as a backup"
-
-    Ollama has no default address, so give each Ollama entry its own `base_url`:
-
-    ``` toml
-    [dojo.sensai]
-    enabled = true
-    models = [
-        { provider = "Ollama", model_name = "llama3.1", base_url = "http://localhost:11434/v1" },
-        { provider = "Google", model_name = "gemini-3.5-flash-lite" },
-    ]
-    ```
-
-???+ info "Anthropic with a bearer token"
-
-    Anthropic is usually reached with `ANTHROPIC_API_KEY`. If your organization uses a gateway that expects a bearer token, set `ANTHROPIC_AUTH_TOKEN` instead, and SensAI sends it as an `Authorization: Bearer` header. When both are set, the key is used. Put the gateway's address in the entry's `base_url`, or in `ANTHROPIC_BASE_URL`.
-
-A provider whose client does not accept a `base_url` (not every one does) refuses the setting with an error that names the provider, rather than quietly sending your requests somewhere else.
-
-### Limits
-
-Two settings keep a message from running away:
-
-| Setting                         | Default | What it limits                                                                                                                                            |
-| :------------------------------ | :------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dojo.sensai.max_requests`      | 12      | The most model requests one message may make. A message that goes over is stopped with an error that names this setting, and your plot is left as it was. |
-| `dojo.sensai.max_versus_trials` | 50      | The most trials one message may add to [versus mode](mosaic.md#versus-mode), since each one loads its data. Ask again to add the next batch.              |
+    [Set SensAI up](../sensai.md#setting-it-up) first, and a sparkle button appears at the bottom right of every Dojo page. SensAI can make mistakes, so please verify its answers and any changes it makes before relying on them.
 
 ---
 
@@ -112,11 +26,13 @@ Press the sparkle button to open the chat. Type and press ++enter++ (++shift+ent
 - **Long messages:** the latest stays open and older ones fold to a preview you can click open.
 - **Chat history:** the [export menu](mosaic.md#export-options) can download the conversation.
 
+What the chat can do depends on which of SensAI's [features](../sensai.md#choosing-what-it-can-do) are on. Ask for one that is off and it tells you so.
+
 ---
 
 !!! tip "Getting a good answer"
 
-    Ask for one thing at a time, and name signals and trials the way the Dojo shows them, or say what a signal measures: SensAI also searches the [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels) of the signals, so "the box's angular velocity" can find `Bodies/box1/xvelr:y`. The built-in signals describe themselves, and you can describe your own. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise `dojo.sensai.max_requests` or split the ask.
+    Ask for one thing at a time, and name signals and trials the way the Dojo shows them, or say what a signal measures: SensAI also searches the [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels) of the signals, so "the box's angular velocity" can find `Bodies/box1/xvelr:y`. The built-in signals describe themselves, and you can describe your own. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise [`sensai.max_requests`](../sensai.md#limits) or split the ask.
 
 ---
 

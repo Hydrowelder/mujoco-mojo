@@ -329,7 +329,7 @@
         <div class="relative group/info flex items-center">
           <span tabindex="0"
                 role="note"
-                aria-label="SensAI is an AI assistant and can make mistakes. Please verify its answers and any changes it makes before relying on them."
+                aria-label="{{ sensai_disclosure }}"
                 class="flex items-center cursor-help text-ink-muted hover:text-ink-body focus:text-ink-body transition-colors outline-none">
             <svg class="w-4 h-4"
                  fill="none"
@@ -345,7 +345,7 @@
             </svg>
           </span>
           <div class="panel p-3! absolute left-0 top-full mt-2 w-64 z-300 pointer-events-none invisible opacity-0 transition-opacity group-hover/info:visible group-hover/info:opacity-100 group-focus-within/info:visible group-focus-within/info:opacity-100 text-xs font-normal normal-case tracking-normal leading-relaxed text-ink-body">
-            SensAI is an AI assistant and can make mistakes. Please verify its answers and any changes it makes before relying on them.
+            {{ sensai_disclosure }}
           </div>
         </div>
       </div>

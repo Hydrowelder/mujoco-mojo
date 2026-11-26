@@ -7,7 +7,7 @@ from pydantic_ai import Agent, RunContext
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.log import get_logger
 
-from .deps import SensAIDeps
+from ..deps import SensAIDeps
 
 logger = get_logger(__name__)
 

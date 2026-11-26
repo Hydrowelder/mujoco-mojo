@@ -182,11 +182,11 @@ function sensai() {
         this._showWindow();
       }
 
-      // keeps this FAB in sync with dojo.sensai.enabled if the user flips it
+      // keeps this FAB in sync with sensai.enabled if the user flips it
       // in the settings panel without reloading the page - see settings-panel.ts's
       // _applySettingsWrite for the dispatch side.
       window.addEventListener("mojo-settings-saved", (e) => {
-        const detail = (e as CustomEvent<{ dojo?: { sensai?: { enabled?: boolean } } }>).detail;
+        const detail = (e as CustomEvent<{ sensai?: { enabled?: boolean } }>).detail;
         const next = enabledFromSettings(detail);
         if (next !== undefined) this.enabled = next;
       });

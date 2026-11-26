@@ -5,7 +5,7 @@ from collections.abc import Collection, Iterable, Sequence
 import pytest
 
 from mujoco_mojo.utils.layers.dojo.plot_config import VersusState
-from mujoco_mojo.utils.layers.dojo.sensai.versus import (
+from mujoco_mojo.utils.sensai.tools.versus import (
     VersusChange,
     VersusError,
     change_versus,

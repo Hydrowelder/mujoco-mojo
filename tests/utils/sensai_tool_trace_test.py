@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
 
 from pydantic_ai.models.test import TestModel
 
-from mujoco_mojo.utils.layers.dojo.sensai.tool_trace import (
+from mujoco_mojo.utils.sensai.tool_trace import (
     ARGS_LENGTH,
     RESULT_LENGTH,
     ToolTrace,

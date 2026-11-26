@@ -1,7 +1,7 @@
 """
 A trial's sampled inputs set against the distributions they were drawn from.
 
-The Dojo's distributions panel (`routers/mosaic.py`) and SensAI's job agent (`sensai/dist_report.py`) both read a job's saved distributions and a trial's saved draws. What a draw is in the unit its distribution was declared in, its z-score, and the nominal are worked out here, once, so the two cannot disagree.
+The Dojo's distributions panel (`routers/mosaic.py`) and SensAI's job agent (`utils/sensai/tools/dist_report.py`) both read a job's saved distributions and a trial's saved draws. What a draw is in the unit its distribution was declared in, its z-score, and the nominal are worked out here, once, so the two cannot disagree.
 """
 
 from __future__ import annotations

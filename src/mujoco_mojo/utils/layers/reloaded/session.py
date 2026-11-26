@@ -20,7 +20,11 @@ from rich.markup import escape
 import mujoco_mojo.runtime as rt
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.mojo_model import MojoModel
-from mujoco_mojo.settings import ReloadedKeySettings, ReloadedStudioSettings
+from mujoco_mojo.settings import (
+    MujocoMojoSettings,
+    ReloadedKeySettings,
+    ReloadedStudioSettings,
+)
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
 from mujoco_mojo.typing import StudioGraphics, UserInterface
 from mujoco_mojo.utils.defaults import (
@@ -697,6 +701,7 @@ class MojoReloaded:
                     keys=self.keys,
                     subtitle=f"{self.ui.value} | {self.workdir}",
                     logs=logs,
+                    sensai=MujocoMojoSettings().sensai.enabled,
                 ).run()
             finally:
                 self._sync_hook = None

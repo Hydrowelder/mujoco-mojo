@@ -1,5 +1,6 @@
 import json
 import logging
+from functools import lru_cache
 from logging.handlers import QueueHandler, RotatingFileHandler
 from pathlib import Path
 from typing import Any, TypedDict
@@ -8,7 +9,7 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.theme import Theme
 
-__all__ = ["get_logger", "get_trial_log_handler", "setup_logger"]
+__all__ = ["get_logger", "get_trial_log_handler", "quiet_in_terminal", "setup_logger"]
 
 mojo_theme = Theme(
     {
@@ -27,10 +28,32 @@ class MojoLogExtra(TypedDict, total=False):
     terminal_only: bool
 
 
+_QUIET_IN_TERMINAL: set[str] = set()
+
+
+def quiet_in_terminal(name: str) -> None:
+    """
+    Sends what the logger `name`, and every logger under it, logs below WARNING to the log file only, out of the terminal and Reloaded's log pane. Its warnings and errors still show.
+
+    For loggers whose lines only help when looking into a problem afterwards, such as SensAI's tool calls and the HTTP requests to its models.
+    """
+    _QUIET_IN_TERMINAL.add(name)
+    _is_quiet.cache_clear()
+
+
+@lru_cache(maxsize=512)
+def _is_quiet(name: str) -> bool:
+    # cached, since a runtime can log on every step and this runs for each record
+    return any(
+        name == quiet or name.startswith(f"{quiet}.") for quiet in _QUIET_IN_TERMINAL
+    )
+
+
 class TerminalFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        # Block if 'file_only' is True
-        return not getattr(record, "file_only", False)
+        if getattr(record, "file_only", False):
+            return False
+        return record.levelno >= logging.WARNING or not _is_quiet(record.name)
 
 
 class FileFilter(logging.Filter):

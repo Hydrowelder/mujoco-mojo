@@ -1,4 +1,6 @@
 import json
+import os
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ from mujoco_mojo.settings import (
     GeneralSettings,
     MujocoMojoSettings,
     VisualizationSettings,
+    move_sensai_settings,
 )
 from mujoco_mojo.utils.layers.dojo.routers.settings import (
     _dojo_settings_schema,
@@ -144,7 +147,7 @@ def test_settings_save_never_writes_a_real_secret(
 def test_settings_save_never_writes_a_real_dojo_password(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """save() never persists dojo.password's real value - only the masked placeholder ever reaches disk, same guarantee as dojo.sensai.api_key."""
+    """save() never persists dojo.password's real value - only the masked placeholder ever reaches disk, same guarantee as any other `SecretStr` field."""
     toml_path = tmp_path / "settings.toml"
     monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", tmp_path)
     monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", toml_path)
@@ -622,13 +625,13 @@ def test_set_project_value_preserves_siblings_and_comments(
 
     project_path.write_text(
         "#:schema settings.schema.json\n"
-        "[dojo.sensai]\n"
+        "[sensai]\n"
         "# pinned for this project's demo\n"
         "max_requests = 7\n",
         encoding="utf-8",
     )
 
-    MujocoMojoSettings.set_project_value("dojo.sensai.enabled", True)
+    MujocoMojoSettings.set_project_value("sensai.enabled", True)
 
     content = project_path.read_text()
     assert "# pinned for this project's demo" in content
@@ -700,7 +703,7 @@ def test_set_project_value_rejects_unknown_path_without_writing(
     assert not project_path.exists()
 
     with pytest.raises(ValidationError):
-        MujocoMojoSettings.set_project_value("dojo.sensai.bogus_key", 1)
+        MujocoMojoSettings.set_project_value("sensai.bogus_key", 1)
     assert not project_path.exists()
 
 
@@ -769,3 +772,109 @@ def test_the_sensai_limits_refuse_a_value_outside_their_range(
 
     with pytest.raises(ValidationError):
         SensAISettings.model_validate({field: bad})
+
+
+class TestSensAISettingsMovedOutOfDojo:
+    """SensAI's settings were `[dojo.sensai]` before they had a section of their own, `[sensai]`, and a file or variable written before the move still has to load."""
+
+    @pytest.fixture
+    def files(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> tuple[Path, Path]:
+        """The global and the project settings file, both empty."""
+        global_path = tmp_path / "global" / "settings.toml"
+        project_path = tmp_path / "project" / "settings.toml"
+        global_path.parent.mkdir()
+        project_path.parent.mkdir()
+        monkeypatch.setattr("mujoco_mojo.settings.SETTINGS_DIR", global_path.parent)
+        monkeypatch.setattr("mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", global_path)
+        monkeypatch.setattr(
+            "mujoco_mojo.settings.project_settings_file", lambda: project_path
+        )
+        for name in list(os.environ):
+            if name.startswith("MUJOCO_MOJO_"):
+                monkeypatch.delenv(name)
+        return global_path, project_path
+
+    def test_an_old_file_loads_into_the_new_section(
+        self, files: tuple[Path, Path]
+    ) -> None:
+        global_path, _ = files
+        global_path.write_text(
+            "[dojo]\nchime_enabled = false\n\n"
+            "[dojo.sensai]\nenabled = true\nmax_requests = 7\n"
+            'models = [{ provider = "Google", model_name = "gemini" }]\n',
+            encoding="utf-8",
+        )
+
+        settings = MujocoMojoSettings()
+
+        assert settings.sensai.enabled
+        assert settings.sensai.max_requests == 7
+        assert [entry.model_name for entry in settings.sensai.models] == ["gemini"]
+        assert settings.dojo.chime_enabled is False
+
+    def test_an_old_project_file_still_outranks_the_global_one(
+        self, files: tuple[Path, Path]
+    ) -> None:
+        """`save()` writes a `[sensai]` table into the global file, which must not hide what an old project file sets."""
+        global_path, project_path = files
+        global_path.write_text(
+            "[sensai]\nenabled = false\nmax_requests = 9\n", encoding="utf-8"
+        )
+        project_path.write_text("[dojo.sensai]\nenabled = true\n", encoding="utf-8")
+
+        settings = MujocoMojoSettings()
+
+        assert settings.sensai.enabled
+        assert settings.sensai.max_requests == 9
+
+    def test_an_old_environment_variable_outranks_the_files(
+        self, files: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        global_path, _ = files
+        global_path.write_text("[sensai]\nenabled = false\n", encoding="utf-8")
+        monkeypatch.setenv("MUJOCO_MOJO_DOJO__SENSAI__ENABLED", "true")
+
+        assert MujocoMojoSettings().sensai.enabled
+
+    def test_saving_moves_the_old_table_and_keeps_its_comments(
+        self, files: tuple[Path, Path]
+    ) -> None:
+        global_path, _ = files
+        global_path.write_text(
+            "[dojo.sensai]\n# my models\nenabled = true\n", encoding="utf-8"
+        )
+
+        MujocoMojoSettings().save()
+
+        written = tomllib.loads(global_path.read_text(encoding="utf-8"))
+        assert "sensai" not in written["dojo"]
+        assert written["sensai"]["enabled"] is True
+        assert "# my models" in global_path.read_text(encoding="utf-8")
+
+    def test_setting_a_project_value_moves_the_old_table(
+        self, files: tuple[Path, Path]
+    ) -> None:
+        _, project_path = files
+        project_path.write_text(
+            "[dojo.sensai]\nenabled = true\nmax_requests = 7\n", encoding="utf-8"
+        )
+
+        MujocoMojoSettings.set_project_value("sensai.max_requests", 30)
+
+        written = tomllib.loads(project_path.read_text(encoding="utf-8"))
+        assert written == {"sensai": {"enabled": True, "max_requests": 30}}
+
+    @pytest.mark.parametrize(("old_wins", "expected"), [(False, 20), (True, 5)])
+    def test_a_key_under_both_is_taken_from_the_one_that_wins(
+        self, old_wins: bool, expected: int
+    ) -> None:
+        data = {
+            "dojo": {"sensai": {"max_requests": 5, "enabled": True}},
+            "sensai": {"max_requests": 20},
+        }
+
+        move_sensai_settings(data, old_wins=old_wins)
+
+        assert data == {"sensai": {"max_requests": expected, "enabled": True}}

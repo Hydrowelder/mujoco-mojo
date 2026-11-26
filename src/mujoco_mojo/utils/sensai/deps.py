@@ -1,10 +1,14 @@
-"""Runtime context shared by the SensAI chat agent and its domain agents."""
+"""Runtime context the Dojo's SensAI chat agent shares with the domain agents that read the dashboard. The docs agent reads none of it."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from mujoco_mojo.settings import DEFAULT_MAX_REQUESTS, DEFAULT_MAX_VERSUS_TRIALS
+from mujoco_mojo.settings import (
+    DEFAULT_MAX_REQUESTS,
+    DEFAULT_MAX_VERSUS_TRIALS,
+    SensAIFeatures,
+)
 from mujoco_mojo.utils.dataframe import ColumnManifest
 from mujoco_mojo.utils.layers.dojo.plot_config import PlotConfig, VersusState
 from mujoco_mojo.utils.statusing import JobStatus
@@ -14,7 +18,7 @@ from .tool_trace import ToolTrace
 
 @dataclass
 class SensAIDeps:
-    """Runtime context available to the SensAI chat agent and every domain agent it delegates to."""
+    """Runtime context available to the Dojo's SensAI chat agent and the job, signal and plot agents it delegates to."""
 
     job_status: JobStatus | None
     """The current job, or None if no job is loaded."""
@@ -38,7 +42,10 @@ class SensAIDeps:
     """Trials this message has added to versus mode so far, which `max_versus_trials` is checked against."""
 
     max_requests: int = DEFAULT_MAX_REQUESTS
-    """`dojo.sensai.max_requests`. The specialists' runs are given it too, since they share the message's count."""
+    """`sensai.max_requests`. The specialists' runs are given it too, since they share the message's count."""
 
     max_versus_trials: int = DEFAULT_MAX_VERSUS_TRIALS
-    """`dojo.sensai.max_versus_trials`."""
+    """`sensai.max_versus_trials`."""
+
+    features: SensAIFeatures = field(default_factory=SensAIFeatures)
+    """`sensai.features`: which specialists the chat agent is offered."""

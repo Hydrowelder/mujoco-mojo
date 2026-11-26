@@ -1,9 +1,9 @@
-"""Builds the fallback model shared by every SensAI agent."""
+"""The model every SensAI agent runs on, and the cap on how many requests one question may send it."""
 
 from __future__ import annotations
 
 from google.genai import errors as google_errors
-from pydantic_ai import ModelAPIError
+from pydantic_ai import ModelAPIError, UsageLimits
 from pydantic_ai.models.fallback import FallbackModel
 
 from mujoco_mojo.settings import MujocoMojoSettings
@@ -19,9 +19,9 @@ def build_fallback_model() -> FallbackModel:
         ValueError: If `SensAISettings.models` is empty - `FallbackModel` needs at least one model to try - or an entry sets a `base_url` its provider doesn't accept.
 
     """
-    settings = MujocoMojoSettings().dojo.sensai
+    settings = MujocoMojoSettings().sensai
     if not settings.models:
-        msg = "dojo.sensai.models is empty; configure at least one (provider, model name) pair."
+        msg = "sensai.models is empty; configure at least one (provider, model name) pair."
         raise ValueError(msg)
 
     models = [
@@ -39,3 +39,12 @@ def build_fallback_model() -> FallbackModel:
         # fallback chain gets no equivalent coverage for its own provider's raw SDK errors.
         fallback_on=(ModelAPIError, google_errors.APIError),
     )
+
+
+def usage_limits(max_requests: int) -> UsageLimits:
+    """
+    The cap on model requests for one question, to pass to the run that answers it and, in the Dojo, to each specialist's run, so that the specialists count against the same total (they share the run's `usage`).
+
+    `max_requests` is `sensai.max_requests`. A request takes one to three (route it, edit, answer) and a refused edit adds one to three more, so the default of 12 leaves room to correct a mistake or two. When a model loops, or rate limits make every request cost several attempts, it is what stops the question from sending dozens.
+    """
+    return UsageLimits(request_limit=max_requests)

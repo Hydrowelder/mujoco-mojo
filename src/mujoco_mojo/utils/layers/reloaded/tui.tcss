@@ -69,6 +69,13 @@ StatusBar #title {
     text-align: right;
 }
 
+/* SensAI's icon, whose tooltip is its disclosure */
+StatusBar #sensai {
+    width: auto;
+    margin-left: 1;
+    color: $primary;
+}
+
 ParamField {
     width: auto;
     height: 1;

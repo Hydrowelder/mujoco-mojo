@@ -647,17 +647,21 @@ describe("historyFileName", () => {
 
 describe("enabledFromSettings", () => {
   it("is the saved flag when the event carries one", () => {
-    expect(enabledFromSettings({ dojo: { sensai: { enabled: true } } })).toBe(true);
-    expect(enabledFromSettings({ dojo: { sensai: { enabled: false } } })).toBe(false);
+    expect(enabledFromSettings({ sensai: { enabled: true } })).toBe(true);
+    expect(enabledFromSettings({ sensai: { enabled: false } })).toBe(false);
   });
 
   it("is undefined when it carries no flag, or one that is not a boolean", () => {
-    expect(enabledFromSettings({ dojo: { sensai: {} } })).toBeUndefined();
-    expect(enabledFromSettings({ dojo: {} })).toBeUndefined();
+    expect(enabledFromSettings({ sensai: {} })).toBeUndefined();
     expect(enabledFromSettings({})).toBeUndefined();
     expect(enabledFromSettings(null)).toBeUndefined();
     expect(enabledFromSettings(undefined)).toBeUndefined();
-    expect(enabledFromSettings({ dojo: { sensai: { enabled: "yes" as never } } })).toBeUndefined();
+    expect(enabledFromSettings({ sensai: { enabled: "yes" as never } })).toBeUndefined();
+  });
+
+  it("reads the SensAI section, not where it was under the Dojo before", () => {
+    const before = { dojo: { sensai: { enabled: true } } } as never;
+    expect(enabledFromSettings(before)).toBeUndefined();
   });
 });
 

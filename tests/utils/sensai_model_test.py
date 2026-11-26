@@ -1,4 +1,4 @@
-"""Tests for the fallback model SensAI builds from `dojo.sensai.models`."""
+"""Tests for the fallback model SensAI builds from `sensai.models`."""
 
 from collections.abc import Sequence
 
@@ -7,20 +7,19 @@ from pydantic import BaseModel
 from pydantic_ai.models import Model
 
 from mujoco_mojo.settings import (
-    DojoSettings,
     SensAIModelEntry,
     SensAISettings,
 )
 from mujoco_mojo.typing import ModelProvider
-from mujoco_mojo.utils.layers.dojo.sensai import model as sensai_model
+from mujoco_mojo.utils.sensai import model as sensai_model
 
 
 class _Settings(BaseModel):
-    dojo: DojoSettings
+    sensai: SensAISettings
 
 
 def _use(monkeypatch: pytest.MonkeyPatch, sensai: SensAISettings) -> None:
-    settings = _Settings(dojo=DojoSettings(sensai=sensai))
+    settings = _Settings(sensai=sensai)
     monkeypatch.setattr(sensai_model, "MujocoMojoSettings", lambda: settings)
 
 
@@ -100,7 +99,7 @@ def test_ollama_takes_its_base_url_from_its_entry_like_any_other_provider(
 def test_a_saved_shared_base_url_still_loads_and_warns_when_an_ollama_model_needs_one() -> (
     None
 ):
-    """`dojo.sensai.base_url` was removed, and `save()` wrote it into every settings file, so a file that still has it must load."""
+    """SensAI's shared `base_url` was removed, and `save()` wrote it into every settings file, so a file that still has it must load."""
     with pytest.warns(UserWarning, match="Set `base_url` on each Ollama model"):
         settings = SensAISettings.model_validate(
             {

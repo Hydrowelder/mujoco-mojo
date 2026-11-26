@@ -53,6 +53,11 @@ class ToolCallRecord(BaseModel):
 Emit = Callable[[str, dict[str, Any]], Awaitable[None]]
 """Sends one event to the chat as it happens, by name and payload."""
 
+EventHandler = Callable[
+    [RunContext[Any], AsyncIterable[AgentStreamEvent]], Awaitable[None]
+]
+"""An `event_stream_handler` that fits the run of any agent, whatever its deps, since it does not read them."""
+
 
 def _one_line(text: str, limit: int) -> str:
     """The text with its whitespace collapsed to single spaces, cut to `limit` characters with `...` when it is longer."""
@@ -86,9 +91,7 @@ class ToolTrace:
             await self._record(agent, event)
             yield event
 
-    def handler(
-        self, agent: str
-    ) -> Callable[[RunContext[Any], AsyncIterable[AgentStreamEvent]], Awaitable[None]]:
+    def handler(self, agent: str) -> EventHandler:
         """An `event_stream_handler` for the run of `agent` that records its tool calls and does nothing else."""
 
         async def record(

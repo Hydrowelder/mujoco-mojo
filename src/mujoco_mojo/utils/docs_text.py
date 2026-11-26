@@ -8,6 +8,7 @@ The pages in `DOCS_SOURCE_DIR` are written for the docs site, and read as plain 
 - a page's front matter (the `---` block of site settings at its top) and its `<style>` and `<script>` blocks are removed
 - a row of linked images (the badges at the top of the home page) is removed
 - attribute lists after a link (`{ .md-button }`) and icon codes (`:material-open-in-new:`) are removed
+- a key as the site writes it (`++ctrl+shift+f++`) becomes its name (`Ctrl+Shift+F`)
 
 Code blocks are left alone. The code the guides show is already in them: `scripts/gen_docs_source.py` replaces each `--8<--` include with the lines it names when it writes the docs source. It uses only the standard library.
 """
@@ -35,6 +36,19 @@ _LINK_ATTRS = re.compile(r"(\]\([^)]*\))\{[^}]*\}")
 _AUTOREF = re.compile(r"\[(?P<text>[^\]]+)\]\[[\w.]+\]")
 """A cross-reference to the API reference, `[text][package.module.Name]`, which only the site can follow: the text is what a reader sees."""
 _ICON = re.compile(r"\s*:(?:material|fontawesome|octicons|simple)-[a-z0-9-]+:")
+_KEYS = re.compile(r"\+\+(?P<keys>[a-z0-9][a-z0-9-]*(?:\+[a-z0-9-]+)*)\+\+")
+"""A key or a combination of keys as the site writes it, such as `++f12++` or `++ctrl+shift+f++`, which the site draws as keycaps."""
+_FUNCTION_KEY = re.compile(r"f\d+")
+_KEY_NAMES = {"slash": "/"}
+
+
+def _key_name(key: str) -> str:
+    """One key of a combination by the name printed on it: `F12`, `Ctrl`, `Page Up`."""
+    if key in _KEY_NAMES:
+        return _KEY_NAMES[key]
+    if _FUNCTION_KEY.fullmatch(key):
+        return key.upper()
+    return key.replace("-", " ").title()
 
 
 def _caption_text(html: str) -> str:
@@ -47,7 +61,7 @@ def _caption_text(html: str) -> str:
 
 
 def _clean_prose(lines: list[str]) -> list[str]:
-    """The lines outside code blocks with the site markup taken out: comments, style and script blocks, badge rows, figures, images, link attributes, cross-references to the API reference (kept as their text) and icons."""
+    """The lines outside code blocks with the site markup taken out: comments, style and script blocks, badge rows, figures, images, link attributes, cross-references to the API reference (kept as their text), keys (kept as their names) and icons."""
     text = "\n".join(lines)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
     text = _STYLE_OR_SCRIPT.sub("", text)
@@ -76,6 +90,9 @@ def _clean_prose(lines: list[str]) -> list[str]:
         line = _IMAGE_INLINE.sub(lambda m: m["alt"], line)
         line = _LINK_ATTRS.sub(r"\1", line)
         line = _AUTOREF.sub(lambda m: m["text"], line)
+        line = _KEYS.sub(
+            lambda m: "+".join(_key_name(key) for key in m["keys"].split("+")), line
+        )
         out.append(_ICON.sub("", line))
     return out
 

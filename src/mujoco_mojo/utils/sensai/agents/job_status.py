@@ -8,9 +8,9 @@ from pydantic_ai import Agent, RunContext
 
 from mujoco_mojo.utils.log import get_logger
 
-from . import dist_report, job_report
-from .deps import SensAIDeps
-from .job_report import LogLevel, Outcome
+from ..deps import SensAIDeps
+from ..tools import dist_report, job_report
+from ..tools.job_report import LogLevel, Outcome
 
 logger = get_logger(__name__)
 

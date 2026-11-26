@@ -20,18 +20,18 @@ from mujoco_mojo.utils.layers.dojo.routers.mosaic import (
 
 from mujoco_mojo.utils.log import get_logger
 
-from .deps import SensAIDeps
-from .dist_report import trials_beyond
-from .job_report import trials_that_missed
-from .plot_config_catalog import filter_catalog, plot_config_catalog
-from .plot_config_catalog import find_signals as _find_signals
-from .plot_config_delta import (
+from ..deps import SensAIDeps
+from ..tools.dist_report import trials_beyond
+from ..tools.job_report import trials_that_missed
+from ..tools.plot_config_catalog import filter_catalog, plot_config_catalog
+from ..tools.plot_config_catalog import find_signals as _find_signals
+from ..tools.plot_config_delta import (
     PlotConfigDeltaError,
     apply_plot_config_delta,
     compact_plot_config,
     remove_plot_signals,
 )
-from .versus import VersusError, change_versus, describe_versus
+from ..tools.versus import VersusError, change_versus, describe_versus
 
 logger = get_logger(__name__)
 
@@ -402,7 +402,7 @@ async def set_versus(
         text += (
             f" {change.left_out} more trial{'s were' if change.left_out != 1 else ' was'} not added: "
             f"one message adds at most {ctx.deps.max_versus_trials} comparison trials "
-            "(dojo.sensai.max_versus_trials in settings). Tell the user how many were left out "
+            "(sensai.max_versus_trials in settings). Tell the user how many were left out "
             "and that asking again adds the next batch."
         )
     return text

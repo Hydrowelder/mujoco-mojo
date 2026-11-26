@@ -541,9 +541,9 @@ export function historyFileName(now: Date): string {
 
 // the enabled flag in a "mojo-settings-saved" event, when it carries one
 export function enabledFromSettings(detail: {
-  dojo?: { sensai?: { enabled?: boolean } };
+  sensai?: { enabled?: boolean };
 } | null | undefined): boolean | undefined {
-  const next = detail?.dojo?.sensai?.enabled;
+  const next = detail?.sensai?.enabled;
   return typeof next === "boolean" ? next : undefined;
 }
 

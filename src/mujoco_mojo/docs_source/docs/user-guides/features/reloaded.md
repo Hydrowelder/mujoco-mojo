@@ -59,12 +59,24 @@ Type a command and press ++enter++. Press ++tab++ to complete the one you are ty
 | `watch`, `w`                        | Turn reloading on or off when your `*.py` files change.                                                                                                            |
 | `record`, `rec`                     | Turn telemetry and video recording on or off.                                                                                                                      |
 | `dojo`                              | Print the command that opens the Dojo for this session.                                                                                                            |
-| `explain seed 42`                   | Say what a command would do without running it. Ending a command with `?` does the same.                                                                           |
+| `explain seed 42`                   | Say what a command would do without running it. This is not AI: for that, use `sensai`.                                                                            |
+| `sensai how do I seed?`             | Ask [SensAI](#asking-sensai) how to use Mojo. It answers from the docs.                                                                                            |
 | `stop`, `halt`, `abort`             | Abort the run in progress.                                                                                                                                         |
 | `help`, `h`, `?`                    | Show every command and key.                                                                                                                                        |
 | `quit`                              | Close the viewer and Reloaded. It is the only word that does, so `stop` is the one that ends a run.                                                                |
 
 A one-line hint beside the command line describes what the command you are typing would do. Click the `?` to hide or show it.
+
+### Asking SensAI
+
+With [SensAI](sensai.md) set up, type `sensai` and a question, such as `sensai how do I add a requirement?`. The answer comes from the Mojo docs and appears in the log, usually ending with a link to the page it used (hold ++ctrl++ and click to open it in most terminals). A run can go on meanwhile.
+
+SensAI is not a code assistant. It does not see your project, your code or the run in progress, only the docs. Each question also stands on its own, so name what you are asking about rather than referring to an earlier answer.
+
+- It answers one question at a time and names the model that answered.
+- A sparkle at the right end of the status bar shows while SensAI is on. Hover it for a reminder that AI can make mistakes.
+- With `sensai.features.docs` off, the command says so.
+- `explain` is not AI: it only describes Reloaded's own commands. A command ending in `?` is not an explanation, so a question for SensAI is never mistaken for one.
 
 ### Locations in the Log
 

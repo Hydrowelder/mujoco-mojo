@@ -16,12 +16,12 @@ from mujoco_mojo.utils.layers.dojo.plot_config import (
     YAxisConfig,
 )
 from mujoco_mojo.utils.layers.dojo.routers.mosaic import get_filter_schema
-from mujoco_mojo.utils.layers.dojo.sensai.plot_config_catalog import (
+from mujoco_mojo.utils.sensai.tools.plot_config_catalog import (
     filter_catalog,
     find_signals,
     plot_config_catalog,
 )
-from mujoco_mojo.utils.layers.dojo.sensai.plot_config_delta import (
+from mujoco_mojo.utils.sensai.tools.plot_config_delta import (
     PlotConfigDeltaError,
     apply_plot_config_delta,
     _merge_patch,

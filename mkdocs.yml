@@ -37,11 +37,12 @@ nav:
               - Mosaic: user-guides/features/dojo/mosaic.md
               - Trial Details: user-guides/features/dojo/trial-details.md
               - Signal Lab: user-guides/features/dojo/signal-lab.md
-              - SensAI: user-guides/features/dojo/sensai.md
+              - SensAI Chat: user-guides/features/dojo/sensai.md
               - Morph: user-guides/features/dojo/morph.md
           - MojoDataFrame: user-guides/features/mojo-dataframe.md
           - Optimization: user-guides/features/optimization.md
           - Reloaded: user-guides/features/reloaded.md
+          - SensAI: user-guides/features/sensai.md
           - Pose Context: user-guides/features/pose-context.md
           - Requirements: user-guides/features/requirements.md
           - Proximity: user-guides/features/proximity.md

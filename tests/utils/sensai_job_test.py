@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from mujoco_mojo.utils.layers.dojo.sensai import job_report
-from mujoco_mojo.utils.layers.dojo.sensai.job_report import (
+from mujoco_mojo.utils.sensai.tools import job_report
+from mujoco_mojo.utils.sensai.tools.job_report import (
     describe_breakdown,
     describe_comparison,
     describe_configuration,

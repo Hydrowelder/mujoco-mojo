@@ -74,6 +74,20 @@ class TestCleaning:
 
         assert clean(text) == "Use `MojoDataFrame.read_parquet(path)` or from_dict.\n"
 
+    def test_a_key_becomes_the_name_printed_on_it(self) -> None:
+        """The site draws `++f12++` as a keycap. Read as text it is noise, and a model that read it wrote it back in its answer."""
+        text = "Press ++f12++ to pause, ++ctrl+shift+f++ to search, ++page-up++ to scroll or ++slash++ to filter.\n"
+
+        assert (
+            clean(text)
+            == "Press F12 to pause, Ctrl+Shift+F to search, Page Up to scroll or / to filter.\n"
+        )
+
+    def test_a_key_in_code_and_an_increment_are_left_alone(self) -> None:
+        text = "C++ and i++ stay.\n\n```bash\necho ++f12++\n```\n"
+
+        assert clean(text) == text
+
     def test_an_ordinary_link_and_a_cross_reference_in_code_are_left_alone(
         self,
     ) -> None:
@@ -146,6 +160,9 @@ class TestTheRealDocs:
             assert not re.search(
                 r":(?:material|fontawesome|octicons)-[a-z0-9-]+:", text
             ), f"{where} has an icon code"
+            assert not re.search(
+                r"\+\+[a-z0-9][a-z0-9-]*(?:\+[a-z0-9-]+)*\+\+", text
+            ), f"{where} has a key in site markup"
 
     def test_the_code_of_an_include_is_in_the_guide(self) -> None:
         """The generate guide includes sections of the Monte Carlo example, so its code has to be there."""

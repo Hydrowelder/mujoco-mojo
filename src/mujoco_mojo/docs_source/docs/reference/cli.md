@@ -291,7 +291,7 @@ mujoco-mojo settings show [OPTIONS]
 
 Update a setting.
 
-Example: `mujoco-mojo settings set dojo.sensai.enabled true`
+Example: `mujoco-mojo settings set sensai.enabled true`
 
 Add **--project** to write only the changed key into this project's local override file, leaving everything else there untouched.
 
@@ -303,7 +303,7 @@ mujoco-mojo settings set [OPTIONS] KEY VALUE
 
 | Argument | Type | Description                                                                |
 | :------- | :--- | :------------------------------------------------------------------------- |
-| `KEY`    | text | Dotted key path (e.g. `dojo.sensai.enabled`)                               |
+| `KEY`    | text | Dotted key path (e.g. `sensai.enabled`)                                    |
 | `VALUE`  | text | Value to assign. Integers, floats, and **True**/**False** are auto-parsed. |
 
 **Options**

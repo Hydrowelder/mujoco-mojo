@@ -5,7 +5,6 @@ No real model is called. A scripted `FunctionModel` plays the part of the model,
 """
 
 import asyncio
-import importlib
 import itertools
 import json
 import logging
@@ -26,6 +25,7 @@ from pydantic_ai.messages import (
     TextPart,
     ToolCallPart,
     ToolReturnPart,
+    UserPromptPart,
 )
 from pydantic_ai import ModelAPIError
 from pydantic_ai.models import Model
@@ -42,6 +42,7 @@ from mujoco_mojo.stochas import DistName, NormalDistribution
 from mujoco_mojo.settings import (
     DEFAULT_MAX_REQUESTS,
     DEFAULT_MAX_VERSUS_TRIALS,
+    SensAIFeatures,
     SensAISettings,
 )
 from mujoco_mojo.utils.dataframe import ColumnManifest
@@ -58,14 +59,14 @@ from mujoco_mojo.utils.layers.dojo.plot_config import (
 )
 from mujoco_mojo.utils.layers.dojo.routers import mosaic
 from mujoco_mojo.utils.layers.dojo.routers import sensai as sensai_router
-from mujoco_mojo.utils.layers.dojo.sensai import (
-    SensAIDeps,
-    chat_agent,
-    column_manifest_agent,
-    docs_agent,
-    job_status_agent,
-    plot_config_agent,
-)
+from mujoco_mojo.utils.sensai.agents import plot_config as plot_agent_module
+from mujoco_mojo.utils.sensai.agents.chat import chat_agent
+from mujoco_mojo.utils.sensai.agents.column_manifest import column_manifest_agent
+from mujoco_mojo.utils.sensai.agents.docs import docs_agent
+from mujoco_mojo.utils.sensai.agents.job_status import job_status_agent
+from mujoco_mojo.utils.sensai.agents.plot_config import plot_config_agent
+from mujoco_mojo.utils.sensai.deps import SensAIDeps
+from mujoco_mojo.utils.sensai.tools import job_report
 from mujoco_mojo.utils.statusing import (
     Completion,
     ExecutionMode,
@@ -76,11 +77,6 @@ from mujoco_mojo.utils.statusing import (
     TrialStatus,
 )
 
-job_report = importlib.import_module("mujoco_mojo.utils.layers.dojo.sensai.job_report")
-# the package re-exports the agent under the module's own name, so the module has to be imported by path
-plot_agent_module = importlib.import_module(
-    "mujoco_mojo.utils.layers.dojo.sensai.plot_config_agent"
-)
 
 COLUMNS = [
     "time",
@@ -796,9 +792,7 @@ class TestJobAgent:
 
 
 def run_docs_agent(model: FunctionModel) -> str:
-    return asyncio.run(
-        docs_agent.run("do it", model=model, deps=make_deps(None))
-    ).output
+    return asyncio.run(docs_agent.run("do it", model=model)).output
 
 
 class TestDocsAgent:
@@ -2185,12 +2179,8 @@ class TestSettingVersus:
         assert "clear_pins=true" in prompt
 
 
-class _Dojo(BaseModel):
-    sensai: SensAISettings = SensAISettings(enabled=True)
-
-
 class _Settings(BaseModel):
-    dojo: _Dojo = _Dojo()
+    sensai: SensAISettings = SensAISettings(enabled=True)
 
 
 class TestChatRoute:
@@ -2892,30 +2882,75 @@ class TestChatRoute:
 
         assert handed == [answer]
 
-    def test_the_chat_agent_is_told_to_send_how_to_questions_to_the_docs_agent(
-        self,
-    ) -> None:
-        prompts: list[str] = []
+    @staticmethod
+    def chat_offers(
+        deps: SensAIDeps, history: list[ModelMessage] | None = None
+    ) -> tuple[list[str], str]:
+        """The tools the chat agent offers the model, and the instructions it sends with the request."""
         tools: list[str] = []
+        prompt: list[str] = []
 
         def look(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-            first = messages[0]
-            assert isinstance(first, ModelRequest)
-            prompts.extend(
-                str(part.content)
-                for part in first.parts
-                if part.part_kind == "system-prompt"
-            )
             tools.extend(t.name for t in info.function_tools)
+            prompt.append(instructions(messages))
             return ModelResponse(parts=[TextPart("ok")])
 
         asyncio.run(
-            chat_agent.run("hi", model=FunctionModel(look), deps=make_deps(None))
+            chat_agent.run(
+                "hi", model=FunctionModel(look), deps=deps, message_history=history
+            )
         )
+        return tools, prompt[0]
+
+    def test_the_chat_agent_is_told_to_send_how_to_questions_to_the_docs_agent(
+        self,
+    ) -> None:
+        tools, prompt = self.chat_offers(make_deps(None))
 
         assert "ask_docs_agent" in tools
-        assert "go to ask_docs_agent" in prompts[0]
-        assert "pass it on as it is" in prompts[0]
+        assert "go to ask_docs_agent" in prompt
+        assert "pass it on as it is" in prompt
+        assert "turned off" not in prompt
+
+    def test_the_chat_agent_keeps_its_instructions_after_the_first_message(
+        self,
+    ) -> None:
+        """pydantic-ai leaves a system prompt out of a run given message history, which is every message after a chat's first one, and the chat agent lost its routing rules there."""
+        history: list[ModelMessage] = [
+            ModelRequest(parts=[UserPromptPart("how far along is the job?")]),
+            ModelResponse(parts=[TextPart("Half done.")]),
+        ]
+
+        _tools, prompt = self.chat_offers(make_deps(None), history)
+
+        assert "route every such request" in prompt
+        assert "go to ask_docs_agent" in prompt
+
+    @pytest.mark.parametrize(
+        ("feature", "tool", "title"),
+        [
+            ("docs", "ask_docs_agent", "Docs"),
+            ("job_status", "ask_job_status_agent", "Job Status"),
+            ("signals", "ask_column_manifest_agent", "Signals"),
+            ("plot", "ask_plot_config_agent", "Plot"),
+        ],
+    )
+    def test_a_feature_turned_off_is_not_offered_and_the_model_is_told(
+        self, feature: str, tool: str, title: str
+    ) -> None:
+        deps = make_deps(None)
+        deps.features = SensAIFeatures.model_validate({feature: False})
+
+        tools, prompt = self.chat_offers(deps)
+
+        assert tool not in tools
+        assert len(tools) == 3
+        assert (
+            f"turned off in the user's settings, so you have no tool for them: {title}."
+            in prompt
+        )
+        assert "SensAI > Features" in prompt
+        assert ("go to ask_docs_agent" in prompt) == (feature != "docs")
 
     def test_a_signal_the_trial_lacks_is_refused_because_the_browser_sent_its_columns(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -3235,14 +3270,14 @@ class TestChatRoute:
             max_requests=max_requests,
             max_versus_trials=max_versus_trials,
         )
-        settings = _Settings(dojo=_Dojo(sensai=sensai))
+        settings = _Settings(sensai=sensai)
         monkeypatch.setattr(sensai_router, "MujocoMojoSettings", lambda: settings)
 
     @pytest.mark.parametrize("limit", [3, 20])
     def test_the_request_limit_is_the_one_in_settings(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch, limit: int
     ) -> None:
-        """A looping model is stopped at whatever `dojo.sensai.max_requests` says, lower or higher than the default."""
+        """A looping model is stopped at whatever `sensai.max_requests` says, lower or higher than the default."""
         self.with_settings(monkeypatch, max_requests=limit)
         requests: list[int] = []
 
@@ -3511,7 +3546,7 @@ class TestStoppedMessage:
         assert message == (
             f"SensAI stopped after {DEFAULT_MAX_REQUESTS} model requests without finishing."
             " Try rephrasing your request."
-            " The limit is dojo.sensai.max_requests in settings."
+            " The limit is sensai.max_requests in settings."
         )
 
     def test_a_tool_that_is_not_a_specialist_is_treated_as_none_at_work(self) -> None:
