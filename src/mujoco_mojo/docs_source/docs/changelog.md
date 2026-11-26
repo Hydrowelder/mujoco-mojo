@@ -1,5 +1,15 @@
 # Changelog
 
+## Version 2.8.6 (2026-11-25)
+
+- Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
+
+## Version 2.8.5 (2026-11-24)
+
+- Fixed the browser viewer being reported as unavailable with MuJoCo 4.0.1
+- Updated the locked MuJoCo to 4.0.1
+- Turned contacts back on in the berthing example, with the arm's own parts kept from colliding with each other
+
 ## Version 2.8.4 (2026-11-22)
 
 - Added a `description` to `ColumnMetadata`, which the built-in signals fill in, to tell apart columns with similar names

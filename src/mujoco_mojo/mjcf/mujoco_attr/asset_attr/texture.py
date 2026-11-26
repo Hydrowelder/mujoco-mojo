@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
@@ -119,6 +120,10 @@ class TextureBase(XMLModel, ABC):
     embed: TextureEmbed = TextureEmbed.AUTO
     """Whether the pixels of this texture are in mjModel or the texture is left by reference. "auto" follows the passthrough policy of the compiler. "true" keeps the pixels in the model whatever the policy says, for example for a texture which is written into at runtime. "false" asks for the texture to be by reference whatever the policy says, and is a compile error for a texture which cannot be: one which is procedural, given as a buffer or as six separate files, flipped, a composite grid, or whose file is served from memory by a virtual file system."""
 
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        return attrs.get("builtin", "none") != "none"
+
     @model_validator(mode="after")
     def validate_files(self) -> Self:
         if self.type == TextureType.D2:
@@ -204,6 +209,8 @@ class Texture(TextureBase):
     Two file formats are supported for loading textures: PNG and KTX. The loader will use the extension of the file name to determine which format to use. Alternatively, the content_type attribute can be used to specify the format explicitly. Only `image/png` and `image/ktx` are supported.
 
     """
+
+    xml_ignored_attributes = ("builtin",)
 
     is_builtin: Literal[False] = False
 

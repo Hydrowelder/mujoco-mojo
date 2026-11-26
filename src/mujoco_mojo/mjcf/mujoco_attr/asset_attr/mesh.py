@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -177,6 +178,19 @@ class MeshBase(XMLModel, ABC):
             logger.error(msg)
             raise ValueError(msg)
         return self
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        return attrs.get("builtin", "none")
+
+    @classmethod
+    def _xml_unpack(cls, name: str, text: str) -> dict[str, Any]:
+        """Reads `params` as the shape's own fields in the order `non_xml_fields` lists them, which is the order each `params` property packs them in."""
+        if name != "params":
+            return super()._xml_unpack(name, text)
+        return dict(
+            zip(cls.non_xml_fields, (float(item) for item in text.split()), strict=True)
+        )
 
     @overload
     @classmethod
@@ -377,6 +391,8 @@ class Mesh(MeshBase):
     """
 
     builtin: Literal["none"] = "none"
+
+    xml_ignored_attributes = ("builtin",)
 
     @classmethod
     def new_from_trimesh(
@@ -866,6 +882,17 @@ class _MeshCountSpacingDim(_MeshCountSpacing, ABC):
         """Packs `count`/`spacing`/`dim` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
         return (*self.count, *(float(v) for v in self.spacing), self.dim)
 
+    @classmethod
+    def _xml_unpack(cls, name: str, text: str) -> dict[str, Any]:
+        if name != "params":
+            return super()._xml_unpack(name, text)
+        c0, c1, c2, s0, s1, s2, dim = (float(item) for item in text.split())
+        return {
+            "count": (int(c0), int(c1), int(c2)),
+            "spacing": [s0, s1, s2],
+            "dim": int(dim),
+        }
+
 
 class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
     """Builtin meshes generated from a count and a spacing that are always 2D surfaces, so they have no `dim`."""
@@ -876,6 +903,13 @@ class _MeshCountSpacingFlat(_MeshCountSpacing, ABC):
     def params(self) -> tuple[float, ...]:
         """Packs `count`/`spacing` into the single `params` attribute real MuJoCo actually expects for a procedural mesh (the per-shape fields above are mojo's own friendlier surface)."""
         return (*self.count, *(float(v) for v in self.spacing))
+
+    @classmethod
+    def _xml_unpack(cls, name: str, text: str) -> dict[str, Any]:
+        if name != "params":
+            return super()._xml_unpack(name, text)
+        c0, c1, c2, s0, s1, s2 = (float(item) for item in text.split())
+        return {"count": (int(c0), int(c1), int(c2)), "spacing": [s0, s1, s2]}
 
     @model_validator(mode="after")
     def validate_count(self) -> Self:

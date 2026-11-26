@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 import mujoco
@@ -242,6 +242,10 @@ class GeomBase(XMLModel, ABC):
 
     plugin: Plugin | None = None
     """Associate this geom with an engine plugin. Either plugin or instance are required."""
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        return attrs.get("type", GeomType.SPHERE)
 
     def geom_xpos(self, state: MjState) -> Vec3:
         """Returns the position of the center of the geom."""

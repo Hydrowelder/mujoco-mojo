@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Self, overload
 
@@ -63,6 +64,13 @@ class OrientationBase(XMLModel, ABC):
 
     # name of the field to convert during XML generation
     _rotation_attr: ClassVar[str] = ""
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        # each orientation type is named after its XML attribute, and `quat` is the one MuJoCo assumes
+        return next(
+            (kind for kind in OrientationType if kind in attrs), OrientationType.QUAT
+        )
 
     def as_quat(self) -> Quat:
         # q = [x, y, z, w] from scipy -> [w, x, y, z] for MuJoCo

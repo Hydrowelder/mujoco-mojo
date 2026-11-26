@@ -1,4 +1,5 @@
 from abc import ABC
+from collections.abc import Mapping
 from typing import ClassVar
 
 import mujoco
@@ -30,6 +31,11 @@ class EqualityBase(XMLModel, ABC):
 
     solimp: Vec5 = SOLIMP_DEFAULT
     """Constraint solver parameters for equality constraint simulation. See Solver parameters."""
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        # a connect or a weld joins either two sites or two bodies
+        return "site" if "site1" in attrs else "body"
 
     def set_active(self, mj_state: MjState, active: bool) -> None:
         """

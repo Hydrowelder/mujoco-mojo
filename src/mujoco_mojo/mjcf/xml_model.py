@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import warnings
 from abc import ABC
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import (
+    Any,
     ClassVar,
     Literal,
     Protocol,
@@ -99,6 +100,9 @@ class XMLModel(MojoBaseModel):
 
     non_xml_fields: ClassVar[tuple[str, ...]] = ()
     """Fields that exist on this model but are intentionally not written to XML as an attribute or child (e.g. an attribute documented as never being saved to XML). Every field not covered by `attributes`, `children`, or this tuple is treated as a missed schema entry. Each entry should be accompanied by a comment explaining why it is exempt."""
+
+    xml_ignored_attributes: ClassVar[tuple[str, ...]] = ()
+    """Attributes that are valid MJCF for this element but that no field holds, which reading XML skips without complaint (a file texture's `builtin="none"`, which is the default anyway)."""
 
     __exclusive_groups__: ClassVar[tuple[tuple[str, ...], ...]] = ()
     """Attributes which if defined simultaneously will result in an error."""
@@ -254,6 +258,20 @@ class XMLModel(MojoBaseModel):
                     raise TypeError(msg)
 
         return el
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        """The value of the discriminator field that tells which member of a union an element with these XML attributes is. Every member of a union that appears in a model's children or flattened attributes implements this on a base class they share."""
+        msg = f"{cls.__name__} is a member of a union but does not say how to tell its variants apart in XML. Please contact a MuJoCo Mojo developer."
+        logger.error(msg)
+        raise NotImplementedError(msg)
+
+    @classmethod
+    def _xml_unpack(cls, name: str, text: str) -> dict[str, Any]:
+        """The fields that the XML attribute `name` packs together, for an attribute in `attributes` that is a property and not a field (a builtin mesh's `params`)."""
+        msg = f"{cls.__name__}: attribute '{name}' is a property and does not say how to be read back into fields. Please contact a MuJoCo Mojo developer."
+        logger.error(msg)
+        raise NotImplementedError(msg)
 
     def _collect_xml_attributes(
         self,

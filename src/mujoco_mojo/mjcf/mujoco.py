@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
+from xml.etree import ElementTree
+from xml.etree.ElementTree import Element, ParseError
 
 import mujoco
 from pydantic import Field
@@ -28,6 +30,7 @@ from mujoco_mojo.mjcf.mujoco_attr.visual import Visual
 from mujoco_mojo.mjcf.pose import PoseQuat
 from mujoco_mojo.mjcf.pose_context import HasPose, PoseContext
 from mujoco_mojo.mjcf.xml_model import XMLModel
+from mujoco_mojo.mjcf.xml_reader import read_xml
 from mujoco_mojo.typing import Angle, EulerSeq, ModelName
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
@@ -38,6 +41,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 __all__ = ["Mujoco"]
+
+
+def _compiler_setting(root: Element, name: str) -> str | None:
+    """The value every `compiler` element of a document gives for the attribute `name`, or `None` if none does."""
+    values = {c.attrib[name] for c in root.findall("compiler") if name in c.attrib}
+    if len(values) > 1:
+        msg = f"Inconsistent compiler {name} settings: {sorted(values)}. All compiler tags must match."
+        logger.error(msg)
+        raise ValueError(msg)
+    return next(iter(values), None)
 
 
 def _with_compiler_dir(path: Path, directory: Path | None, strippath: bool) -> Path:
@@ -241,6 +254,53 @@ class Mujoco(XMLModel):
         file.write_text(xml, encoding="utf-8")
         return xml
 
+    @classmethod
+    def from_xml(cls, source: str | Path, *, strict: bool = True) -> Self:
+        """
+        Reads a model from MJCF, the inverse of `write_xml`.
+
+        A relative file in the XML (a mesh, a texture) is completed the way MuJoCo finds it, with the compiler's `meshdir`, `texturedir`, `assetdir` and `strippath` and then the folder of the file, so it points at the file wherever you run from. XML text has no folder, so there a relative path stays relative to the working directory like every `DepPath`.
+
+        Elements are grouped by kind, so the order of different kinds within an element is not kept (the actuators of a `motor` and a `position` come out as all of one and then all of the other, which changes their order in `ctrl`).
+
+        Args:
+            source: The XML text if it is a `str`, or the file to read if it is a `Path`.
+            strict: Whether an element or attribute that Mojo has no model for (`default`, `custom` and `include`, for instance) raises. With `strict=False` it is dropped and a warning is logged, and what the dropped element set (the values of a `default` class) is lost.
+
+        Returns:
+            The model.
+
+        Raises:
+            ValueError: If the XML is not well formed, is not a `mujoco` element, or in strict mode has something Mojo cannot read. The message lists everything.
+
+        """
+        base: Path | None = None
+        try:
+            if isinstance(source, Path):
+                root = ElementTree.parse(source).getroot()
+                base = source.resolve().parent
+            else:
+                root = ElementTree.fromstring(source)
+        except ParseError as error:
+            msg = f"The XML is not well formed: {error}."
+            if isinstance(source, str) and not source.lstrip().startswith("<"):
+                msg += " A str is read as XML text, so pass a Path to read a file."
+            logger.error(msg)
+            raise ValueError(msg) from error
+
+        angle = _compiler_setting(root, "angle")
+        eulerseq = _compiler_setting(root, "eulerseq")
+        model = read_xml(
+            cls,
+            root,
+            angle=DEFAULT_ANGLE if angle is None else Angle(angle),
+            eulerseq=DEFAULT_EULERSEQ if eulerseq is None else EulerSeq(eulerseq),
+            strict=strict,
+        )
+        if base is not None:
+            model._complete_asset_paths(base)
+        return model
+
     def _compiler_asset_dirs(self) -> tuple[Path | None, Path | None, bool]:
         """The effective `meshdir`, `texturedir`, and `strippath` across every compiler element, with `assetdir` standing in for whichever of the two directories is unset (the specific directory wins, as in MuJoCo)."""
         meshdir = texturedir = assetdir = None
@@ -264,31 +324,39 @@ class Mujoco(XMLModel):
             Whether any asset was bundled.
 
         """
-        meshdir, texturedir, strippath = self._compiler_asset_dirs()
-        directories = {"meshdir": meshdir, "texturedir": texturedir}
-        if strippath or meshdir is not None or texturedir is not None:
-            for obj in self._iter_tree():
-                if obj.compiler_asset_dir is None:
-                    continue
-                for attr in obj.attributes:
-                    value = getattr(obj, attr, None)
-                    if isinstance(value, DepPath):
-                        setattr(
-                            obj,
-                            attr,
-                            DepPath(
-                                _with_compiler_dir(
-                                    value,
-                                    directories[obj.compiler_asset_dir],
-                                    strippath,
-                                )
-                            ),
-                        )
+        self._complete_asset_paths()
 
         bundled = super().bundle_assets(target_dir, rel_to_xml)
         if bundled:
             self._clear_compiler_asset_dirs()
         return bundled
+
+    def _complete_asset_paths(self, base: Path | None = None) -> None:
+        """
+        Puts the compiler directory in front of every `DepPath` that MuJoCo would look for in one (see `bundle_assets`), then `base` in front of what is still relative, since MuJoCo reads a relative file from the folder of the model file.
+
+        Without a `base`, nothing is changed when the compiler sets no directory and no `strippath`.
+        """
+        meshdir, texturedir, strippath = self._compiler_asset_dirs()
+        if base is None and not (
+            strippath or meshdir is not None or texturedir is not None
+        ):
+            return
+        directories = {"meshdir": meshdir, "texturedir": texturedir}
+        for obj in self._iter_tree():
+            for attr in obj.attributes:
+                value = getattr(obj, attr, None)
+                if not isinstance(value, DepPath):
+                    continue
+                completed = value
+                if obj.compiler_asset_dir is not None:
+                    completed = _with_compiler_dir(
+                        value, directories[obj.compiler_asset_dir], strippath
+                    )
+                if base is not None and not completed.is_absolute():
+                    completed = base / completed
+                if completed != value:
+                    setattr(obj, attr, DepPath(completed))
 
     def _clear_compiler_asset_dirs(self) -> None:
         cleared = []

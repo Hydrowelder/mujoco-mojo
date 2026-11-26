@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, cast
 
 import mujoco
@@ -126,6 +126,10 @@ class SiteBase(XMLModel, ABC):
 
     user: VecN | None = None
     """See User parameters."""
+
+    @classmethod
+    def _xml_variant(cls, attrs: Mapping[str, str]) -> object:
+        return attrs.get("type", GeomType.SPHERE)
 
     def rt_xmat(self, state: MjState, flatten: bool = False) -> Mat3:
         """Rotation matrix the site during runtime."""
