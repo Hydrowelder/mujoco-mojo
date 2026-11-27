@@ -85,6 +85,27 @@ def test_the_global_settings_directory_is_never_a_project(
     assert found is None or found != _no_global_settings
 
 
+def test_settings_left_in_the_old_global_folder_are_never_a_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The global settings were kept in `~/.mujoco-mojo` before version 2.8.6, and a file there that was not moved (its new place was taken) would otherwise be the project settings of everything under the home directory."""
+    home = tmp_path / "home"
+    legacy = home / ".mujoco-mojo"
+    legacy.mkdir(parents=True)
+    (legacy / "settings.toml").write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE",
+        tmp_path / "config" / "mujoco-mojo" / "settings.toml",
+    )
+    monkeypatch.setattr("mujoco_mojo.settings.LEGACY_DIR", legacy)
+    project = home / "project"
+    project.mkdir()
+
+    found = find_project_settings_file(project)
+
+    assert found is None or tmp_path not in found.parents
+
+
 def test_a_project_file_below_the_home_directory_is_still_found(
     tmp_path: Path, _no_global_settings: Path
 ) -> None:

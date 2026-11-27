@@ -210,7 +210,7 @@ Each new shape is automatically assigned the next color in the preset palette so
 
 Profiles save your complete workspace under a named key so you can restore a view instantly. A profile holds **every open plot tab**: each one's selected signals, axes, display settings, zoom, annotations and shapes.
 
-Profiles are stored globally in `~/.mujoco-mojo/profiles/` and are available across all workdirs, making it easy to share a standard analysis setup between projects.
+Profiles are stored globally in your user data folder (`~/.local/share/mujoco-mojo/profiles/` on Linux) and are available across all workdirs, making it easy to share a standard analysis setup between projects.
 
 <figure markdown="span">
     ![Saved profiles menu](../../../assets/user-guides/light-profiles.jpg#only-light){ width="40%" height="auto" }

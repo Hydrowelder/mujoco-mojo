@@ -29,14 +29,14 @@ from pathlib import Path
 
 from PIL import Image
 
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import FAVICONS_DIR
 
 logger = logging.getLogger(__name__)
 
 # Not inside the installed package's own static folder -- that may not be
 # writable (e.g. a wheel install under site-packages), and generated files
 # shouldn't be committed to git the way the source SVGs are.
-CACHE_DIR = MUJOCO_MOJO_DIR / "cache"
+CACHE_DIR = FAVICONS_DIR
 
 _SOURCE_SVG = "light-logo.svg"
 

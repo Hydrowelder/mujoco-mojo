@@ -20,6 +20,7 @@
 - Added a tennis racket theorem example guide, with its model to open in MuJoCo Live
 - Added a Custom Signals guide
 - Each feature guide is now in a folder of its own, which changes its address on the docs site
+- Settings, saved profiles and labs, and caches moved from `~/.mujoco-mojo` to the platform's standard folders, and existing files are moved there once
 - Fixed SensAI losing its routing rules after the first message of a chat
 - Fixed links in Reloaded's log being hard to ctrl+click
 - Fixed `with_unit_system` turning an angle in degrees into radians, which the Dojo's display unit system did too

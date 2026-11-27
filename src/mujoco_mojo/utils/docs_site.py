@@ -1,5 +1,5 @@
 """
-Builds the documentation site from the source that ships in the package (`DOCS_SOURCE_DIR`), keeps it under `~/.mujoco-mojo/docs/v<version>/`, and serves it.
+Builds the documentation site from the source that ships in the package (`DOCS_SOURCE_DIR`), keeps it in `DOCS_SITES_DIR` (`~/.cache/mujoco-mojo/docs/v<version>/` on Linux), and serves it.
 
 Building needs the `docs` extra (Zensical and the API reference plugins). Serving does not: it is a static folder behind the web server that Mojo already has, so a version that was built once can be served without those packages.
 
@@ -25,7 +25,7 @@ from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
 from mujoco_mojo.__about__ import __url__
-from mujoco_mojo.meta import DOCS_SOURCE_DIR, MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import DOCS_SITES_DIR, DOCS_SOURCE_DIR
 
 # the modules the build needs, from the `docs` extra, each with the package it is in. Zensical writes the site and hands the API reference to mkdocstrings and its Python handler, and stops with an error without either
 DOCS_EXTRA_MODULES: dict[str, str] = {
@@ -79,7 +79,7 @@ class DocsBuildError(RuntimeError):
 
 def docs_site_dir(version: str) -> Path:
     """The folder the built site of `version` is kept in."""
-    return MUJOCO_MOJO_DIR / "docs" / f"v{version}"
+    return DOCS_SITES_DIR / f"v{version}"
 
 
 def is_built(site_dir: Path) -> bool:
@@ -98,7 +98,7 @@ def _version_key(version: str) -> list[tuple[int, int | str]]:
 
 def built_versions() -> list[str]:
     """The versions that have a built site, in version order, oldest first."""
-    root = MUJOCO_MOJO_DIR / "docs"
+    root = DOCS_SITES_DIR
     if not root.is_dir():
         return []
     return sorted(

@@ -68,7 +68,7 @@ Like the plots, the Lab keeps several graphs open at once as tabs: **New** start
 
 ## Saving and using a lab
 
-Type a name in the box beside **Save** and press **Save**. Use `folder/name` to keep labs in folders (for example `arm/tip-speed`), and ++tab++ completes the folder names. Saved labs live in `~/.mujoco-mojo/lab/`, so they are available for every job.
+Type a name in the box beside **Save** and press **Save**. Use `folder/name` to keep labs in folders (for example `arm/tip-speed`), and ++tab++ completes the folder names. Saved labs live in your user data folder (`~/.local/share/mujoco-mojo/lab/` on Linux), so they are available for every job.
 
 A saved lab's outputs become **signals of the trial**. Close the Lab and open the Y-axes dropdown: the new signals are listed under `Lab/<lab name>/<label>`, next to the ones the run recorded, and you can plot them, filter them, and put them in a [profile](mosaic.md#saved-profiles) like any other. They are computed when the plot is drawn, so a lab applies to **every** trial that has the signals it reads, and you can flip between trials and [compare them in versus mode](mosaic.md#versus-mode) with no extra step.
 

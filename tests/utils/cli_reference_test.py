@@ -12,6 +12,7 @@ import pytest
 import typer
 from typer.main import get_command
 
+from mujoco_mojo.meta import APP_NAME, USER_DIR_VARIABLES
 from mujoco_mojo.utils.layers.cli import cli_app
 
 ROOT = Path(__file__).parents[2]
@@ -123,12 +124,15 @@ class TestTheRealCommandLine:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        """Many defaults on the command line come from the user's settings, so a page written on a machine with settings of its own would fail the check anywhere else. A global settings file, a project one and `MUJOCO_MOJO_*` variables are all set here, and the page does not show them."""
+        """Many defaults on the command line come from the user's settings, so a page written on a machine with settings of its own would fail the check anywhere else. A global settings file (in the home's config folder, and in one `XDG_CONFIG_HOME` points at), a project one and `MUJOCO_MOJO_*` variables are all set here, and the page does not show them."""
         home = tmp_path / "home"
-        (home / ".mujoco-mojo").mkdir(parents=True)
-        (home / ".mujoco-mojo" / "settings.toml").write_text(
-            '[general]\nn_proc = 7\n\n[reloaded]\nui = "studio"\n', encoding="utf-8"
-        )
+        config = tmp_path / "config"
+        for folder in (home / ".config" / APP_NAME, config / APP_NAME):
+            folder.mkdir(parents=True)
+            (folder / "settings.toml").write_text(
+                '[general]\nn_proc = 7\n\n[reloaded]\nui = "studio"\n',
+                encoding="utf-8",
+            )
         project = tmp_path / "project"
         (project / ".mujoco-mojo").mkdir(parents=True)
         (project / ".mujoco-mojo" / "settings.toml").write_text(
@@ -136,6 +140,7 @@ class TestTheRealCommandLine:
         )
         monkeypatch.setenv("HOME", str(home))
         monkeypatch.setenv("USERPROFILE", str(home))
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
         monkeypatch.chdir(project)
         monkeypatch.setenv("MUJOCO_MOJO_GENERAL__MODEL_CONFIG_NAME", "mine")
         monkeypatch.setenv("MUJOCO_MOJO_RUN__MONTE_CARLO__RESUME", "false")
@@ -154,6 +159,8 @@ class TestTheRealCommandLine:
         monkeypatch.setenv("MUJOCO_MOJO_GENERAL__N_PROC", "5")
         monkeypatch.setenv("MUJOCO_MOJO_RELOADED__UI", "studio")
         monkeypatch.setenv("SOME_OTHER_VARIABLE", "kept")
+        for name in USER_DIR_VARIABLES:
+            monkeypatch.setenv(name, f"/machine/{name}")
 
         environment = generator.clean_environment("/empty/home")
 
@@ -164,6 +171,8 @@ class TestTheRealCommandLine:
             "MUJOCO_MOJO_RELOADED__UI"
         }
         assert environment["MUJOCO_MOJO_RELOADED__UI"] == "web"
+        # the variables that would point the user folders back at the machine's are gone too
+        assert not set(USER_DIR_VARIABLES) & set(environment)
         # everything else is left as it is, since the child needs its PATH and the like
         assert environment["SOME_OTHER_VARIABLE"] == "kept"
 

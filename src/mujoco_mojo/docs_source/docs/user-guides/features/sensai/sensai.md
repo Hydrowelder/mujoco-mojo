@@ -21,7 +21,7 @@ SensAI needs the `sensai` extra, and a model.
 uv add "mujoco-mojo[sensai]"      # or: pip install "mujoco-mojo[sensai]"
 ```
 
-**2. Turn it on and name a model.** The easiest way is the Dojo's [settings panel](../dojo/dojo.md#settings) (the gear in its toolbar): open **SensAI**, switch **Enabled** on and add an entry under **Models**. You can also set it in `~/.mujoco-mojo/settings.toml`:
+**2. Turn it on and name a model.** The easiest way is the Dojo's [settings panel](../dojo/dojo.md#settings) (the gear in its toolbar): open **SensAI**, switch **Enabled** on and add an entry under **Models**. You can also set it in your global settings file (`~/.config/mujoco-mojo/settings.toml` on Linux):
 
 ``` toml
 [sensai]

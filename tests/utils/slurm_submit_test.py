@@ -29,7 +29,7 @@ from mujoco_mojo.utils.statusing import JOB_STATUS_FNAME, JobStatus
 
 @pytest.fixture(autouse=True)
 def _isolated_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keeps a real `~/.mujoco-mojo` or project settings file out of the generated scripts."""
+    """Keeps the real global settings file, or a project one, out of the generated scripts."""
     monkeypatch.setattr(
         "mujoco_mojo.settings.GLOBAL_SETTINGS_FILE", tmp_path / "no-global.toml"
     )

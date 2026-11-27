@@ -67,6 +67,9 @@ from playwright.sync_api import (
 )
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+from mujoco_mojo.meta import APP_NAME, LAB_DIR, PROFILES_DIR, USER_DIR_VARIABLES
+from mujoco_mojo.meta import CACHE_DIR as USER_CACHE_DIR
+
 ROOT = Path(__file__).parents[1]
 ASSETS = ROOT / "docs" / "assets" / "user-guides"
 JOB_SCRIPT = Path(__file__).parent / "dojo_screenshots_job.py"
@@ -98,7 +101,7 @@ JOB_INPUTS: dict[Job, tuple[Path, ...]] = {
 }
 """The files a job is made from. A cached job is reused only while these are unchanged."""
 
-CACHE_DIR = Path.home() / ".cache" / "mujoco-mojo" / "dojo-screenshots"
+CACHE_DIR = USER_CACHE_DIR / "dojo-screenshots"
 """Where the finished jobs are kept between runs."""
 
 COMPLETE_MARKER = ".complete"
@@ -191,8 +194,12 @@ TRIAL_ERROR = "trial_06"
 
 
 def clean_environment(home: Path) -> dict[str, str]:
-    """The environment a Dojo starts in: an empty home, no `MUJOCO_MOJO_*` variable of the machine, and the settings the shots need."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("MUJOCO_MOJO_")}
+    """The environment a Dojo starts in: an empty home with none of the variables that move the user folders (`USER_DIR_VARIABLES`), no `MUJOCO_MOJO_*` variable of the machine, and the settings the shots need."""
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith("MUJOCO_MOJO_") and k not in USER_DIR_VARIABLES
+    }
     env.update(
         HOME=str(home),
         USERPROFILE=str(home),
@@ -375,8 +382,10 @@ def section(page: Page, heading: str) -> Locator:
 
 def reset_saved_state(home: Path) -> None:
     """Deletes what a shot saved on the server, which keeps profiles and labs under the home. Without it the shot of the second theme finds the profile the first one saved, and saving it again asks whether to overwrite it: the dialog, and the blur behind it, is then what the picture shows."""
-    for name in ("profiles", "lab"):
-        shutil.rmtree(home / ".mujoco-mojo" / name, ignore_errors=True)
+    # the empty home holds only Mojo's folders, wherever this platform puts them
+    for folder in home.rglob(APP_NAME):
+        for saved in (PROFILES_DIR, LAB_DIR):
+            shutil.rmtree(folder / saved.name, ignore_errors=True)
 
 
 # ----- what the trial page's plot shows --------------------------------------

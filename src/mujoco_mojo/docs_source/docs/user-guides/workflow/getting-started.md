@@ -43,7 +43,7 @@ This documentation ships with the package, so you can read the version that matc
 mujoco-mojo docs serve
 ```
 
-Open the address it prints. The first time, it builds the site for your version into `~/.mujoco-mojo/docs/v<version>`, which takes a moment and needs the `docs` extra (`pip install mujoco-mojo[docs]`). After that it serves the saved copy at once, with no extra packages.
+Open the address it prints. The first time, it builds the site for your version into your user cache folder (`~/.cache/mujoco-mojo/docs/v<version>` on Linux), which takes a moment and needs the `docs` extra (`pip install mujoco-mojo[docs]`). After that it serves the saved copy at once, with no extra packages.
 
 - [`mujoco-mojo docs build`](../../reference/cli.md#mujoco-mojo-docs-build) builds without serving. Add `--rebuild` to build again.
 - [`mujoco-mojo docs list`](../../reference/cli.md#mujoco-mojo-docs-list) shows which versions are built and where, including sites that older installs built.

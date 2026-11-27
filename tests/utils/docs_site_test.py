@@ -29,9 +29,9 @@ RAW = "https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo"
 
 @pytest.fixture
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A `~/.mujoco-mojo` that is not the real one."""
-    folder = tmp_path / "mojo-home"
-    monkeypatch.setattr(docs_site, "MUJOCO_MOJO_DIR", folder)
+    """A user cache folder that is not the real one, which keeps the built sites in its `docs` folder."""
+    folder = tmp_path / "mojo-cache"
+    monkeypatch.setattr(docs_site, "DOCS_SITES_DIR", folder / "docs")
     return folder
 
 

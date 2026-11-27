@@ -16,7 +16,7 @@ import stochas
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import LAB_DIR, PROFILES_DIR
 from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
 from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
@@ -528,12 +528,12 @@ async def get_plot_config_schema() -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Profiles  ·  named saved views stored under ~/.mujoco-mojo/profiles/
+# Profiles  ·  named saved views stored in PROFILES_DIR
 # ---------------------------------------------------------------------------
 
 
 def _get_profiles_dir() -> Path:
-    d: Path = MUJOCO_MOJO_DIR / "profiles"
+    d: Path = PROFILES_DIR
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -685,7 +685,7 @@ async def delete_profile(name: str) -> dict[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# Lab  ·  filter graph configs stored under ~/.mujoco-mojo/lab/
+# Lab  ·  filter graph configs stored in LAB_DIR
 # ---------------------------------------------------------------------------
 
 _LAB_PREFIX = SignalCategory.LAB  # Virtual column category shown in the Y-axis selector
@@ -693,7 +693,7 @@ _LAB_MAX_BYTES = 1024 * 1024  # 1 MB
 
 
 def _get_lab_dir() -> Path:
-    d: Path = MUJOCO_MOJO_DIR / "lab"
+    d: Path = LAB_DIR
     d.mkdir(parents=True, exist_ok=True)
     return d
 

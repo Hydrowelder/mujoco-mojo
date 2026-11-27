@@ -959,8 +959,11 @@ class MojoRunner:
 
         from rich.console import Console
 
+        from mujoco_mojo.meta import home_relative
+        from mujoco_mojo.settings import GLOBAL_SETTINGS_FILE
+
         Console().print(
-            "[dim]Tip: set '[slurm]' entries in ~/.mujoco-mojo/settings.toml (or a project-local "
+            f"[dim]Tip: set '[slurm]' entries in {home_relative(GLOBAL_SETTINGS_FILE)} (or a project-local "
             "./.mujoco-mojo/settings.toml, via `mujoco-mojo settings set --project`) to auto-inject "
             "extra #SBATCH lines (prefix a key with 'sbatch.', e.g. 'sbatch.account') and/or "
             "environment variables (any other key) into the generated submission script.[/dim]"

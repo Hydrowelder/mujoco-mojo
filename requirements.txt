@@ -1169,6 +1169,7 @@ platformdirs==4.5.1 \
     #   jupyter-core
     #   mkdocs-get-deps
     #   moocore
+    #   mujoco-mojo
     #   pint
     #   textual
 playwright==1.65.0 \

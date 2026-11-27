@@ -17,7 +17,11 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from mujoco_mojo.meta import DOCS_SOURCE_DIR, MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import (
+    CHANGELOG_CACHE_FILE,
+    DOCS_SOURCE_DIR,
+    LAST_SEEN_VERSION_FILE,
+)
 from mujoco_mojo.utils.log import get_logger
 
 __all__ = [
@@ -39,12 +43,6 @@ __all__ = [
 logger = get_logger(__name__)
 
 CHANGELOG_URL = "https://raw.githubusercontent.com/Hydrowelder/mujoco-mojo/refs/heads/master/CHANGELOG.md"
-
-LAST_SEEN_VERSION_FILE = MUJOCO_MOJO_DIR / "last_seen_changelog_version.txt"
-"""The latest changelog version the user has explicitly acknowledged (by closing the What's Changed modal on it). Read fresh on every `GET /changelog/data` request, not cached in memory, so a mark-seen write takes effect immediately - both for a later page load in the same Dojo process and across a full restart of it."""
-
-CHANGELOG_CACHE_FILE = MUJOCO_MOJO_DIR / "changelog_cache.md"
-"""The last changelog fetched successfully from GitHub, kept as the raw text so a later parser change still reads it. `load_changelog` falls back to it, marked as possibly out of date, when GitHub can't be reached."""
 
 BUNDLED_CHANGELOG_FILE = DOCS_SOURCE_DIR / "docs" / "changelog.md"
 """The changelog that ships inside the package, as of the installed version. The last resort for a host that has never reached GitHub, so it can't know about any newer release."""

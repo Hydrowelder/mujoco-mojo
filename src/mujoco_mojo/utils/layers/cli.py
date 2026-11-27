@@ -26,7 +26,7 @@ from rich.text import Text
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
 from mujoco_mojo.examples import EXAMPLES, ExampleName
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import home_relative
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
 from mujoco_mojo.typing import Direction, Sampler, StudioGraphics, UserInterface
@@ -640,7 +640,7 @@ cli_app.add_typer(run_app, name="run")
 
 # settings subcommand group
 settings_app = typer.Typer(
-    help=f"Manage global mujoco-mojo settings at [bold cyan]~/{MUJOCO_MOJO_DIR.relative_to(Path.home())}/settings.toml[/bold cyan].",
+    help="Manage global mujoco-mojo settings ([bold cyan]~/.config/mujoco-mojo/settings.toml[/bold cyan] on Linux).",
     no_args_is_help=True,
 )
 cli_app.add_typer(settings_app, name="settings")
@@ -1087,7 +1087,7 @@ def docs_build(rebuild: DocsRebuildType = False) -> None:
     r"""
     [bold yellow]Build the documentation site for this version of mujoco-mojo.[/bold yellow]
 
-    The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo\[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
+    The site is the same as the online docs, built from the source that ships with the package and kept in your user cache folder (`~/.cache/mujoco-mojo/docs/v<version>` on Linux). It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo\[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
     """
     typer.echo(_build_docs_with_status(rebuild))
 
@@ -1151,7 +1151,7 @@ def docs_list() -> None:
     """
     [bold yellow]List the documentation sites that are built.[/bold yellow]
 
-    One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
+    One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in your user cache folder (`~/.cache/mujoco-mojo/docs` on Linux), and one that an older install built is still there. Serve one with `docs serve --version`.
     """
     from mujoco_mojo.utils.docs_site import built_versions, docs_site_dir
 
@@ -1440,7 +1440,7 @@ def settings_init(
     """
     [bold yellow]Initialize a settings file with defaults.[/bold yellow]
 
-    Writes [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
+    Writes [bold cyan]settings.toml[/bold cyan] in your user config folder, [bold cyan]~/.config/mujoco-mojo[/bold cyan] on Linux (or, with [bold]--project[/bold], [bold cyan]./.mujoco-mojo/settings.toml[/bold cyan]) plus a [bold]settings.schema.json[/bold] and [bold].taplo.toml[/bold] colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
     """
     from mujoco_mojo.settings import (
         PROJECT_SETTINGS_DIR_NAME,
@@ -1591,7 +1591,7 @@ def settings_show(
             case SettingsScope.PROJECT:
                 target_str = str(target)
             case SettingsScope.GLOBAL:
-                target_str = GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
+                target_str = home_relative(GLOBAL_SETTINGS_FILE)
         raw_str = _pad_for_subtitle(tomlkit.dumps(doc).rstrip("\n"), target_str)
 
         console.print(
@@ -1612,12 +1612,7 @@ def settings_show(
 
     toml_str = tomlkit.dumps(d).rstrip("\n")
     if GLOBAL_SETTINGS_FILE.exists():
-        try:
-            source = "~/" + str(
-                GLOBAL_SETTINGS_FILE.relative_to(Path.home()).as_posix()
-            )
-        except ValueError:
-            source = str(GLOBAL_SETTINGS_FILE)
+        source = home_relative(GLOBAL_SETTINGS_FILE)
     else:
         source = "defaults only"
 
@@ -1746,7 +1741,7 @@ def settings_reset(
     """
     [bold yellow]Reset settings back to their defaults.[/bold yellow]
 
-    Without [bold]--project[/bold]: overwrites every value in [bold cyan]~/.mujoco-mojo/settings.toml[/bold cyan] with its default (comments you've added by hand are kept). With [bold]--project[/bold]: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
+    Without [bold]--project[/bold]: overwrites every value in the global settings file ([bold cyan]~/.config/mujoco-mojo/settings.toml[/bold cyan] on Linux) with its default (comments you've added by hand are kept). With [bold]--project[/bold]: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
     """
     from rich.prompt import Confirm
 

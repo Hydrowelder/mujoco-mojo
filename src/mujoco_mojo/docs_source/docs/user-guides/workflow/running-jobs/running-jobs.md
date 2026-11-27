@@ -230,9 +230,9 @@ mujoco-mojo run watch-workdir --workdir path/to/workdir
 
 The wizard only asks about a handful of common fields (partition, cpus, memory, time). Real clusters often need things Mojo has no way to know about ahead of time: account numbers, QOS, mail settings, license-server environment variables, and so on. These live in the `[slurm]` table of Mojo's settings files, managed with [`mujoco-mojo settings <init|show|set|reset>`](../../../reference/cli.md#mujoco-mojo-settings), and - like every other setting - can be set globally for you, or overridden per project, with the project value winning.
 
-**Global defaults** - things about you or your cluster that rarely change (account number, email) belong in `~/.mujoco-mojo/settings.toml`, applied automatically to every submission from any project:
+**Global defaults** - things about you or your cluster that rarely change (account number, email) belong in your global settings file (`~/.config/mujoco-mojo/settings.toml` on Linux), applied automatically to every submission from any project:
 
-```toml title="~/.mujoco-mojo/settings.toml"
+```toml title="~/.config/mujoco-mojo/settings.toml"
 [slurm]
 "sbatch.account" = "proj123"
 "sbatch.mail-user" = "me@cluster.edu"
@@ -267,7 +267,7 @@ If a key appears in both layers, the project-local value wins - so the example a
 
 The project file is always `.mujoco-mojo/settings.toml`. The `.mujoco-mojo/` directory belongs to the project, so any other project-local file Mojo needs later will sit beside it.
 
-Mojo finds it by checking the current directory, then each parent directory in turn, and uses the **nearest** one. Files further up are not merged in, and the global `~/.mujoco-mojo` directory is never mistaken for a project. This means you can run Mojo from anywhere inside a project, including from a script that `cd`s into its own folder first (the scripts written by [`mujoco-mojo init`](../../../reference/cli.md#mujoco-mojo-init) do), and still pick up the project's settings.
+Mojo finds it by checking the current directory, then each parent directory in turn, and uses the **nearest** one. Files further up are not merged in, and `~/.mujoco-mojo`, where older versions kept the global settings, is never mistaken for a project. This means you can run Mojo from anywhere inside a project, including from a script that `cd`s into its own folder first (the scripts written by [`mujoco-mojo init`](../../../reference/cli.md#mujoco-mojo-init) do), and still pick up the project's settings.
 
 | Command                                     | Which project file it uses                                                                                                                                                     |
 | :------------------------------------------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -282,7 +282,7 @@ Before the script is written, the wizard prints which settings files it read and
 
 ```text linenums="0"
 SLURM settings
-  global   /home/me/.mujoco-mojo/settings.toml  3 entries under [slurm]
+  global   /home/me/.config/mujoco-mojo/settings.toml  3 entries under [slurm]
   project  /home/me/sims/.mujoco-mojo/settings.toml  2 entries under [slurm]
 
 Extra lines added to the submission script:

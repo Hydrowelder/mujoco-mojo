@@ -18,7 +18,12 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from mujoco_mojo.settings import GenerateJsonSchemaWithDefaults, MujocoMojoSettings
+from mujoco_mojo.meta import home_relative
+from mujoco_mojo.settings import (
+    GLOBAL_SETTINGS_FILE,
+    GenerateJsonSchemaWithDefaults,
+    MujocoMojoSettings,
+)
 
 from .docs_catalog import STOP_WORDS, docs_url
 
@@ -53,7 +58,7 @@ _READ_LIMIT = 7000
 
 _HOW_TO_CHANGE = (
     "Change a setting in the [settings panel]({link}) (the gear in the Dojo's toolbar), "
-    "with `mujoco-mojo settings set KEY VALUE`, or in `~/.mujoco-mojo/settings.toml`. "
+    "with `mujoco-mojo settings set KEY VALUE`, or in `{file}`. "
     "A project's `.mujoco-mojo/settings.toml` takes priority over the global file."
 )
 
@@ -282,7 +287,7 @@ def _written(found: Sequence[Setting]) -> str:
 def read_from(found: Sequence[Setting], section: str = "") -> str:
     """What `read_settings` answers for the settings in `found`."""
     link = f"{docs_url('user-guides/features/dojo/dojo.md')}#settings"
-    how = _HOW_TO_CHANGE.format(link=link)
+    how = _HOW_TO_CHANGE.format(link=link, file=home_relative(GLOBAL_SETTINGS_FILE))
     query = section.strip().strip("`.").lower()
     if not query:
         return f"{_outline(found)}\n\n{how}"

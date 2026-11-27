@@ -1,4 +1,4 @@
-"""Global user settings for mujoco_mojo, `persisted to ~/.mujoco-mojo/settings.toml`."""
+"""Global user settings for mujoco_mojo, persisted to `settings.toml` in the user config folder (`CONFIG_DIR`: `~/.config/mujoco-mojo` on Linux)."""
 
 from __future__ import annotations
 
@@ -43,7 +43,13 @@ from pydantic_settings import (
 )
 from tomlkit.items import Table
 
-from mujoco_mojo.meta import MUJOCO_MOJO_DIR
+from mujoco_mojo.meta import (
+    CONFIG_DIR,
+    LEGACY_DIR,
+    SCHEMA_FILENAME,
+    SETTINGS_FILENAME,
+    TAPLO_FILENAME,
+)
 from mujoco_mojo.typing import (
     Direction,
     ModelProvider,
@@ -56,10 +62,7 @@ from mujoco_mojo.typing import (
 from mujoco_mojo.utils.color import Color
 from mujoco_mojo.utils.utils import web_client_available
 
-SETTINGS_DIR = MUJOCO_MOJO_DIR
-SETTINGS_FILENAME = "settings.toml"
-SCHEMA_FILENAME = "settings.schema.json"
-TAPLO_FILENAME = ".taplo.toml"
+SETTINGS_DIR = CONFIG_DIR
 GLOBAL_SETTINGS_FILE = SETTINGS_DIR / SETTINGS_FILENAME
 SETTINGS_SCHEMA_FILE = SETTINGS_DIR / SCHEMA_FILENAME
 SETTINGS_TAPLO_FILE = SETTINGS_DIR / TAPLO_FILENAME
@@ -92,7 +95,7 @@ def find_project_settings_file(start: Path | None = None) -> Path | None:
     """
     Searches `start` (default: the current directory) and then each parent directory for a project settings file, `.mujoco-mojo/settings.toml`, the way uv looks for its own configuration.
 
-    The nearest file wins and the search stops there: files in further parent directories are not merged in. The global settings directory (`~/.mujoco-mojo`) is skipped, since it holds the global settings and would otherwise be found as the "project" of anything under the home directory. A directory that cannot be read counts as not having a file.
+    The nearest file wins and the search stops there: files in further parent directories are not merged in. The global settings directory is skipped, as is `~/.mujoco-mojo`, where the global settings were kept before version 2.8.6 and one could be left behind: either would otherwise be found as the "project" of anything under the home directory. A directory that cannot be read counts as not having a file.
 
     Args:
         start: Directory to start from. Defaults to `Path.cwd()`, evaluated on every call rather than cached, since the working directory can legitimately differ across calls within one process (e.g. a long-running dashboard server, a script that `cd`s first, or tests).
@@ -108,11 +111,11 @@ def find_project_settings_file(start: Path | None = None) -> Path | None:
         except OSError:
             return path
 
-    global_dir = resolved(GLOBAL_SETTINGS_FILE.parent)
+    global_dirs = {resolved(GLOBAL_SETTINGS_FILE.parent), resolved(LEGACY_DIR)}
     directory = Path.cwd() if start is None else start
     for ancestor in (directory, *directory.parents):
         project_dir = ancestor / PROJECT_SETTINGS_DIR_NAME
-        if resolved(project_dir) == global_dir:
+        if resolved(project_dir) in global_dirs:
             continue
         candidate = project_dir / SETTINGS_FILENAME
         try:
@@ -1345,9 +1348,9 @@ class GenerateJsonSchemaWithDefaults(GenerateJsonSchema):
 
 class MujocoMojoSettings(BaseSettings):
     """
-    Global user-level settings persisted to `~/.mujoco-mojo/settings.toml`, layered with an optional project-local override file, found by searching the current directory and its parents - the same User-settings-vs-Workspace-settings model VS Code uses.
+    Global user-level settings persisted to `settings.toml` in the user config folder (`CONFIG_DIR`), layered with an optional project-local override file, found by searching the current directory and its parents - the same User-settings-vs-Workspace-settings model VS Code uses.
 
-    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, the nearest `.mujoco-mojo/settings.toml` in the current directory or a parent) > global settings file (`~/.mujoco-mojo/settings.toml`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_SENSAI__MAX_REQUESTS=20`.
+    Instantiate to load. Sources are checked in priority order: constructor kwargs > environment variables > `.env` file (`env_file` in `model_config`) > project settings file (`project_settings_file()`, the nearest `.mujoco-mojo/settings.toml` in the current directory or a parent) > global settings file (`CONFIG_DIR / "settings.toml"`) > defaults. Every field can be overridden at the project level, not just a specific subset - a project file is expected to hold only the handful of keys that genuinely differ from the global defaults (e.g. per-project SLURM extras or force-scaling), not a full copy. Environment variables (real ones and `.env` entries alike) use the prefix `MUJOCO_MOJO_` with `__` as the nested delimiter, e.g. `MUJOCO_MOJO_SENSAI__MAX_REQUESTS=20`.
     """
 
     model_config = SettingsConfigDict(
@@ -1534,7 +1537,7 @@ class MujocoMojoSettings(BaseSettings):
 
     def save(self, directory: Path | None = None, *, project: bool = False) -> Path:
         """
-        Persist settings to `directory` (defaults to the global settings directory, `~/.mujoco-mojo`), alongside a freshly (re)generated `settings.schema.json`/`.taplo.toml` pair (see `write_schema_files`) - one method covers both the global settings file and a project-local override file, so there's no separate `init_project_file`-style method to keep in sync with this one.
+        Persist settings to `directory` (defaults to the global settings directory, `SETTINGS_DIR`), alongside a freshly (re)generated `settings.schema.json`/`.taplo.toml` pair (see `write_schema_files`) - one method covers both the global settings file and a project-local override file, so there's no separate `init_project_file`-style method to keep in sync with this one.
 
         `project=False` (the default - the global file): every field's current value is merged into `settings.toml` with `tomlkit`, preserving any comments or formatting added by hand. A key that exists in the file but no longer has a corresponding settings value (e.g. a removed `slurm` entry) is left as-is rather than deleted.
 

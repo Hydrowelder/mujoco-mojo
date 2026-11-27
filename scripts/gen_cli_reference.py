@@ -5,7 +5,7 @@ The page is read off the Typer app itself, so every command, argument and option
 
 Typer bundles its own copy of click (`typer._click`), so a `click.Group`, `click.Option` or `click.Argument` check on one of its commands is never true. This reads them by what they have instead: a command with `commands` is a group, and a parameter says what it is in `param_type_name`.
 
-Many defaults on the command line come from the user's settings (`~/.mujoco-mojo/settings.toml`, a project's `.mujoco-mojo/settings.toml`, `MUJOCO_MOJO_*` variables), and the viewer default depends on whether this machine's MuJoCo can serve the web viewer. A page written from whatever machine ran the script would show that machine's values, and the test that checks the page would fail on any machine that differs. So the real command line is read in a child process on a clean footing (see `clean_environment`): an empty home, no `MUJOCO_MOJO_*` variables, and the viewer pinned to `web`.
+Many defaults on the command line come from the user's settings (the global `settings.toml` in the user config folder, a project's `.mujoco-mojo/settings.toml`, `MUJOCO_MOJO_*` variables), and the viewer default depends on whether this machine's MuJoCo can serve the web viewer. A page written from whatever machine ran the script would show that machine's values, and the test that checks the page would fail on any machine that differs. So the real command line is read in a child process on a clean footing (see `clean_environment`): an empty home, no `MUJOCO_MOJO_*` variables, and the viewer pinned to `web`.
 
 Usage:
     python scripts/gen_cli_reference.py           # rewrite the page
@@ -29,6 +29,8 @@ from typing import Any
 import typer
 from rich.text import Text
 from typer.main import get_command
+
+from mujoco_mojo.meta import USER_DIR_VARIABLES
 
 ROOT = Path(__file__).parents[1]
 OUTPUT = ROOT / "docs" / "reference" / "cli.md"
@@ -243,11 +245,11 @@ def _section(path: list[str], command: Any) -> str:
 
 
 def clean_environment(home: str) -> dict[str, str]:
-    """The environment to read the real command line in: this one with `home` as the home directory (so no global settings file is found), no `MUJOCO_MOJO_*` variable (so no setting is overridden), and the viewer set to `web`. The viewer default is the one that comes from the machine and not from the code (`web` where MuJoCo can serve it, `opengl` where it cannot), so it is pinned to one value for the page to read the same everywhere."""
+    """The environment to read the real command line in: this one with `home` as the home directory and none of the variables that move the user folders (`USER_DIR_VARIABLES`), so no global settings file is found, no `MUJOCO_MOJO_*` variable (so no setting is overridden), and the viewer set to `web`. The viewer default is the one that comes from the machine and not from the code (`web` where MuJoCo can serve it, `opengl` where it cannot), so it is pinned to one value for the page to read the same everywhere."""
     environment = {
         name: value
         for name, value in os.environ.items()
-        if not name.startswith("MUJOCO_MOJO_")
+        if not name.startswith("MUJOCO_MOJO_") and name not in USER_DIR_VARIABLES
     }
     environment.update(
         HOME=home,

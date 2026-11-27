@@ -10,7 +10,7 @@ Every `mujoco-mojo` command with its arguments and options. Add `--help` to any 
 | [`mujoco-mojo reloaded`](#mujoco-mojo-reloaded) | Run a development session in a terminal UI, with the model shown in a MuJoCo viewer.               |
 | [`mujoco-mojo dojo`](#mujoco-mojo-dojo)         | Launch the Mojo Dojo to monitor the progress of a running job.                                     |
 | [`mujoco-mojo run`](#mujoco-mojo-run)           | Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.).      |
-| [`mujoco-mojo settings`](#mujoco-mojo-settings) | Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`.                              |
+| [`mujoco-mojo settings`](#mujoco-mojo-settings) | Manage global mujoco-mojo settings (`~/.config/mujoco-mojo/settings.toml` on Linux).               |
 | [`mujoco-mojo docs`](#mujoco-mojo-docs)         | Find the documentation that ships with this version of mujoco-mojo, and build and browse its site. |
 | [`mujoco-mojo examples`](#mujoco-mojo-examples) | List the examples that ship with mujoco-mojo, and open one in Reloaded.                            |
 
@@ -240,7 +240,7 @@ mujoco-mojo run optimization [OPTIONS]
 
 ## `mujoco-mojo settings`
 
-Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`.
+Manage global mujoco-mojo settings (`~/.config/mujoco-mojo/settings.toml` on Linux).
 
 ``` bash linenums="0"
 mujoco-mojo settings [OPTIONS] COMMAND [ARGS]...
@@ -259,7 +259,7 @@ mujoco-mojo settings [OPTIONS] COMMAND [ARGS]...
 
 Initialize a settings file with defaults.
 
-Writes `~/.mujoco-mojo/settings.toml` (or, with **--project**, `./.mujoco-mojo/settings.toml`) plus a **settings.schema.json** and **.taplo.toml** colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
+Writes `settings.toml` in your user config folder, `~/.config/mujoco-mojo` on Linux (or, with **--project**, `./.mujoco-mojo/settings.toml`) plus a **settings.schema.json** and **.taplo.toml** colocated in the same directory, for TOML editor intellisense. Safe to re-run any time to refresh the schema, e.g. after upgrading mujoco-mojo. A project file is meant to hold only the specific keys that differ from the global settings (e.g. per-project SLURM extras or force-scaling), not a full copy - and gets its own self-contained schema, independent of the global one, so intellisense keeps working even when only the project directory is visible to your editor (e.g. opened over SSH/SSHFS without the home directory mounted).
 
 ``` bash linenums="0"
 mujoco-mojo settings init [OPTIONS]
@@ -317,7 +317,7 @@ mujoco-mojo settings set [OPTIONS] KEY VALUE
 
 Reset settings back to their defaults.
 
-Without **--project**: overwrites every value in `~/.mujoco-mojo/settings.toml` with its default (comments you've added by hand are kept). With **--project**: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
+Without **--project**: overwrites every value in the global settings file (`~/.config/mujoco-mojo/settings.toml` on Linux) with its default (comments you've added by hand are kept). With **--project**: deletes the project-local override file entirely, since it's meant to hold only a small, deliberate diff, not a full copy of every setting.
 
 ``` bash linenums="0"
 mujoco-mojo settings reset [OPTIONS]
@@ -360,7 +360,7 @@ mujoco-mojo docs path [OPTIONS]
 
 Build the documentation site for this version of mujoco-mojo.
 
-The site is the same as the online docs, built from the source that ships with the package and kept in `~/.mujoco-mojo/docs/v<version>`. It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
+The site is the same as the online docs, built from the source that ships with the package and kept in your user cache folder (`~/.cache/mujoco-mojo/docs/v<version>` on Linux). It is built once per version: the command does nothing if it is already there, unless `--rebuild` is given. Building needs the `docs` extra (`pip install mujoco-mojo[docs]`). Browsing the site afterwards does not, see `docs serve`. The folder is printed.
 
 ``` bash linenums="0"
 mujoco-mojo docs build [OPTIONS]
@@ -394,7 +394,7 @@ mujoco-mojo docs serve [OPTIONS]
 
 List the documentation sites that are built.
 
-One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in `~/.mujoco-mojo/docs`, and one that an older install built is still there. Serve one with `docs serve --version`.
+One line for each, the version and the folder it is in, oldest first, with a `*` before the installed version. A site is built by `docs build` (or by `docs serve`, the first time) and kept in your user cache folder (`~/.cache/mujoco-mojo/docs` on Linux), and one that an older install built is still there. Serve one with `docs serve --version`.
 
 ``` bash linenums="0"
 mujoco-mojo docs list [OPTIONS]

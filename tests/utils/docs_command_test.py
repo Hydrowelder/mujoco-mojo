@@ -80,9 +80,9 @@ INSTALLED = "1.2.3"
 
 @pytest.fixture
 def home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A `~/.mujoco-mojo` that is not the real one, an installed version that is not the real one, and a console wide enough not to wrap what the commands print."""
-    folder = tmp_path / "mojo-home"
-    monkeypatch.setattr(docs_site, "MUJOCO_MOJO_DIR", folder)
+    """A user cache folder that is not the real one (its `docs` folder holds the built sites), an installed version that is not the real one, and a console wide enough not to wrap what the commands print."""
+    folder = tmp_path / "mojo-cache"
+    monkeypatch.setattr(docs_site, "DOCS_SITES_DIR", folder / "docs")
     monkeypatch.setattr(cli_module, "VERSION", INSTALLED)
     monkeypatch.setattr(cli_module, "console", Console(width=300))
     return folder

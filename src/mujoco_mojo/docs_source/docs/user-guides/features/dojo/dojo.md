@@ -121,7 +121,7 @@ Dojo is split into environments depending on your current needs:
 
 ## Settings
 
-The gear in the toolbar opens the settings panel, an editor for your global settings file (`~/.mujoco-mojo/settings.toml`). It reads the same settings as [`mujoco-mojo settings`](../../../reference/cli.md#mujoco-mojo-settings), so a change made here applies to the command line too.
+The gear in the toolbar opens the settings panel, an editor for your global settings file (`~/.config/mujoco-mojo/settings.toml` on Linux). It reads the same settings as [`mujoco-mojo settings`](../../../reference/cli.md#mujoco-mojo-settings), so a change made here applies to the command line too.
 
 <figure markdown="span">
     ![Settings panel](../../../assets/user-guides/light-settings-panel.jpg#only-light){ width="85%" height="auto" }
