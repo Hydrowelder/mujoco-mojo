@@ -87,16 +87,13 @@ Theme = Literal["light", "dark"]
 THEMES: tuple[Theme, ...] = ("light", "dark")
 Job = Literal["monte-carlo", "optimize"]
 
-DOCS_EXAMPLES = ROOT / "docs" / "user-guides"
+EXAMPLES = ROOT / "src" / "mujoco_mojo" / "examples"
 
 JOB_INPUTS: dict[Job, tuple[Path, ...]] = {
-    "monte-carlo": (
-        JOB_SCRIPT,
-        DOCS_EXAMPLES / "workflow" / "monte_carlo_example.py",
-    ),
+    "monte-carlo": (JOB_SCRIPT, EXAMPLES / "boxes_and_springs" / "simulation.py"),
     "optimize": (
         JOB_SCRIPT,
-        DOCS_EXAMPLES / "features" / "optimization_example.py",
+        EXAMPLES / "boxes_and_springs_optimization" / "simulation.py",
     ),
 }
 """The files a job is made from. A cached job is reused only while these are unchanged."""

@@ -439,7 +439,7 @@ class Mujoco(XMLModel):
             logger.warning(
                 "No unit system declared on this model. Telemetry metadata will use "
                 "abstract Pint dimension strings ([length], [mass]) instead of concrete "
-                "units. Set mojo_model.u = UnitSystem.si() (or fps(), ips(), cgs()) "
+                "units. Set mojo_model.us = UnitSystem.si() (or fps(), ips(), cgs()) "
                 "to resolve this."
             )
         return state

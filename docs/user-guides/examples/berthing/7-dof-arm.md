@@ -13,11 +13,11 @@ An end effector is a cylinder with a site on its end. To grab a grapple fixture,
 ??? example "End Effector Inputs"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/end_effector.py:inputs"
+    --8<-- "src/mujoco_mojo/examples/berthing/end_effector.py:inputs"
     ```
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/end_effector.py:end_effector"
+--8<-- "src/mujoco_mojo/examples/berthing/end_effector.py:end_effector"
 ```
 
 A frame at the end effector's root holds the cylinder and the site. Its X axis points along the end effector, from the root toward the site, and the site has the same orientation. When the arm grabs a fixture, the two sites line up and their X axes point the same way. As with the fixture, `mount` places the root and sets which way it points, and `name` prefixes everything the end effector makes.
@@ -31,7 +31,7 @@ Inputs for the arm hold the dimensions and masses of its parts, the servos, the 
 ??? example "Arm Inputs"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/arm.py:inputs"
+    --8<-- "src/mujoco_mojo/examples/berthing/arm.py:inputs"
     ```
 
 Built bent into a V that points toward the visitor, the arm starts in its home pose, and every joint angle is measured from it. The home angles are part of the joint bodies' poses, so a servo commanded to zero holds the arm in the home pose.
@@ -54,7 +54,7 @@ A few small helpers build the joints, and each is used many times:
 ??? example "Helper Code"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/arm.py:helpers"
+    --8<-- "src/mujoco_mojo/examples/berthing/arm.py:helpers"
     ```
 
 ---
@@ -64,7 +64,7 @@ A few small helpers build the joints, and each is used many times:
 This arm is a chain of bodies, one for each joint, starting at the station. Each body is a child of the one before it, so each joint turns everything after it. The shoulder has three DOF, so it has three bodies: roll, yaw and pitch. Their axes meet at one point:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:shoulder"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:shoulder"
 ```
 
 The rest of the chain follows the same pattern:
@@ -82,7 +82,7 @@ The rest of the chain follows the same pattern:
 Each joint gets a position servo. A servo pulls its joint toward a commanded angle using some gain, damping, and range:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:servos"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:servos"
 ```
 
 ---
@@ -92,7 +92,7 @@ Each joint gets a position servo. A servo pulls its joint toward a commanded ang
 Commanded angles live in a list on the arm, one for each joint. Each servo gets an `ActuatorControl`, which copies its joint's commanded angle into the control array every step. `ActuatorControl` is one of Mojo's [loads](../../workflow/runtime-script.md#defining-loads).
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:register"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:register"
 ```
 
 The arm's methods change those commanded angles. `move_to` is the one that moves them, and it uses `mink`.
@@ -113,7 +113,7 @@ Inverse kinematics finds the joint motion that puts the end effector at a goal. 
 `move_to` gives `mink` the goal, asks for the joint velocities, integrates them for one timestep, and copies the result into the commanded angles, so all the joints move at once. Mojo helps with the setup: `Joint.qpos_address` and `Joint.dof_address` say where each joint sits in the configuration and in the Jacobian.
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:ik"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:ik"
 ```
 
 ---
@@ -123,7 +123,7 @@ Inverse kinematics finds the joint motion that puts the end effector at a goal. 
 `approach` calls `move_to` with a goal in front of a site, with the end effector facing it. The goal follows the site, so the arm keeps up if the visitor drifts:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:approach"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:approach"
 ```
 
 `carry_to` is like `move_to`, but the goal travels to the target in a straight line at a set speed. That is how the arm carries the visitor. `misalignment` measures how far the end effector is from lining up with a site, and the runtime uses it to decide when the arm can move in.
@@ -132,10 +132,10 @@ Inverse kinematics finds the joint motion that puts the end effector at a goal. 
 
 ## Camera
 
-Only the free end has a camera. It is placed in the end effector's frame, so it turns with the wrist roll, and it is off the axis, so the end effector stays out of the picture. The [Video Recording](../../features/video-recording.md) guide covers filming a camera.
+Only the free end has a camera. It is placed in the end effector's frame, so it turns with the wrist roll, and it is off the axis, so the end effector stays out of the picture. The [Video Recording](../../features/video-recording/video-recording.md) guide covers filming a camera.
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/arm.py:camera"
+--8<-- "src/mujoco_mojo/examples/berthing/arm.py:camera"
 ```
 
 ---

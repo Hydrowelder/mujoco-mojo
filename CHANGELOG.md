@@ -14,8 +14,16 @@
 - SensAI's settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
 - Reloaded shows SensAI's disclaimer on an icon in the status bar while SensAI is on
 - Reloaded's `explain` now points to `sensai` for an AI answer
+- The docs examples now ship with Mojo in `mujoco_mojo.examples`, and run offline
+- Added `mujoco-mojo examples list` and `examples run`, which opens an example in Reloaded and logs where its source is
+- Added the `examples` extra, which installs `mink` for the berthing example
+- Added a tennis racket theorem example guide, with its model to open in MuJoCo Live
+- Added a Custom Signals guide
+- Each feature guide is now in a folder of its own, which changes its address on the docs site
 - Fixed SensAI losing its routing rules after the first message of a chat
 - Fixed links in Reloaded's log being hard to ctrl+click
+- Fixed `with_unit_system` turning an angle in degrees into radians, which the Dojo's display unit system did too
+- Fixed the Dojo's display unit system labeling a converted custom signal with the unit it was recorded in
 
 > [!WARNING]
 > - **Breaking:** A Reloaded command ending in `?` no longer explains it, since questions for `sensai` end that way. Use `explain <cmd>`

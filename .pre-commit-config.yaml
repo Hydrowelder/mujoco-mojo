@@ -71,18 +71,9 @@ repos:
         # and the push is what publishes them to the branch the docs link to. A push stops
         # when the hook rewrote a model, so commit the new file and push again
         language: system
-        files: ^(src/mujoco_mojo/.*\.py|docs/user-guides/examples/(vlr/vlr_example|berthing/[^/]+)\.py|scripts/gen_docs_models\.py)$
+        files: ^(src/mujoco_mojo/.*\.py|scripts/gen_docs_models\.py)$
         pass_filenames: false
         stages: [pre-push]
-  - repo: local
-    hooks:
-      - id: copy-docs-examples
-        name: Copy Docs Examples to Examples
-        entry: python scripts/copy_docs_examples_to_examples.py
-        language: python
-        files: ^docs/user-guides/.*\.py$
-        additional_dependencies: [ruff==0.15.17]
-        stages: [pre-commit]
   - repo: local
     hooks:
       - id: gen-cli-reference
@@ -119,12 +110,12 @@ repos:
         # which `mujoco-mojo docs build` builds the site from), and a commit stops when it
         # did, so stage the result and commit again. It is listed after gen-cli-reference
         # and gen-mjcf-tags because it copies what they write (the command line reference
-        # page and the MJCF tags checklist), and the command line is in the pattern
-        # because only a staged file starts a hook. SensAI and `mujoco-mojo docs path`
-        # read the guides from this bundle
+        # page and the MJCF tags checklist), and the command line and the examples, which
+        # the pages include, are in the pattern because only a staged file starts a hook.
+        # SensAI and `mujoco-mojo docs path` read the guides from this bundle
         entry: python scripts/gen_docs_source.py
         language: python
-        files: ^(docs/.*\.(md|py|js|css|svg)|mkdocs\.yml|CHANGELOG\.md|scripts/(generated/implemented_mjcf_tags\.md|gen_docs_source\.py|fix_smart_quotes\.py)|src/mujoco_mojo/utils/layers/cli\.py)$
+        files: ^(docs/.*\.(md|py|js|css|svg)|src/mujoco_mojo/examples/.*\.py|mkdocs\.yml|CHANGELOG\.md|scripts/(generated/implemented_mjcf_tags\.md|gen_docs_source\.py|fix_smart_quotes\.py)|src/mujoco_mojo/utils/layers/cli\.py)$
         pass_filenames: false
         stages: [pre-commit]
   - repo: https://github.com/astral-sh/ruff-pre-commit

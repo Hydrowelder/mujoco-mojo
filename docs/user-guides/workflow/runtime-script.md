@@ -13,7 +13,7 @@
 
 !!! info "Suggested Reading:  Mojo Reloaded"
 
-    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
+    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -24,7 +24,7 @@ Like the generate script, the runtime script follows a strict protocol. It recei
 ???+ example "Example: MojoRuntime Handle"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:runtime-handle"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:runtime-handle"
     ```
 
 ---
@@ -46,7 +46,7 @@ Mojo provides high-level force abstractions like [`PointToPointForce`][mujoco_mo
 ???+ example "Example: Applying Custom Forces"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:forces"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:forces"
     ```
 
 ???+ question "Available Load Types"
@@ -138,24 +138,12 @@ Mojo uses a **"Request"** pattern for data logging. Instead of manually creating
 
     The `.request()` method is available on select Mojo objects. It tells the [`SignalManager`][mujoco_mojo.runtime.signal_manager.SignalManager] to automatically capture the requested signals for the duration of the trial. You can specify which signals are of interest to you (like if you are interested in a body's energy but not momentum).
 
-    Custom requests can also be made using the [`SignalManager.post()`][mujoco_mojo.runtime.signal_manager.SignalManager.post] method! It takes a value and a [`Column`][mujoco_mojo.utils.column.Column], which names the signal (`Category/subgroup:attr`) and can carry metadata. Build the `Column` once, outside your sampler, because `post()` is called every timestep:
-
-    ``` python
-    --8<-- "docs/user-guides/workflow/runtime_script_doc_examples.py:custom_signal"
-    ```
-
-    A signal that holds integer codes, like the state of a controller, can carry labels for them. [`ColumnMetadata.from_enum()`][mujoco_mojo.utils.signal_metadata.ColumnMetadata.from_enum] builds the labels from an enum class, and the Dojo plots the signal on its own axis named by them:
-
-    ``` python
-    --8<-- "docs/user-guides/workflow/runtime_script_doc_examples.py:enum_signal"
-    ```
-
-    In a loaded `MojoDataFrame`, `df.mojo.convert_enums(path=...)` swaps the codes for their labels.
+    A value Mojo does not work out for you can be recorded too: your runtime calculates it and posts it with [`SignalManager.post()`][mujoco_mojo.runtime.signal_manager.SignalManager.post]. The [Custom Signals](../features/custom-signals/custom-signals.md) guide shows how.
 
 ???+ example "Example: Telemetry Requests"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:requests"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:requests"
     ```
 
 ---
@@ -171,7 +159,7 @@ If you need visual proof of your simulation (or you just need something for a sl
 ???+ example "Example: Video Setup"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:video"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:video"
     ```
 
 ---
@@ -185,7 +173,7 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 ???+ example "Example: Stepping"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:stepping"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:stepping"
     ```
 
 ---
@@ -199,5 +187,5 @@ When the context manager for `rm` is over, all your requested telemetry and vide
 ??? example "Example: Full Runtime Script"
 
     ``` python
-    --8<-- "docs/user-guides/workflow/monte_carlo_example.py:runtime"
+    --8<-- "src/mujoco_mojo/examples/boxes_and_springs/simulation.py:runtime"
     ```

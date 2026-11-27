@@ -7,28 +7,19 @@ The jobs that the Dojo documentation screenshots show, so that every screenshot 
     python scripts/dojo_screenshots_job.py optimize ./shots-opt
     mujoco-mojo dojo ./shots-mc
 
-The Monte Carlo job is the docs' own example (`docs/user-guides/workflow/monte_carlo_example.py`: two boxes joined by springs) with three additions so the Monitor and the Mosaic have something to show in every state: trials 3 and 8 fail a requirement, trial 6 raises an error halfway through its run, and a live requirement records its verdicts as a signal. The optimization job is the docs' optimization example (`docs/user-guides/features/optimization_example.py`) with fewer trials, which fills the Morph tab.
+The Monte Carlo job is the docs' own example (`mujoco_mojo.examples.boxes_and_springs.simulation`: two boxes joined by springs) with three additions so the Monitor and the Mosaic have something to show in every state: trials 3 and 8 fail a requirement, trial 6 raises an error halfway through its run, and a live requirement records its verdicts as a signal. The optimization job is the docs' optimization example (`mujoco_mojo.examples.boxes_and_springs_optimization.simulation`) with fewer trials, which fills the Morph tab.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
-import sys
 from pathlib import Path
 from typing import Literal
 
-DOCS_EXAMPLES = Path(__file__).parents[1] / "docs" / "user-guides"
-
-# the examples are plain scripts in the docs, not an installed package, so their folders go on the path to import them
-sys.path.insert(0, str(DOCS_EXAMPLES / "workflow"))
-sys.path.insert(0, str(DOCS_EXAMPLES / "features"))
-
 import mujoco_mojo as mojo
+import mujoco_mojo.examples.boxes_and_springs.simulation as base
+import mujoco_mojo.examples.boxes_and_springs_optimization.simulation as optimization
 import mujoco_mojo.runtime as rt
-
-base = importlib.import_module("monte_carlo_example")
-optimization = importlib.import_module("optimization_example")
 
 N_TRIAL = 12
 """Trials in the Monte Carlo job: the nominal trial `trial_00` and eleven sampled ones."""
@@ -50,22 +41,8 @@ def trial_number(mojo_model: mojo.MojoModel) -> int:
     return int(mojo_model.trial_dir.name.rsplit("_", 1)[1])
 
 
-def generate(
-    mojo_model: mojo.MojoModel, *args: object, **kwargs: object
-) -> mojo.MojoModel:
-    """The docs example's model: two boxes and the springs between them, without the skybox when its images are not there."""
-    model = base.generate(mojo_model, *args, **kwargs)
-    assert isinstance(model, mojo.MojoModel)
-    # the example's skybox reads `textures/stars` from the working directory, and those images are not part of the repository, so a run from anywhere else would fail on the missing files
-    if not (Path.cwd() / "textures" / "stars").is_dir():
-        model.mjcf.assets = [
-            asset
-            for asset in model.mjcf.assets
-            if not any(
-                texture.type == mojo.TextureType.SKYBOX for texture in asset.textures
-            )
-        ]
-    return model
+generate = base.generate
+"""The docs example's model: two boxes and the springs between them. It leaves out its skybox when the images are not there, which they are not in the repository."""
 
 
 def runtime(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import inspect
 import logging
 import os
 import sys
@@ -19,10 +20,12 @@ from rich.align import Align
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
+from rich.table import Table
 from rich.text import Text
 
 # get logger is not called at the top of this module since it MUST be called after setup_logger is run
 # but since setup_logger doesnt know its verbosity until runtime get_logger needs to be called AS NEEDED
+from mujoco_mojo.examples import EXAMPLES, ExampleName
 from mujoco_mojo.meta import MUJOCO_MOJO_DIR
 from mujoco_mojo.settings import MujocoMojoSettings
 from mujoco_mojo.stochas import NOMINAL_TRIAL_NUM
@@ -472,6 +475,25 @@ if True:
         ),
     ]
 
+    # examples
+    ExampleNameType = Annotated[
+        ExampleName,
+        typer.Argument(
+            help="Which example to open. [dim]mujoco-mojo examples list[/dim] says what each one models.",
+            case_sensitive=False,
+        ),
+    ]
+    # a None sentinel because the default depends on the example
+    ExampleWorkdirType = Annotated[
+        Path | None,
+        typer.Option(
+            "--workdir",
+            "-w",
+            help="Workspace directory the example's trials are written to. Defaults to a folder named for the example in [italic]mojo-examples[/italic], in the current directory.",
+            show_default=False,
+        ),
+    ]
+
     # Reloaded
     ConfigPathFileType = Annotated[
         Path | None,
@@ -629,6 +651,13 @@ docs_app = typer.Typer(
     no_args_is_help=True,
 )
 cli_app.add_typer(docs_app, name="docs")
+
+# examples subcommand group
+examples_app = typer.Typer(
+    help="List the examples that ship with mujoco-mojo, and open one in Reloaded.",
+    no_args_is_help=True,
+)
+cli_app.add_typer(examples_app, name="examples")
 
 
 @cli_app.callback(
@@ -1137,6 +1166,99 @@ def docs_list() -> None:
         marker = "*" if built == VERSION else " "
         # echo, not the rich console: a long path must not be wrapped or styled
         typer.echo(f"{marker} {built:<{width}}  {docs_site_dir(built)}")
+
+
+@examples_app.command(name="list")
+def examples_list() -> None:
+    """
+    [bold yellow]List the examples that ship with mujoco-mojo.[/bold yellow]
+
+    Open one in Reloaded by its name with [bold]mujoco-mojo examples run[/bold]. The guides in the docs walk through their code.
+    """
+    table = Table(box=None, show_header=False, pad_edge=False)
+    table.add_column(style="bold cyan", no_wrap=True)
+    table.add_column()
+    for name, example in EXAMPLES.items():
+        table.add_row(name.value, example.summary)
+    console.print(table)
+
+
+def _source_location(func: Callable[..., Any]) -> str:
+    """Where `func` is defined, as `path:line`, which the terminal of an editor such as VS Code opens at that line on Ctrl+click."""
+    _, line = inspect.getsourcelines(func)
+    return f"{inspect.getsourcefile(func)}:{line}"
+
+
+@examples_app.command(name="run")
+def examples_run(
+    name: ExampleNameType,
+    workdir: ExampleWorkdirType = None,
+    ui: UIType = _SETTINGS.reloaded.ui,
+    gfx: GfxType = _SETTINGS.reloaded.gfx,
+    seed: SeedType = DEFAULT_SEED,
+    trial_num: TrialNumType = 0,
+    record: RecordType = _SETTINGS.reloaded.record,
+    port: PortType = _SETTINGS.general.default_port,
+    verbose: VerboseType = 0,
+    quiet: QuietType = 0,
+) -> None:
+    """
+    [bold yellow]Open an example in Reloaded.[/bold yellow]
+
+    The first line of Reloaded's log is the path to the example's source, which the terminal of an editor such as VS Code opens on Ctrl+click. Its trials are written to the workdir, and it needs no files beyond the package, so it runs offline.
+    """
+    from .crash_guard import run_supervised
+
+    example = EXAMPLES[name]
+    workdir = (workdir or Path("mojo-examples") / name.value).resolve()
+
+    # first of all, for the same reason as in `reloaded`
+    status = run_supervised(workdir / "crash.log")
+    if status is not None:
+        raise typer.Exit(status)
+
+    _setup_cli_logging(
+        verbose=_SETTINGS.general.verbose + verbose,
+        quiet=_SETTINGS.general.quiet + quiet,
+    )
+
+    try:
+        module = importlib.import_module(example.module)
+    except ModuleNotFoundError as e:
+        if e.name is None or e.name.split(".")[0] == "mujoco_mojo":
+            raise
+        install = escape("pip install 'mujoco-mojo[examples]'")
+        console.print(
+            f"[bold red]Error:[/bold red] The {name} example needs [bold]{e.name}[/bold], which is not installed. Install the examples extra: [bold]{install}[/bold]"
+        )
+        raise typer.Exit(code=1)
+
+    from .reloaded import MojoReloaded
+
+    web_port = find_free_port("0.0.0.0", port) if ui == UserInterface.WEB else None
+
+    MojoReloaded(
+        generator=example.generator,
+        runtime=example.runtime,
+        workdir=workdir,
+        ui=ui,
+        gfx=gfx,
+        overrides_path=None,
+        config_path=None,
+        trial_num=trial_num,
+        seed=seed,
+        model_config_name=_SETTINGS.general.model_config_name,
+        xml_name=_SETTINGS.general.xml_name,
+        record=record,
+        keys=_SETTINGS.reloaded.keys,
+        studio=_SETTINGS.reloaded.studio,
+        args=[],
+        kwargs={},
+        port=web_port,
+        intro=[
+            f"Source of the {name} example: {escape(_source_location(module.generate))}"
+        ],
+    ).run()
 
 
 def _agents_follow_up(wrote: bool, snippet: str) -> None:

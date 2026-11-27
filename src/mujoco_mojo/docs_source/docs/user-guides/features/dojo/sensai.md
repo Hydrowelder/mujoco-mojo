@@ -2,9 +2,9 @@
 
 !!! abstract
 
-    The **SensAI chat** is [SensAI](../sensai.md) in the Dojo. Ask it about your job (_which trial took the longest?_), what your trials were sampled from (_what is the wind speed drawn from?_), tell it to change your plot (_plot the x position of box2 and make it red_) or to compare trials in [versus mode](mosaic.md#versus-mode) (_compare the trials where wind speed was 2 or more standard deviations out_), ask what a trial recorded, ask how to do something in Mojo (_how do I add a requirement?_), or ask what a setting does (_how do I start the Dojo in fullscreen?_). It answers in plain language, using the same data the Dojo shows you.
+    The **SensAI chat** is [SensAI](../sensai/sensai.md) in the Dojo. Ask it about your job (_which trial took the longest?_), what your trials were sampled from (_what is the wind speed drawn from?_), tell it to change your plot (_plot the x position of box2 and make it red_) or to compare trials in [versus mode](mosaic.md#versus-mode) (_compare the trials where wind speed was 2 or more standard deviations out_), ask what a trial recorded, ask how to do something in Mojo (_how do I add a requirement?_), or ask what a setting does (_how do I start the Dojo in fullscreen?_). It answers in plain language, using the same data the Dojo shows you.
 
-    [Set SensAI up](../sensai.md#setting-it-up) first, and a sparkle button appears at the bottom right of every Dojo page. SensAI can make mistakes, so please verify its answers and any changes it makes before relying on them.
+    [Set SensAI up](../sensai/sensai.md#setting-it-up) first, and a sparkle button appears at the bottom right of every Dojo page. SensAI can make mistakes, so please verify its answers and any changes it makes before relying on them.
 
 ---
 
@@ -24,16 +24,16 @@ Press the sparkle button to open the chat. Type and press ++enter++ (++shift+ent
 - **Tool calls:** every reply lists the calls behind it, such as what it asked the job report for or which signals it added, live while it works and as a closed _N tool calls_ line afterward. A call the server turned away is shown with its reason.
 - **Copy and the model:** each message has a copy button, and hovering the row above a reply shows which of your models wrote it, which tells you when a fallback answered.
 - **Long messages:** the latest stays open and older ones fold to a preview you can click open.
-- **Context and Compact:** under the box, how much of the model's context window the chat takes up, and **Compact**, which summarizes it so far so SensAI goes on from the summary. SensAI also does that by itself once the chat grows long (see [long conversations](../sensai.md#long-conversations)).
+- **Context and Compact:** under the box, how much of the model's context window the chat takes up, and **Compact**, which summarizes it so far so SensAI goes on from the summary. SensAI also does that by itself once the chat grows long (see [long conversations](../sensai/sensai.md#long-conversations)).
 - **Chat history:** the [export menu](mosaic.md#export-options) can download the conversation.
 
-What the chat can do depends on which of SensAI's [features](../sensai.md#choosing-what-it-can-do) are on. Ask for one that is off and it tells you so.
+What the chat can do depends on which of SensAI's [features](../sensai/sensai.md#choosing-what-it-can-do) are on. Ask for one that is off and it tells you so.
 
 ---
 
 !!! tip "Getting a good answer"
 
-    Ask for one thing at a time, and name signals and trials the way the Dojo shows them, or say what a signal measures: SensAI also searches the [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels) of the signals, so "the box's angular velocity" can find `Bodies/box1/xvelr:y`. The built-in signals describe themselves, and you can describe your own. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise [`sensai.max_requests`](../sensai.md#limits) or split the ask.
+    Ask for one thing at a time, and name signals and trials the way the Dojo shows them, or say what a signal measures: SensAI also searches the [descriptions](../mojo-dataframe/mojo-dataframe.md#metadata-units-tags-and-labels) of the signals, so "the box's angular velocity" can find `Bodies/box1/xvelr:y`. The built-in signals describe themselves, and you can describe your own. A small model can pick the wrong edit; the server refuses an invalid one and the model gets a few tries, and if it still cannot, the plot stays as it was and you are told why. If a chat stops with an error about the number of requests, raise [`sensai.max_requests`](../sensai/sensai.md#limits) or split the ask.
 
 ---
 

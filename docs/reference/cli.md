@@ -12,6 +12,7 @@ Every `mujoco-mojo` command with its arguments and options. Add `--help` to any 
 | [`mujoco-mojo run`](#mujoco-mojo-run)           | Execution commands for various Mojo generators and solvers (Monte Carlo, optimization, etc.).      |
 | [`mujoco-mojo settings`](#mujoco-mojo-settings) | Manage global mujoco-mojo settings at `~/.mujoco-mojo/settings.toml`.                              |
 | [`mujoco-mojo docs`](#mujoco-mojo-docs)         | Find the documentation that ships with this version of mujoco-mojo, and build and browse its site. |
+| [`mujoco-mojo examples`](#mujoco-mojo-examples) | List the examples that ship with mujoco-mojo, and open one in Reloaded.                            |
 
 ## Global options
 
@@ -398,3 +399,58 @@ One line for each, the version and the folder it is in, oldest first, with a `*`
 ``` bash linenums="0"
 mujoco-mojo docs list [OPTIONS]
 ```
+
+## `mujoco-mojo examples`
+
+List the examples that ship with mujoco-mojo, and open one in Reloaded.
+
+``` bash linenums="0"
+mujoco-mojo examples [OPTIONS] COMMAND [ARGS]...
+```
+
+**Commands**
+
+| Command                                                   | What it does                                  |
+| :-------------------------------------------------------- | :-------------------------------------------- |
+| [`mujoco-mojo examples list`](#mujoco-mojo-examples-list) | List the examples that ship with mujoco-mojo. |
+| [`mujoco-mojo examples run`](#mujoco-mojo-examples-run)   | Open an example in Reloaded.                  |
+
+### `mujoco-mojo examples list`
+
+List the examples that ship with mujoco-mojo.
+
+Open one in Reloaded by its name with **mujoco-mojo examples run**. The guides in the docs walk through their code.
+
+``` bash linenums="0"
+mujoco-mojo examples list [OPTIONS]
+```
+
+### `mujoco-mojo examples run`
+
+Open an example in Reloaded.
+
+The first line of Reloaded's log is the path to the example's source, which the terminal of an editor such as VS Code opens on Ctrl+click. Its trials are written to the workdir, and it needs no files beyond the package, so it runs offline.
+
+``` bash linenums="0"
+mujoco-mojo examples run [OPTIONS] NAME
+```
+
+**Arguments**
+
+| Argument | Type                                                                                             | Description                                                                 |
+| :------- | :----------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| `NAME`   | one of `vlr`, `berthing`, `boxes-and-springs`, `boxes-and-springs-optimization`, `tennis-racket` | Which example to open. mujoco-mojo examples list says what each one models. |
+
+**Options**
+
+| Option                     | Type                                                                       | Default       | Description                                                                                                                                                                                                                                                                                                 |
+| :------------------------- | :------------------------------------------------------------------------- | :------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--workdir`, `-w`          | path                                                                       | none          | Workspace directory the example's trials are written to. Defaults to a folder named for the example in mojo-examples, in the current directory.                                                                                                                                                             |
+| `--user-interface`, `-ui`  | one of `opengl`, `studio`, `web`                                           | `web`         | Which viewer to show the model in. **opengl** is the classic MuJoCo window: it needs a display (X11 forwarding over SSH) but is ideal for local development. **studio** is a native MuJoCo Studio window and **web** is MuJoCo Studio in a browser, which works over SSH and without a display.             |
+| `--gfx`                    | one of `default`, `opengl`, `opengl_software`, `vulkan`, `vulkan_software` | `default`     | How the native MuJoCo Studio window is drawn (Studio's own --gfx option): **default**, **opengl**, **opengl_software**, **vulkan**, **vulkan_software** where the display only has software OpenGL, such as a remote desktop, and the default fails to draw. Ignored by the **web** and **opengl** viewers. |
+| `--seed`, `-s`             | integer                                                                    | none          | Seed to use for the job.                                                                                                                                                                                                                                                                                    |
+| `--trial-num`, `-tn`       | integer                                                                    | `0`           | Specific trial number to run (-tn 5)                                                                                                                                                                                                                                                                        |
+| `--record` / `--no-record` | flag                                                                       | `--no-record` | Record telemetry to a per-trial 'telemetry.parquet' (so the run can be inspected with mujoco-mojo dojo) and capture frames for any registered video recorders. Off by default since interactive sessions can run indefinitely.                                                                              |
+| `--port`, `-p`             | integer                                                                    | `8000`        | Port number to use to serve the process. Auto-selects the next free port at or after this one if it's already taken.                                                                                                                                                                                        |
+| `--verbose`, `-v`          | count                                                                      | `0`           | Increase verbosity (can be repeated, e.g., -vv for DEBUG).                                                                                                                                                                                                                                                  |
+| `--quiet`, `-q`            | count                                                                      | `0`           | Decrease verbosity (can be repeated, e.g., -qq for ERROR).                                                                                                                                                                                                                                                  |

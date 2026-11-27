@@ -57,6 +57,73 @@ def _resolve_column_metadata(
     return dict[str, ColumnMetadata]()
 
 
+def _base_units(unit_system: UnitSystem) -> dict[str, str]:
+    """The unit `unit_system` sets for each base dimension, by Pint's name for the dimension (`[length]` to `m`). A dimension the system leaves unset is left out."""
+    units = {
+        "[length]": unit_system.length,
+        "[mass]": unit_system.mass,
+        "[time]": unit_system.time,
+        "[temperature]": unit_system.temperature,
+        "[current]": unit_system.current,
+        "[substance]": unit_system.amount,
+        "[luminosity]": unit_system.luminosity,
+    }
+    return {dimension: unit for dimension, unit in units.items() if unit is not None}
+
+
+def _unit_for(
+    dimensionality: Mapping[str, Any], base_units: Mapping[str, str]
+) -> str | None:
+    """The unit with `dimensionality` made of `base_units`, or `None` when `base_units` has no unit for one of its dimensions."""
+    from mujoco_mojo.stochas import ureg
+
+    unit = ureg.dimensionless
+    for dimension, exponent in dimensionality.items():
+        base = base_units.get(dimension)
+        if base is None:
+            return None
+        unit = unit * ureg.parse_units(base) ** exponent
+    return str(unit)
+
+
+def unit_conversion(
+    metadata: ColumnMetadata | None,
+    target: UnitSystem,
+    assume_source: UnitSystem | None = None,
+) -> tuple[str, str] | None:
+    """
+    The conversion `with_unit_system` makes to a column with `metadata`: the unit its values are in, and the unit in `target` they become. The Dojo labels a column its display unit system converted with the second, so the label and the values agree.
+
+    A column with a `unit` is converted from it. A column with only a `dimension` is converted when `assume_source` says which system it was recorded in. `None` means the column is left as it is: it has neither, its unit has no dimension (an angle, which a unit system has no unit for), or one of the systems leaves a dimension it needs unset.
+    """
+    from mujoco_mojo.stochas import ureg
+
+    if metadata is None:
+        return None
+    if metadata.unit is not None:
+        expression, source_units = metadata.unit, None
+    elif assume_source is not None and metadata.dimension is not None:
+        expression, source_units = metadata.dimension, _base_units(assume_source)
+    else:
+        return None
+    try:
+        dimensionality = dict(ureg.get_dimensionality(expression))
+    except Exception:
+        return None
+    # an angle is dimensionless to Pint, and converting degrees to "dimensionless" gives radians
+    if not dimensionality:
+        return None
+    source = (
+        metadata.unit
+        if source_units is None
+        else _unit_for(dimensionality, source_units)
+    )
+    converted = _unit_for(dimensionality, _base_units(target))
+    if source is None or converted is None:
+        return None
+    return source, converted
+
+
 def _try_parse(name: str) -> Column | None:
     """`Column.parse` that returns `None` for a name outside the telemetry grammar, so such a column is simply never matched."""
     try:
@@ -499,7 +566,7 @@ class MojoNamespace:
         """
         Converts all columns with known units into the target unit system.
 
-        For each column whose metadata carries a concrete `"unit"` key, applies a unit conversion from that stored unit into the equivalent unit in `target`. If `assume_source` is given, columns that only carry a `"dimension"` key (no concrete unit) are treated as if their source unit is the corresponding unit in `assume_source`, so they are converted too.
+        For each column whose metadata carries a concrete `"unit"` key, applies a unit conversion from that stored unit into the equivalent unit in `target`. If `assume_source` is given, columns that only carry a `"dimension"` key (no concrete unit) are treated as if their source unit is the corresponding unit in `assume_source`, so they are converted too. A column whose unit has no dimension, such as an angle in degrees or radians, is left in the unit it was recorded in, since a unit system has no unit for it.
 
         All conversions are collected and applied in a single `with_columns()` call (Polars handles the vectorised execution across columns), so this is equivalent in cost to one pass over the data regardless of how many unit groups there are.
 
@@ -510,78 +577,19 @@ class MojoNamespace:
             assume_source: When set, columns with only a `"dimension"` tag (no `"unit"`) are converted as if they were expressed in the corresponding unit from this system.
 
         """
-        from mujoco_mojo.stochas import UnitSystem as _US
-        from mujoco_mojo.stochas import ureg
         from mujoco_mojo.utils.filters.filters import UnitFilter
 
         meta = _resolve_column_metadata(path, column_metadata)
 
-        def _base_map(us: _US) -> dict[str, str]:
-            return {
-                k: v
-                for k, v in {
-                    "[length]": us.length,
-                    "[mass]": us.mass,
-                    "[time]": us.time,
-                    "[temperature]": us.temperature,
-                    "[current]": us.current,
-                    "[substance]": us.amount,
-                    "[luminosity]": us.luminosity,
-                }.items()
-                if v is not None
-            }
-
-        target_map = _base_map(target)
-        source_map = _base_map(assume_source) if assume_source is not None else None
-
-        def _unit_str_for(
-            dim_dict: dict[str, Any], unit_map: dict[str, str]
-        ) -> str | None:
-            """Build a unit string from a dimensionality dict + base-unit map. Returns None if any required dimension is unconfigured."""
-            u = ureg.dimensionless
-            for dim_key, exp in dim_dict.items():
-                base = unit_map.get(dim_key)
-                if base is None:
-                    return None
-                u = u * ureg.parse_units(base) ** exp
-            return str(u)
-
         exprs = []
         for col in self._df.columns:
-            col_meta = meta.get(col)
-            src_str: str | None = None
-
-            if col_meta is not None and col_meta.unit is not None:
-                try:
-                    dim_dict = dict(ureg.get_dimensionality(col_meta.unit))
-                except Exception:
-                    continue
-                src_str = col_meta.unit
-            elif (
-                source_map is not None
-                and col_meta is not None
-                and col_meta.dimension is not None
-            ):
-                dim_str = col_meta.dimension
-                if dim_str == "[]":
-                    continue
-                try:
-                    dim_dict = dict(ureg.get_dimensionality(dim_str))
-                except Exception:
-                    continue
-                src_str = _unit_str_for(dim_dict, source_map)
-                if src_str is None:
-                    continue
-            else:
+            conversion = unit_conversion(meta.get(col), target, assume_source)
+            if conversion is None:
                 continue
-
-            tgt_str = _unit_str_for(dim_dict, target_map)
-            if tgt_str is None:
-                continue
-
+            source, converted = conversion
             try:
                 exprs.append(
-                    UnitFilter(from_unit=src_str, to_unit=tgt_str)
+                    UnitFilter(from_unit=source, to_unit=converted)
                     .apply(pl.col(col))
                     .alias(col)
                 )

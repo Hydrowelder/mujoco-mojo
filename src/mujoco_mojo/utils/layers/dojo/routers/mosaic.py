@@ -22,6 +22,7 @@ from mujoco_mojo.typing import SignalCategory
 from mujoco_mojo.utils.dataframe import (
     ColumnManifest,
     MojoDataFrame,
+    unit_conversion,
 )
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME as _TIME_COLUMN_NAME
 from mujoco_mojo.stochas import UnitSystem as _UnitSystem
@@ -210,6 +211,21 @@ def _augment_col_meta(meta: ColumnMetadata) -> ColumnMetadata:
         if group:
             return meta.model_copy(update={"group_unit": group})
     return meta
+
+
+def _display_meta(meta: ColumnMetadata, unit_system: _UnitSystem) -> ColumnMetadata:
+    """
+    `meta` with the unit the display unit system shows its column in.
+
+    A column with a `dimension` is labeled with it, written in the system's units; for a built-in signal that is the unit `with_unit_system` converted its values to. A column with only a `unit` has nothing else to label it by, so it is labeled with the unit `unit_conversion` says its values became, and keeps its own unit when they were not converted (an angle). Its `group_unit` is dropped, since it came from the unit it was recorded in.
+    """
+    if meta.dimension is None:
+        conversion = unit_conversion(meta, unit_system)
+        if conversion is None:
+            return meta
+        _, converted = conversion
+        return meta.model_copy(update={"unit": converted, "group_unit": None})
+    return _resolve_dim_meta(meta, unit_system)
 
 
 _CONSTRAINT_OPS = {
@@ -1128,7 +1144,7 @@ async def get_trial_data(
             )
             # update manifest column_metadata with resolved units and group_unit for the UI
             display_col_meta = {
-                col: _augment_col_meta(_resolve_dim_meta(meta, target_us))
+                col: _augment_col_meta(_display_meta(meta, target_us))
                 for col, meta in column_manifest["column_metadata"].items()
             }
             column_manifest = {

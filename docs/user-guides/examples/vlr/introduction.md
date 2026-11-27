@@ -11,9 +11,15 @@
 
     This example is based on work performed while writing [this paper](https://www.ideals.illinois.edu/items/128732).
 
-The model we will build will be composed of Python classes specific to this application, and will use Mojo to help us build the MuJoCo MJCF files and run simulations. Optionally, the Mojo [optimization plugin](../../features/optimization.md) can be used to run a parameter design study to tune the design to custom requirements.
+The model we will build will be composed of Python classes specific to this application, and will use Mojo to help us build the MuJoCo MJCF files and run simulations. Optionally, the Mojo [optimization plugin](../../features/optimization/optimization.md) can be used to run a parameter design study to tune the design to custom requirements.
 
-We recommend building this model line by line, limiting direct copying of code. We also highly recommend using [Mojo's Reloaded tool](../../features/reloaded.md) to see live progress while modifying your code.
+We recommend building this model line by line, limiting direct copying of code. We also highly recommend using [Mojo's Reloaded tool](../../features/reloaded/reloaded.md) to see live progress while modifying your code.
+
+The finished model ships with Mojo as `mujoco_mojo.examples.vlr`. To see where you are headed, open it in Reloaded:
+
+``` bash linenums="0"
+mujoco-mojo examples run vlr
+```
 
 ---
 
@@ -34,7 +40,7 @@ This will initialize your project with a mock Python file, some helpful bash scr
 After declaring this project's imports, we define a logger and global unit system (for easier conversions, MuJoCo tends to only play nice with SI units).
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:imports"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:imports"
 ```
 
 ---
@@ -48,7 +54,7 @@ This is also the first place where you see the use of our unit system (`US`). Si
 ??? example "All Inputs Used"
 
     ``` python
-    --8<-- "docs/user-guides/examples/vlr/vlr_example.py:inputs"
+    --8<-- "src/mujoco_mojo/examples/vlr/simulation.py:inputs"
     ```
 
 ---

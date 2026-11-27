@@ -60,7 +60,7 @@ A job with no distributions has no panel.
 
 ## Trial Execution
 
-The **Trial Execution** panel shows how the trial itself ran, and carries a badge with its outcome (`SUCCESS`, `FAILURE`, `TERMINATED`, `ERROR` or `INCOMPLETE`, see [Requirements](../requirements.md#completion-states)).
+The **Trial Execution** panel shows how the trial itself ran, and carries a badge with its outcome (`SUCCESS`, `FAILURE`, `TERMINATED`, `ERROR` or `INCOMPLETE`, see [Requirements](../requirements/requirements.md#completion-states)).
 
 <figure markdown="span">
     ![Trial execution panel](../../../assets/user-guides/light-trial-execution.jpg#only-light){ width="85%" height="auto" }
@@ -70,7 +70,7 @@ The **Trial Execution** panel shows how the trial itself ran, and carries a badg
 
 **Steps:** A table of the two steps of a trial, `generating` (your generate script builds the model) and `solving` (your runtime script runs the simulation), with the local time each started and how long it took, in seconds. A step that is still going shows _running..._. This is the table to read when one trial took far longer than the others.
 
-**Requirements:** When the trial had [requirements](../requirements.md), each is listed with its verdict, the simulation time it was decided at, and its message. The badge counts how many passed (`1/2 PASSED`). Hover the info icon of a requirement to see how it was set up: how often it was checked (every N steps, or at the end of the trial only), and whether it terminates the trial on a failure or a pass, or latches.
+**Requirements:** When the trial had [requirements](../requirements/requirements.md), each is listed with its verdict, the simulation time it was decided at, and its message. The badge counts how many passed (`1/2 PASSED`). Hover the info icon of a requirement to see how it was set up: how often it was checked (every N steps, or at the end of the trial only), and whether it terminates the trial on a failure or a pass, or latches.
 
 !!! tip "Requirements as a signal"
 
@@ -105,4 +105,4 @@ The panel's title counts the entries (`mojo.log · 12/40` while a filter shows 1
 
 !!! success
 
-    That is the full tour of a trial. To change what the data looks like, see the [Signal Lab](signal-lab.md); to work with it in code, see [MojoDataFrame](../mojo-dataframe.md).
+    That is the full tour of a trial. To change what the data looks like, see the [Signal Lab](signal-lab.md); to work with it in code, see [MojoDataFrame](../mojo-dataframe/mojo-dataframe.md).

@@ -168,6 +168,11 @@ class SignalManager:
         )
 
     def register_sampler(self, task: Callable[[MjState], Any]) -> None:
+        """
+        Registers `task` to be called with the state on every recorded step, so it can work out values of its own and `post` them.
+
+        A recorded step is every `record_decimation`-th step while recording is on. A column that `task` does not post on a recorded step is empty (NaN) in that row.
+        """
         self._sample_tasks.append(task)
         logger.debug(
             f"Registered new sampler: {task.__name__ if hasattr(task, '__name__') else 'lambda'}"

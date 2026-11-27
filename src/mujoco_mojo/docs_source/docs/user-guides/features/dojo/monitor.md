@@ -22,7 +22,7 @@ Every finished trial lands in exactly one of three outcomes, and the Monitor kee
 
 | Outcome     | Color | Meaning                                                                                                           |
 | :---------- | :---- | :---------------------------------------------------------------------------------------------------------------- |
-| **Success** | Green | The trial ran to the end and passed every [requirement](../requirements.md) (or had none).                        |
+| **Success** | Green | The trial ran to the end and passed every [requirement](../requirements/requirements.md) (or had none).                        |
 | **Failure** | Red   | The trial ran, but missed one or more requirements. This includes a trial that a failing requirement ended early. |
 | **Error**   | Amber | The trial raised an unhandled exception. It broke, so it was never judged against its requirements.               |
 

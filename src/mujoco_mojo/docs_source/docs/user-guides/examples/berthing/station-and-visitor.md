@@ -10,7 +10,7 @@
 
 ## Shared Helpers
 
-[Proximity](../../features/proximity.md) measures distances between mesh volumes, so the station, the hull and the fixtures are meshes instead of primitive `Geom`s. MuJoCo can generate a mesh itself, so no mesh file is needed. `CylinderInput` holds the radius, length and mass of a cylindrical part, and its `mesh` method uses Mojo's `MeshCylinder` to make the mesh. A generated cylinder is built along Z, and `lying_along` gives the pose that turns one to lie along X or Y.
+[Proximity](../../features/proximity/proximity.md) measures distances between mesh volumes, so the station, the hull and the fixtures are meshes instead of primitive `Geom`s. MuJoCo can generate a mesh itself, so no mesh file is needed. `CylinderInput` holds the radius, length and mass of a cylindrical part, and its `mesh` method uses Mojo's `MeshCylinder` to make the mesh. A generated cylinder is built along Z, and `lying_along` gives the pose that turns one to lie along X or Y.
 
 The helpers also hold the contact settings. Two geoms collide only if the `contype` of one shares a bit with the `conaffinity` of the other. The arm's parts offer bit 1 and accept none, so none touches another, which matters because the housings overlap at the joints. The hull, the station and the fixtures accept bit 1 and offer none, so the arm can touch them but they cannot touch each other.
 
@@ -344,7 +344,7 @@ class Visitor(mojo.UserData):
 
 ## Sky and Overview Camera
 
-Two small parts finish the scene. `Environment` is a dark gradient sky and the sun, a directional light that illuminates everything. `Overview` is a fixed camera that pivots to keep the center of mass of the arm's free end in view, which is how the [overview video](introduction.md) follows the action. It is built after the arm, since it aims at one of the arm's bodies. [Video Recording](../../features/video-recording.md) covers filming a camera.
+Two small parts finish the scene. `Environment` is a dark gradient sky and the sun, a directional light that illuminates everything. `Overview` is a fixed camera that pivots to keep the center of mass of the arm's free end in view, which is how the [overview video](introduction.md) follows the action. It is built after the arm, since it aims at one of the arm's bodies. [Video Recording](../../features/video-recording/video-recording.md) covers filming a camera.
 
 ??? example "Sky and Overview Camera Code"
 

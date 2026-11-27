@@ -565,13 +565,16 @@ class TestTheBundledDocs:
             ),
             (
                 "make a requirement terminate the trial early",
-                "user-guides/features/requirements.md",
+                "user-guides/features/requirements/requirements.md",
             ),
             ("how do I start the Dojo dashboard", "user-guides/features/dojo/dojo.md"),
-            ("what is pose context", "user-guides/features/pose-context.md"),
+            (
+                "what is pose context",
+                "user-guides/features/pose-context/pose-context.md",
+            ),
             (
                 "how do I install the optimization extra",
-                "user-guides/features/optimization.md",
+                "user-guides/features/optimization/optimization.md",
             ),
             (
                 "how do I write the generate function",

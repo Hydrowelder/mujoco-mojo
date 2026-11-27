@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    **Morph** is the Dojo's window onto an [optimization](../optimization.md) study. A Monte Carlo job asks _what happens across many random draws_, and the Monitor and Mosaic answer that. An optimization job asks _which design is best_, and the question is about the search itself: how the score improved, which parameters mattered, and where the optimizer looked. Morph embeds [Optuna Dashboard](https://github.com/optuna/optuna-dashboard) so you can answer it without leaving the Dojo.
+    **Morph** is the Dojo's window onto an [optimization](../optimization/optimization.md) study. A Monte Carlo job asks _what happens across many random draws_, and the Monitor and Mosaic answer that. An optimization job asks _which design is best_, and the question is about the search itself: how the score improved, which parameters mattered, and where the optimizer looked. Morph embeds [Optuna Dashboard](https://github.com/optuna/optuna-dashboard) so you can answer it without leaving the Dojo.
 
 ---
 
@@ -30,7 +30,7 @@ Morph is Optuna Dashboard itself, so its own [documentation](https://optuna-dash
 | **Slice and contour**    | Look at the score against one parameter, or two, to find where the good region is and whether it is narrow.                     |
 | **Trials**               | A table of every trial with its parameters, its score and its state, which you can sort to find the best.                       |
 
-The parameter names are the ones you gave your [design variables](../optimization.md#defining-the-search-space) ([`DesignFloat`][stochas.DesignFloat] and [`DesignCategorical`][stochas.DesignCategorical]) in the generate script, and the score is what your [objective function](../optimization.md#the-objective-function-contract) returned.
+The parameter names are the ones you gave your [design variables](../optimization/optimization.md#defining-the-search-space) ([`DesignFloat`][stochas.DesignFloat] and [`DesignCategorical`][stochas.DesignCategorical]) in the generate script, and the score is what your [objective function](../optimization/optimization.md#the-objective-function-contract) returned.
 
 ---
 
@@ -44,10 +44,10 @@ Morph tells you _which_ design won. To see _how_ a trial behaved, use the other 
 
 !!! tip "Resuming and refining"
 
-    A study is saved, so you can come back to Morph after the job ends, or resume the job with more trials and watch the history grow. See Adaptive Refinement in the [Optimization guide](../optimization.md) for narrowing the search around the best trial.
+    A study is saved, so you can come back to Morph after the job ends, or resume the job with more trials and watch the history grow. See Adaptive Refinement in the [Optimization guide](../optimization/optimization.md) for narrowing the search around the best trial.
 
 ---
 
 !!! success
 
-    Morph closes the loop of an optimization: you describe the search, Mojo runs it, and Morph shows what it found. Continue to the [Optimization guide](../optimization.md) for the commands that start one.
+    Morph closes the loop of an optimization: you describe the search, Mojo runs it, and Morph shows what it found. Continue to the [Optimization guide](../optimization/optimization.md) for the commands that start one.

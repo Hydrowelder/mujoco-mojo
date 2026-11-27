@@ -2,7 +2,7 @@
 
 !!! abstract
 
-    This guide writes the runtime: a loop that steps the model through four phases: approach, capture, berth, and release. It calls the arm's methods from the [last guide](7-dof-arm.md#driving-the-servos) and puts the [Proximity](../../features/proximity.md), [Equality Constraints](../../features/equality-constraints.md) and [Video Recording](../../features/video-recording.md) guides to work.
+    This guide writes the runtime: a loop that steps the model through four phases: approach, capture, berth, and release. It calls the arm's methods from the [last guide](7-dof-arm.md#driving-the-servos) and puts the [Proximity](../../features/proximity/proximity.md), [Equality Constraints](../../features/equality-constraints/equality-constraints.md) and [Video Recording](../../features/video-recording/video-recording.md) guides to work.
 
 ---
 
@@ -13,7 +13,7 @@ Distances, speeds and times that steer the berthing are in one input class, so t
 ??? example "Mission Inputs"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/mission.py:inputs"
+    --8<-- "src/mujoco_mojo/examples/berthing/mission.py:inputs"
     ```
 
 ---
@@ -30,7 +30,7 @@ The berthing has four phases:
 An enum names them:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/mission.py:phase"
+--8<-- "src/mujoco_mojo/examples/berthing/mission.py:phase"
 ```
 
 ---
@@ -40,7 +40,7 @@ An enum names them:
 The runtime opens the runtime manager, reads the `Berthing` user data back, and hands over the controls and the measurements:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/simulation.py:setup"
+--8<-- "src/mujoco_mojo/examples/berthing/simulation.py:setup"
 ```
 
 - `record_decimation` records telemetry every tenth step, which keeps the files small.
@@ -60,13 +60,13 @@ Each step, the loop works out how well the end effector lines up with the fixtur
 ??? example "Runtime Code"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/simulation.py:runtime"
+    --8<-- "src/mujoco_mojo/examples/berthing/simulation.py:runtime"
     ```
 
 Approach is the first phase:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/simulation.py:approach-phase"
+--8<-- "src/mujoco_mojo/examples/berthing/simulation.py:approach-phase"
 ```
 
 In the approach, the goal follows the fixture, so the arm keeps up if the visitor drifts. The arm counts as parked when it is close to its parking spot and lined up, which means on the fixture's axis and pointing along it, within the mission's tolerances.
@@ -76,7 +76,7 @@ In the approach, the goal follows the fixture, so the arm keeps up if the visito
 ## Capture
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/simulation.py:capture-phase"
+--8<-- "src/mujoco_mojo/examples/berthing/simulation.py:capture-phase"
 ```
 
 - The end effector moves in only while it is lined up.
@@ -89,7 +89,7 @@ In the approach, the goal follows the fixture, so the arm keeps up if the visito
 ## Berth and Release
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/simulation.py:berth-phase"
+--8<-- "src/mujoco_mojo/examples/berthing/simulation.py:berth-phase"
 ```
 
 - The weld ties the end effector to the visitor's grapple site, so putting the end effector on the berthing point puts the visitor there.
@@ -101,7 +101,7 @@ In the approach, the goal follows the fixture, so the arm keeps up if the visito
 
 ## Distances
 
-[Proximity](../../features/proximity.md) measures ten pairs of mesh volumes, nine for the **clearance** and one for the **gap**.
+[Proximity](../../features/proximity/proximity.md) measures ten pairs of mesh volumes, nine for the **clearance** and one for the **gap**.
 
 The clearance pairs are everything the arm must keep clear of:
 
@@ -118,41 +118,41 @@ The housings at the joints are primitive shapes, so these pairs do not see them.
 ??? example "Distance Code"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/simulation.py:proximities"
+    --8<-- "src/mujoco_mojo/examples/berthing/simulation.py:proximities"
     ```
 
 ---
 
 ## Capture Weld
 
-The capture weld joins the end effector's site to the visitor's grapple site. It is off until the capture, as in the [Equality Constraints](../../features/equality-constraints.md) guide, and a small class wraps its three actions:
+The capture weld joins the end effector's site to the visitor's grapple site. It is off until the capture, as in the [Equality Constraints](../../features/equality-constraints/equality-constraints.md) guide, and a small class wraps its three actions:
 
 ``` python
---8<-- "docs/user-guides/examples/berthing/capture.py:capture"
+--8<-- "src/mujoco_mojo/examples/berthing/capture.py:capture"
 ```
 
 ---
 
 ## Videos
 
-[Video Recording](../../features/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the gap is no longer measured, so the label drops it.
+[Video Recording](../../features/video-recording/video-recording.md) films two cameras, the arm camera and the overview camera, into the trial's folder. Only the nominal trial films. Each frame carries a label with the time, the gap, the clearance and whether the weld is on. After the capture the gap is no longer measured, so the label drops it.
 
 The overview camera records the whole run. The arm camera starts the first time the end effector lines up with the fixture and keeps going from there, since the arm can drift out of tolerance for a moment as it starts to move.
 
 ??? example "Video Code"
 
     ``` python
-    --8<-- "docs/user-guides/examples/berthing/simulation.py:videos"
+    --8<-- "src/mujoco_mojo/examples/berthing/simulation.py:videos"
     ```
 
 ---
 
 ## Running It
 
-Run the Reloaded script from the example's folder:
+Open the example in Reloaded:
 
 ``` bash linenums="0"
-./reloaded.sh
+mujoco-mojo examples run berthing
 ```
 
 The runtime logs each milestone: parked, captured, at the berthing point, released and finished. The last line says how far the visitor's grapple site ended up from the berthing point.
@@ -161,4 +161,4 @@ The runtime logs each milestone: parked, captured, at the berthing point, releas
 
 !!! success
 
-    That completes the berthing walkthrough. Change the inputs in `mission.py` and see how the run changes.
+    That completes the berthing walkthrough. To change the inputs in `mission.py` and see how the run changes, copy the `berthing` folder out of the package and run your copy from the folder above it with `mujoco-mojo reloaded -g berthing.generate -r berthing.runtime`.

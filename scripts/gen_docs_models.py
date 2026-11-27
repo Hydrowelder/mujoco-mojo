@@ -12,14 +12,15 @@ The pre-commit hook `gen-docs-models` runs it before a push when the library or 
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
 
 import mujoco_mojo as mojo
+from mujoco_mojo.examples import EXAMPLES as PACKAGED_EXAMPLES
+from mujoco_mojo.examples import ExampleName
 
 ROOT = Path(__file__).parents[1]
 OUTPUT_DIR = ROOT / "docs" / "assets" / "models"
@@ -27,16 +28,12 @@ OUTPUT_DIR = ROOT / "docs" / "assets" / "models"
 SEED = 0
 TRIAL_NUM = 0
 
-# the docs examples with a model to open in MuJoCo Live: each one's folder name under `docs/assets/models`, and the example script whose `generate` builds it
-EXAMPLES: dict[str, Path] = {
-    "vlr": ROOT / "docs" / "user-guides" / "examples" / "vlr" / "vlr_example.py",
-    "berthing": ROOT
-    / "docs"
-    / "user-guides"
-    / "examples"
-    / "berthing"
-    / "simulation.py",
-}
+# the examples with a model to open in MuJoCo Live, each under its own name in `docs/assets/models`
+EXAMPLES: tuple[ExampleName, ...] = (
+    ExampleName.VLR,
+    ExampleName.BERTHING,
+    ExampleName.TENNIS_RACKET,
+)
 
 
 def output_path(name: str) -> Path:
@@ -44,26 +41,10 @@ def output_path(name: str) -> Path:
     return OUTPUT_DIR / name / "model.xml"
 
 
-def load_example(name: str) -> ModuleType:
-    """Imports the example script, which sits outside any package. It is registered under its own name first because pydantic looks a class's module up there to resolve its annotations. An example made of several modules imports them by plain name, so the script's folder is on the path while it loads."""
-    module_name = f"docs_example_{name}"
-    spec = importlib.util.spec_from_file_location(module_name, EXAMPLES[name])
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Cannot load the example script {EXAMPLES[name]}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    folder = str(EXAMPLES[name].parent)
-    sys.path.insert(0, folder)
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.path.remove(folder)
-    return module
-
-
 def render(name: str) -> str:
     """The XML of the example `name`, built the way the runner builds a trial's model."""
-    generate: Callable[[mojo.MojoModel], mojo.MojoModel] = load_example(name).generate
+    module = importlib.import_module(PACKAGED_EXAMPLES[ExampleName(name)].module)
+    generate: Callable[[mojo.MojoModel], mojo.MojoModel] = module.generate
     mojo_model = mojo.MojoModel().with_seed(seed=SEED).with_trial_num(TRIAL_NUM)
     mojo_model = generate(mojo_model)
     with tempfile.TemporaryDirectory() as tmp:

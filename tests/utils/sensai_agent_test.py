@@ -834,10 +834,12 @@ class TestDocsAgent:
         assert "Nothing in the docs matches" in str(seen[0])
 
     def test_a_page_is_read_with_its_link_on_top(self) -> None:
-        seen = self.results(call("read_docs", path="features/pose-context.md"))
+        seen = self.results(
+            call("read_docs", path="features/pose-context/pose-context.md")
+        )
 
         assert str(seen[0]).startswith(
-            "Pose Context (https://hydrowelder.github.io/mujoco-mojo/user-guides/features/pose-context/)"
+            "Pose Context (https://hydrowelder.github.io/mujoco-mojo/user-guides/features/pose-context/pose-context/)"
         )
 
     def test_a_section_of_a_page_can_be_read(self) -> None:
@@ -872,7 +874,10 @@ class TestDocsAgent:
 
         prompt = prompts[0]
         assert "- user-guides/workflow/getting-started.md: Getting Started" in prompt
-        assert "- user-guides/features/requirements.md: Requirements Checker" in prompt
+        assert (
+            "- user-guides/features/requirements/requirements.md: Requirements Checker"
+            in prompt
+        )
         assert "and only from them" in prompt
         assert "Do not answer from memory" in prompt
         assert 'search_docs(query="submit a job to SLURM")' in prompt

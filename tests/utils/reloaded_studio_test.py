@@ -77,6 +77,9 @@ class FakeControls:
         self.calls.append(("rerun", ""))
 
 
+SHOWN_PATH = "/work/trial_000/model.xml"
+
+
 class RecordingStepControl(MojoStepControl):
     """Keeps what it would send to the viewer instead of needing one."""
 
@@ -86,6 +89,9 @@ class RecordingStepControl(MojoStepControl):
 
     def _send(self, snapshot: messages.StepControlSnapshot) -> None:
         self.sent.append(snapshot)
+
+    def _shown_path(self) -> str:
+        return SHOWN_PATH
 
 
 def slider(
@@ -252,11 +258,12 @@ def test_the_single_step_button_steps_once_and_a_pause_request_pauses(
 def test_reset_and_reload_run_the_last_command_again_instead_of_touching_the_model(
     step_control: RecordingStepControl, controls: FakeControls
 ) -> None:
-    """Both are consumed, because the built in handlers would reset or replace the model the runtime is stepping."""
+    """Both are consumed, because the built in handlers would reset or replace the model the runtime is stepping. Reload sends the shown model's path, as Studio's button does."""
     assert step_control._on_reset(messages.ResetEvent()) is True
+    assert step_control._on_load_model(messages.LoadModelEvent(path=SHOWN_PATH)) is True
     assert step_control._on_load_model(messages.LoadModelEvent()) is True
 
-    assert controls.calls == [("rerun", ""), ("rerun", "")]
+    assert controls.calls == [("rerun", ""), ("rerun", ""), ("rerun", "")]
 
 
 def test_a_dropped_model_file_is_refused_because_the_generator_builds_the_model(

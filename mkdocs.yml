@@ -11,10 +11,11 @@ remote_name: origin
 # thousands of files costs seconds: `src` holds the Dojo frontend's node_modules (about
 # 15,000 files), and listing it made a build of a few seconds take over 30. It is not
 # needed for the API pages, since Zensical already watches the Python modules under
-# mkdocstrings' `paths` (`src`). The two files that pages include from outside `docs`
-# are listed instead
+# mkdocstrings' `paths` (`src`). What pages include from outside `docs` is listed
+# instead: the examples, the MJCF tags checklist and the changelog
 watch:
   - docs
+  - src/mujoco_mojo/examples
   - scripts/generated
   - CHANGELOG.md
 
@@ -39,15 +40,16 @@ nav:
               - Signal Lab: user-guides/features/dojo/signal-lab.md
               - SensAI Chat: user-guides/features/dojo/sensai.md
               - Morph: user-guides/features/dojo/morph.md
-          - MojoDataFrame: user-guides/features/mojo-dataframe.md
-          - Optimization: user-guides/features/optimization.md
-          - Reloaded: user-guides/features/reloaded.md
-          - SensAI: user-guides/features/sensai.md
-          - Pose Context: user-guides/features/pose-context.md
-          - Requirements: user-guides/features/requirements.md
-          - Proximity: user-guides/features/proximity.md
-          - Video Recording: user-guides/features/video-recording.md
-          - Equality Constraints: user-guides/features/equality-constraints.md
+          - MojoDataFrame: user-guides/features/mojo-dataframe/mojo-dataframe.md
+          - Custom Signals: user-guides/features/custom-signals/custom-signals.md
+          - Optimization: user-guides/features/optimization/optimization.md
+          - Reloaded: user-guides/features/reloaded/reloaded.md
+          - SensAI: user-guides/features/sensai/sensai.md
+          - Pose Context: user-guides/features/pose-context/pose-context.md
+          - Requirements: user-guides/features/requirements/requirements.md
+          - Proximity: user-guides/features/proximity/proximity.md
+          - Video Recording: user-guides/features/video-recording/video-recording.md
+          - Equality Constraints: user-guides/features/equality-constraints/equality-constraints.md
       - Examples:
           - user-guides/examples/examples.md
           - Vertically Landed Rocket:
@@ -62,6 +64,7 @@ nav:
               - Station and Visitor: user-guides/examples/berthing/station-and-visitor.md
               - 7-DOF Arm: user-guides/examples/berthing/7-dof-arm.md
               - Mission Runtime: user-guides/examples/berthing/mission.md
+          - Tennis Racket Theorem: user-guides/examples/tennis-racket/tennis-racket.md
 
       - Developer:
           - user-guides/developer/developer.md
@@ -142,6 +145,9 @@ plugins:
         # a pure re-export of the stochas library, which has its own reference
         - "mujoco_mojo.stochas"
         - "mujoco_mojo.stochas.*"
+        # the example models, which their guides walk through. the package itself, which
+        # lists them, keeps its page
+        - "mujoco_mojo.examples.*"
         # scaffolding templates copied by `mujoco-mojo init`
         - "mujoco_mojo.templates"
         - "mujoco_mojo.templates.*"

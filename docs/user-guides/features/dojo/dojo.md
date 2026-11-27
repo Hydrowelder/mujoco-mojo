@@ -111,11 +111,11 @@ Dojo is split into environments depending on your current needs:
 
 ### Morph
 
-**Optimization History.** Appears only for [optimization](../optimization.md) jobs. [Morph](morph.md) embeds Optuna Dashboard so you can study how the search converged.
+**Optimization History.** Appears only for [optimization](../optimization/optimization.md) jobs. [Morph](morph.md) embeds Optuna Dashboard so you can study how the search converged.
 
 ### SensAI
 
-**An Assistant for the Dashboard.** Ask about your job, change your plot, or find out how to do something in Mojo, in plain language, in the [SensAI chat](sensai.md). [SensAI](../sensai.md) is optional and needs a language model of your choice.
+**An Assistant for the Dashboard.** Ask about your job, change your plot, or find out how to do something in Mojo, in plain language, in the [SensAI chat](sensai.md). [SensAI](../sensai/sensai.md) is optional and needs a language model of your choice.
 
 ---
 

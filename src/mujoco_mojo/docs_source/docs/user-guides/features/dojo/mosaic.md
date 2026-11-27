@@ -81,7 +81,7 @@ Your tabs are remembered by your browser, so a reload brings them back. [Profile
     - Saved profiles and shared links that use the older single-signal frame reset to `world`.
 -   **Y-Axes (Multi-Select):** You can overlay as many signals as you want. The button shows how many are selected, and opens a folder-style tree of the signals with a search box. Opening a folder that holds only one folder or signal opens straight down to it. With a reference frame other than `world` selected this list is automatically filtered to available vectors.
 -   **Labeled Signals (Enums):** A signal that carries labels for its integer codes (an `enumeration_map`) is drawn as a step line on its own axis on the right, with the labels as the tick marks. Signals that share the same labels share one axis, and hovering shows the label next to the code. Filters and reference frames do not apply to these signals.
--   **Descriptions:** Hover a signal in the X-Axis, Y-Axes or Reference Frame list to see its full name and, if it has one, its description. The built-in signals describe themselves, and you can [describe your own](../mojo-dataframe.md#metadata-units-tags-and-labels) to tell apart signals with similar names. Turn on the tag button in a signal list's search box to search by description.
+-   **Descriptions:** Hover a signal in the X-Axis, Y-Axes or Reference Frame list to see its full name and, if it has one, its description. The built-in signals describe themselves, and you can [describe your own](../mojo-dataframe/mojo-dataframe.md#metadata-units-tags-and-labels) to tell apart signals with similar names. Turn on the tag button in a signal list's search box to search by description.
 -   **Metadata:** The info button on a signal shows what Mojo recorded about it (its unit, dimension and tags). Where a unit is known, the Dojo offers the matching unit conversion as a quick filter.
 -   **The Ribbon:** Selected signals appear as color-coded chips. Use the arrows on the chips to reorder them (hold ++shift++ to send one straight to the start or the end). The order in the ribbon determines the color mapping on the plot. You can also remove signals with the "x" button, or clear them all with **Deselect All**.
 
@@ -94,7 +94,7 @@ Your tabs are remembered by your browser, so a reload brings them back. [Profile
     Every signal list's search box has two buttons at its right:
 
     - **`.*`** switches between a regular expression (the default, and what the segment buttons write) and plain text. In plain text no character is special, and each space-separated word only has to be part of the signal's name, so `box1 vel` finds `Bodies/box1/xvelp:x`. The segment buttons are hidden while it is on, since they write regular expressions.
-    - **The tag** also searches the signals' [descriptions](../mojo-dataframe.md#metadata-units-tags-and-labels), along with their quantity and unit. In plain text each word of your search has to be in the name, or be the start of a word of the description, so `box1 angular` finds the angular velocity of `box1` even though its name never says so. In a regular expression the description is searched with the same expression as the name.
+    - **The tag** also searches the signals' [descriptions](../mojo-dataframe/mojo-dataframe.md#metadata-units-tags-and-labels), along with their quantity and unit. In plain text each word of your search has to be in the name, or be the start of a word of the description, so `box1 angular` finds the angular velocity of `box1` even though its name never says so. In a regular expression the description is searched with the same expression as the name.
 
     Both are remembered by your browser and are the same in every signal list.
 
@@ -117,7 +117,7 @@ Click a signal's name in the ribbon to open its settings. They apply to that one
     <figcaption>The settings of one signal, opened from its chip: how its line is drawn, and its filter stack.</figcaption>
 </figure>
 
-The filters are the same ones you can use in code with [`MojoDataFrame`](../mojo-dataframe.md#filters), and the ones the [Signal Lab](signal-lab.md) offers as nodes.
+The filters are the same ones you can use in code with [`MojoDataFrame`](../mojo-dataframe/mojo-dataframe.md#filters), and the ones the [Signal Lab](signal-lab.md) offers as nodes.
 
 ---
 

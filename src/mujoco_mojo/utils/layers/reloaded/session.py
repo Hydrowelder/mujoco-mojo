@@ -205,6 +205,9 @@ class MojoReloaded:
     studio: ReloadedStudioSettings = field(default_factory=ReloadedStudioSettings)
     """Which parts of Studio are showing when it opens, from the `reloaded.studio` settings."""
 
+    intro: list[str] = field(default_factory=list)
+    """Messages, as rich markup, logged before the first generation, so they are the first lines of the log pane. `mujoco-mojo examples run` uses one to say where the example's source is."""
+
     _sync_hook: rt.runtime_manager.SyncHook | None = None
     """Called by the runtime manager after every step with the state and the arrows and lines to draw, so the viewer follows the run. Set from the viewer backend while the session runs."""
 
@@ -629,6 +632,8 @@ class MojoReloaded:
         early_handler = TuiLogHandler(early_logs)
         early_handler.addFilter(TerminalFilter())
         logging.getLogger().addHandler(early_handler)
+        for message in self.intro:
+            logger.info(message)
         try:
             start = time.time()
             with console.status(

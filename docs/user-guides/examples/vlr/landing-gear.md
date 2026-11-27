@@ -11,7 +11,7 @@
 We begin by defining an enumeration called `Side`. This `StrEnum` is used as a convenient way to ensure each side of the landing gear has a different name, and to compute each side's clocking angle (its rotation around the tube's axis) and position from that name. It lets us loop over the four sides and compute each one's placement from a single definition, rather than repeating that logic four times.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:side"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:side"
 ```
 
 Recall in the previous section that we defined a for loop to make each leg of the landing gear. We used `Side` to loop over all of the defined enumeration branches to make a body with a clocking angle and position. This is done by using `mojo.Frame` which allows us to define a single side in a simple reference frame, allowing the MuJoCo compiler to perform the frame rotations for us. This is nice (compared to defining each side around a body) since we do not have to carry around four `<body>` tags whose only purpose would be to hold a position and orientation.
@@ -19,7 +19,7 @@ Recall in the previous section that we defined a for loop to make each leg of th
 In this case we define a `Frame` at each clocking angle, extended one radius from the cylinder's centerline. Then we use the `LandingGear.new()` class method to make a leg in that `Frame`.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:patterning"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:patterning"
 ```
 
 ---
@@ -39,7 +39,7 @@ Because the `Frame` already carries each side's clocking rotation and offset fro
 After adding the leg we also add two sites, one attached to the leg, and the other attached to the rocket body (via the frame). These will be used later when defining the runtime behavior of the legs since we will be attaching a spring between them.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:landing_gear_kinematics"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:landing_gear_kinematics"
 ```
 
 ---

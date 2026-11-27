@@ -4,9 +4,10 @@ import numpy as np
 import polars as pl
 import pytest
 
+from mujoco_mojo.stochas import UnitSystem
 from mujoco_mojo.typing import BodyName, SignalCategory
 from mujoco_mojo.utils.column import Column
-from mujoco_mojo.utils.dataframe import MojoDataFrame
+from mujoco_mojo.utils.dataframe import MojoDataFrame, unit_conversion
 from mujoco_mojo.utils.defaults import TIME_COLUMN_NAME
 from mujoco_mojo.utils.filters import AnyFilter, ScaleFilter
 from mujoco_mojo.utils.signal_metadata import ColumnMetadata, TransformType
@@ -860,3 +861,58 @@ def test_with_filter_map(sample_data: MojoDataFrame) -> None:
     assert mapped["Bodies/racket/nutation_deg"][0] == 12.0
     # Unmapped columns should be identical
     assert mapped["Bodies/racket/xpos:x"][0] == 1.0
+
+
+def _unit_frame() -> MojoDataFrame:
+    """Two angles, one in degrees and one in radians, and a length in inches."""
+    return MojoDataFrame.from_dict(
+        {
+            TIME_COLUMN_NAME: [0.0, 1.0],
+            "Custom/angle:deg": [90.0, 45.0],
+            "Custom/angle:rad": [1.0, 0.5],
+            "Custom/reach": [1.0, 2.0],
+        }
+    )
+
+
+_UNIT_META = {
+    "Custom/angle:deg": ColumnMetadata(unit="degree", quantity="angle"),
+    "Custom/angle:rad": ColumnMetadata(unit="radian", quantity="angle"),
+    "Custom/reach": ColumnMetadata(unit="inch"),
+}
+
+
+@pytest.mark.parametrize(
+    "target", [UnitSystem.si(), UnitSystem.cgs()], ids=["si", "cgs"]
+)
+def test_with_unit_system_leaves_an_angle_in_the_unit_it_was_recorded_in(
+    target: UnitSystem,
+) -> None:
+    """A unit system has no unit for an angle, and Pint counts an angle as dimensionless, which once turned degrees into radians while the column still said degrees."""
+    out = _unit_frame().mojo.with_unit_system(target, column_metadata=_UNIT_META)
+
+    assert out["Custom/angle:deg"].to_list() == [90.0, 45.0]
+    assert out["Custom/angle:rad"].to_list() == [1.0, 0.5]
+
+
+def test_with_unit_system_still_converts_a_unit_with_a_dimension() -> None:
+    out = _unit_frame().mojo.with_unit_system(
+        UnitSystem.si(), column_metadata=_UNIT_META
+    )
+
+    assert out["Custom/reach"].to_list() == pytest.approx([0.0254, 0.0508])
+
+
+def test_unit_conversion_names_the_units_with_unit_system_converts_between() -> None:
+    si = UnitSystem.si()
+
+    assert unit_conversion(ColumnMetadata(unit="inch"), si) == ("inch", "meter")
+    # a dimension alone is converted only when its source system is known
+    length = ColumnMetadata(dimension="[length]")
+    assert unit_conversion(length, si) is None
+    assert unit_conversion(length, si, assume_source=UnitSystem.cgs()) == (
+        "centimeter",
+        "meter",
+    )
+    assert unit_conversion(ColumnMetadata(unit="degree"), si) is None
+    assert unit_conversion(None, si) is None

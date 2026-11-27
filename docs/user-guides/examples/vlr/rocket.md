@@ -26,7 +26,7 @@ The rocket is composed of a `body` and a set of `landing_gear` and is created wi
 6.  Finally, the body is appended to the list of `worldbody` bodies.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:rocket"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:rocket"
 ```
 
 ---

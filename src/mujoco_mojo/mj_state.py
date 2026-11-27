@@ -18,7 +18,7 @@ class MjState:
     model: mujoco.MjModel
     data: mujoco.MjData
     us: UnitSystem | None = field(default=None, repr=False, compare=False)
-    """Physical unit system declared on the model. Set automatically from `mojo_model.u` at simulation startup. When set, telemetry channels report concrete units (e.g. `"meter"`) instead of abstract Pint dimensions (e.g. `"[length]"`)."""
+    """Physical unit system declared on the model. Set automatically from `mojo_model.us` at simulation startup. When set, telemetry channels report concrete units (e.g. `"meter"`) instead of abstract Pint dimensions (e.g. `"[length]"`)."""
 
     _rne_post_constraint_fresh: bool = field(
         default=False, init=False, repr=False, compare=False

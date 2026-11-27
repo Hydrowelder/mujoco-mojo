@@ -11,7 +11,7 @@
 
 !!! info "Suggested Reading: Mojo Reloaded"
 
-    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
+    After a brief skim of this guide, you may want to take a look at [the guide](../features/reloaded/reloaded.md) on using **Mojo Reloaded** to accelerate your prototyping.
 
 ---
 
@@ -46,6 +46,7 @@ We use a `Handoff` dataclass or Pydantic BaseModel to encapsulate these referenc
 
     ``` python
     FIXED_CAMERA_NAME = mojo.CameraName("static")
+    US = mojo.UnitSystem.si()
 
 
     class Handoff(mojo.UserData):
@@ -174,8 +175,8 @@ Notice in the following code how enumerations such as [`mojo.TextureType.D2`][mu
         ),
     ]
 
-    # Handle skybox if in nominal mode
-    if mojo_model.is_nominal:
+    # Handle skybox if in nominal mode and its image files are there
+    if mojo_model.is_nominal and skybox_folder.is_dir():
         mojo_model.mjcf.assets.append(
             mojo.Asset(
                 textures=[
@@ -197,6 +198,8 @@ Notice in the following code how enumerations such as [`mojo.TextureType.D2`][mu
 Mojo uses `DepPath` to handle asset paths, ensuring that your models remain portable across different machines. They have identical properties to `pathlib.Path`. In the [`MojoModel.mjcf`][mujoco_mojo.mojo_model.MojoModel.mjcf], wherever you would use a `Path` object, instead use a `DepPath`.
 
 Using `DepPath` is the key to portability; it tells Mojo to track the file as a dependency that is integral to your model. This allows Mojo to share a file on disk between different runs, preventing extra bloat!
+
+The skybox here is six images in `textures/stars`, under the folder the job runs from. Mojo does not ship them, so the example only adds the skybox when that folder is there, and runs without one otherwise.
 
 ---
 
@@ -310,6 +313,7 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
     ``` python
     def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
         """Generates the MJCF model and samples distributions."""
+        mojo_model.us = US  # add an optional unit system
         skybox_folder = (mojo.DepPath() / "textures" / "stars").resolve()
 
         # Configure simulation assets
@@ -336,8 +340,8 @@ Lets tie things up! At the end of your `generate` function, you attach your `Han
             ),
         ]
 
-        # Handle skybox if in nominal mode
-        if mojo_model.is_nominal:
+        # Handle skybox if in nominal mode and its image files are there
+        if mojo_model.is_nominal and skybox_folder.is_dir():
             mojo_model.mjcf.assets.append(
                 mojo.Asset(
                     textures=[

@@ -21,7 +21,7 @@ After declaring the units, we go into our custom logic to create the model (`VLR
 The `options` tag is used to set some key parameters like the simulation timestep, integrator, and contact parameters. At the end, the modified `mojo_model` is returned for future steps.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:generate"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:generate"
 ```
 
 <!-- docs/assets/models/vlr/model.xml is written by scripts/gen_docs_models.py, and a pre-push hook keeps it current. Do not edit it by hand. -->
@@ -47,7 +47,7 @@ Our `VLRModel` will have a few things defined by the end of the `classmethod`:
 5.  We also define a light for _dramatic_ effect.
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:thin_wrapper"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:thin_wrapper"
 ```
 
 ---

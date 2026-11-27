@@ -43,7 +43,7 @@ Between them, the nodes are grouped in the add-node menu:
 | **Vector**       | **Rotation** (into the frame of an orientation, and optionally an origin) and **Translation** (add or subtract a position).                                                                     |
 | **Template**     | Template In and Template Out, and each saved template as one node (see [Templates](#templates)).                                                                                                |
 
-The single-signal nodes are the same filters that work in code on a [`MojoDataFrame`](../mojo-dataframe.md#filters), so a graph you prove out here can be written down as a short script.
+The single-signal nodes are the same filters that work in code on a [`MojoDataFrame`](../mojo-dataframe/mojo-dataframe.md#filters), so a graph you prove out here can be written down as a short script.
 
 ---
 
@@ -74,7 +74,7 @@ A saved lab's outputs become **signals of the trial**. Close the Lab and open th
 
 !!! note "Lab signals are not stored in your data"
 
-    A lab's outputs live in the Dojo only. They are not written into `telemetry.parquet`, so a script that reads the file with [`MojoDataFrame`](../mojo-dataframe.md) will not see them. To keep one, express the same steps in code.
+    A lab's outputs live in the Dojo only. They are not written into `telemetry.parquet`, so a script that reads the file with [`MojoDataFrame`](../mojo-dataframe/mojo-dataframe.md) will not see them. To keep one, express the same steps in code.
 
 The **Load** list shows each saved lab with when it changed, and flags the ones that cannot run on the trial in front of you:
 
@@ -107,4 +107,4 @@ To plot the speed of `box1` in centimeters per second:
 
 !!! success
 
-    You can now make the signal your analysis needs, even when the run did not record it. To do the same in a script, continue to [MojoDataFrame](../mojo-dataframe.md).
+    You can now make the signal your analysis needs, even when the run did not record it. To do the same in a script, continue to [MojoDataFrame](../mojo-dataframe/mojo-dataframe.md).

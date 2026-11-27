@@ -13,17 +13,17 @@
 
 This example puts the feature guides to work:
 
-- [Proximity](../../features/proximity.md) measures the gap between the arm and the grapple fixture it is closing on, and the clearance of the arm from the vehicle, the station and itself.
-- [Equality Constraints](../../features/equality-constraints.md) provide the capture weld, which is off until the arm is in place and then holds the vehicle to the arm.
-- [Video Recording](../../features/video-recording.md) films the run from a camera on the arm and from a fixed camera that follows the vehicle.
+- [Proximity](../../features/proximity/proximity.md) measures the gap between the arm and the grapple fixture it is closing on, and the clearance of the arm from the vehicle, the station and itself.
+- [Equality Constraints](../../features/equality-constraints/equality-constraints.md) provide the capture weld, which is off until the arm is in place and then holds the vehicle to the arm.
+- [Video Recording](../../features/video-recording/video-recording.md) films the run from a camera on the arm and from a fixed camera that follows the vehicle.
 
-It also follows the `Handoff` pattern of the [runtime script](../../workflow/runtime-script.md): the generator keeps what the runtime will need in `user_data`, and the runtime reads it back. And it shows how Mojo works with an established MuJoCo library: `mink` moves the arm, and it reads the same compiled model that Mojo builds. Install it with `pip install mink` before running the example.
+It also follows the `Handoff` pattern of the [runtime script](../../workflow/runtime-script.md): the generator keeps what the runtime will need in `user_data`, and the runtime reads it back. And it shows how Mojo works with an established MuJoCo library: `mink` moves the arm, and it reads the same compiled model that Mojo builds. Install it with Mojo's `examples` extra, `pip install "mujoco-mojo[examples]"`, before running the example.
 
 ---
 
 ## Project Layout
 
-Code for the example lives in [the berthing folder](https://github.com/Hydrowelder/mujoco-mojo/tree/master/docs/user-guides/examples/berthing){target="_blank"}, with one file for each part of the model:
+The example ships with Mojo as the `mujoco_mojo.examples.berthing` package ([the berthing folder](https://github.com/Hydrowelder/mujoco-mojo/tree/master/src/mujoco_mojo/examples/berthing){target="_blank"} on GitHub), with one file for each part of the model:
 
 | File              | Holds                                                                                                        |
 | :---------------- | :----------------------------------------------------------------------------------------------------------- |
@@ -120,13 +120,13 @@ def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
 
 A run has four phases: the arm approaches and lines up with the fixture, moves in slowly and switches the weld on, carries the vehicle to the berthing point, and lets go. The runtime is a loop that steps through them, and each part has methods for the controls it needs, which the loop only calls.
 
-To watch it, run the Reloaded script from the example's folder:
+To watch it, open the example in [Reloaded](../../features/reloaded/reloaded.md):
 
 ``` bash linenums="0"
-./reloaded.sh
+mujoco-mojo examples run berthing
 ```
 
-It runs `mujoco-mojo reloaded -g simulation.generate -r simulation.runtime`, which opens the model in [Reloaded](../../features/reloaded.md) and runs it.
+The first line of Reloaded's log is the path to the example's code, which the terminal of an editor such as VS Code opens with Ctrl+click.
 
 <!-- docs/assets/models/berthing/model.xml is written by scripts/gen_docs_models.py, and a pre-push hook keeps it current. Do not edit it by hand. -->
 

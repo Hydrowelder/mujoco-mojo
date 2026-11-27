@@ -200,7 +200,7 @@ A rapid prototyping loop that allows you to modify physics logic and model archi
 - **Terminal UI:** Drive the reload/sync pipeline from a terminal UI with clickable settings, command completion, and a log of every run.
 - **Interactive Prototyping:** A developer-centric command loop to toggle playback speeds, repeat last commands, watch for file changes and auto-reload, switch telemetry recording on or off mid-session, or trigger "generation-only" mode for rapid MJCF debugging.
 - **Live Session Controls:** Adjust the seed and trial number on the fly with `seed <N>` and `trial <N>`, without restarting the loop.
-- **Ask SensAI:** With [SensAI](user-guides/features/sensai.md) on, `sensai <question>` answers how to use Mojo from the docs, right in the log, while a run goes on.
+- **Ask SensAI:** With [SensAI](user-guides/features/sensai/sensai.md) on, `sensai <question>` answers how to use Mojo from the docs, right in the log, while a run goes on.
 - **Asset Persistence:** Automatically dumps current MJCF snapshots and model configurations to a workspace directory for post-hoc analysis or version tracking.
 
 ??? example

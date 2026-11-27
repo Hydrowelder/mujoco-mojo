@@ -127,7 +127,8 @@ class MojoStepControl(plugin.SimPlugin):
 
     @messages.handler
     def _on_load_model(self, event: messages.LoadModelEvent) -> bool:
-        if event.path:
+        # the Reload button sends the shown model's path, which is the trial's xml, so only another path is a dropped file
+        if event.path and event.path != self._shown_path():
             logger.warning(
                 f"Reloaded builds the model with your generator, so '{event.path}' was not loaded."
             )
@@ -151,6 +152,10 @@ class MojoStepControl(plugin.SimPlugin):
 
     def _send(self, snapshot: messages.StepControlSnapshot) -> None:
         self.handle.send_to_viewer(snapshot)
+
+    def _shown_path(self) -> str:
+        """The path of the model the viewer shows, which is what its Reload button sends."""
+        return self.handle.model_path
 
 
 @dataclasses.dataclass(frozen=True, eq=False)

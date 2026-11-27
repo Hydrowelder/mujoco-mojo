@@ -46,7 +46,7 @@ Once in the context block, we do a few things:
 
 1.  Extract our `VLRModel` from the user data
 2.  Loop over the landing gear to add the springs using our `add_spring` method
-3.  Use the camera we defined to record video and take screenshots during the simulation
+3.  Use the camera we defined to record video and take screenshots during the simulation, saved in the trial's folder (`mojo_model.trial_dir`)
     - We only do this for the nominal trial, not every randomized Monte Carlo trial, since video files can increase runtime, memory/storage space, and are generally not needed.
 4.  Run the solver by looping using `rm.step(state)` (this is where [`rt.PointToPointForce`][mujoco_mojo.runtime.load.PointToPointForce] will automatically be computed and applied for each timestep)
 5.  Take one last screenshot when the rocket has landed
@@ -82,20 +82,20 @@ def runtime(
         if mojo_model.is_nominal:
             recorder = (
                 rt.VideoRecorder(
-                    path=Path(__file__).parent / "video.gif",
+                    path=mojo_model.trial_dir / "video.gif",
                     camera_name=vlr_model.camera,
                     frame_rate=10,
                 )
                 .setup(state)
                 .register_to_rm()
             )
-            recorder.snapshot(state, Path(__file__).parent / "ground.jpg")
+            recorder.snapshot(state, mojo_model.trial_dir / "ground.jpg")
 
         while state.data.time < 4.0:
             rm.step(state)
 
         if recorder:
-            recorder.snapshot(state, Path(__file__).parent / "landed.jpg")
+            recorder.snapshot(state, mojo_model.trial_dir / "landed.jpg")
 
     return mojo_model
 
@@ -111,7 +111,7 @@ Running the model can be done using [`mojo.utils.MojoRunner`][mujoco_mojo.utils.
 ``` python
 if __name__ == "__main__":
     mojo.utils.setup_logger()
-    workdir = Path(__file__).parent / "monte_carlo_study"
+    workdir = Path("monte_carlo_study")
 
     runner = mojo.utils.MojoRunner(
         generator=generate,
@@ -595,20 +595,20 @@ if __name__ == "__main__":
             if mojo_model.is_nominal:
                 recorder = (
                     rt.VideoRecorder(
-                        path=Path(__file__).parent / "video.gif",
+                        path=mojo_model.trial_dir / "video.gif",
                         camera_name=vlr_model.camera,
                         frame_rate=10,
                     )
                     .setup(state)
                     .register_to_rm()
                 )
-                recorder.snapshot(state, Path(__file__).parent / "ground.jpg")
+                recorder.snapshot(state, mojo_model.trial_dir / "ground.jpg")
 
             while state.data.time < 4.0:
                 rm.step(state)
 
             if recorder:
-                recorder.snapshot(state, Path(__file__).parent / "landed.jpg")
+                recorder.snapshot(state, mojo_model.trial_dir / "landed.jpg")
 
         return mojo_model
 
@@ -616,7 +616,7 @@ if __name__ == "__main__":
 
     if __name__ == "__main__":
         mojo.utils.setup_logger()
-        workdir = Path(__file__).parent / "monte_carlo_study"
+        workdir = Path("monte_carlo_study")
 
         runner = mojo.utils.MojoRunner(
             generator=generate,

@@ -21,7 +21,7 @@ The `Ground` class is (thankfully) pretty straightforward. We define three thing
     - For a more complex model, you could even use a heightmap to simulate an uneven surface!
 
 ``` python
---8<-- "docs/user-guides/examples/vlr/vlr_example.py:ground"
+--8<-- "src/mujoco_mojo/examples/vlr/simulation.py:ground"
 ```
 
 ---
