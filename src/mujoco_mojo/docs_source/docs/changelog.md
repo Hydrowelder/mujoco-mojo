@@ -1,31 +1,32 @@
 # Changelog
 
-## Version 2.8.6 (2026-11-25)
+## Version 2.8.6 (2026-11-29)
 
-- Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
-- Added a `sensai` command to Reloaded, which answers questions about using Mojo from the docs
-- Reloaded's SensAI answers show in a pane that swaps with the log (Tab switches), and remember the conversation
-- SensAI summarizes a long conversation once it fills `sensai.compact_at` of the context window, in the Dojo chat and in Reloaded
-- The Dojo chat and Reloaded show how full the context window is, with a button to summarize the conversation
-- Each `sensai.models` entry can set `context_window`, for a model Mojo cannot look up, such as one served by Ollama
-- The settings panel explains each field of a SensAI model, and shows `sensai.compact_at` as a percentage
-- Updated pydantic-ai to 2.75.0, and added pydantic-ai-harness to the `sensai` extra
-- Added `sensai.features` to turn off any of SensAI's specialists (docs, job status, signals, plot)
-- SensAI's settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
-- Reloaded shows SensAI's disclaimer on an icon in the status bar while SensAI is on
-- Reloaded's `explain` now points to `sensai` for an AI answer
+- Added SensAI to Reloaded: the `sensai` command answers questions about using Mojo from the docs
+    - Answers show in a pane that swaps with the log (Tab switches), and SensAI remembers the conversation
+- Various improvements for SensAI, in the Dojo and in Reloaded
+    - Summarizes a long conversation once it fills `sensai.compact_at` of the context window
+    - Shows how full the context window is, with a button to summarize the conversation
+    - Each `sensai.models` entry can set `context_window`, for a model Mojo cannot look up, such as one served by Ollama
+    - Added `sensai.features` to turn off any of SensAI's specialists (docs, job status, signals, plot)
+    - Its settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
+    - The settings panel explains each field of a SensAI model, and shows `sensai.compact_at` as a percentage
+    - Updated pydantic-ai to 2.75.0, and added pydantic-ai-harness to the `sensai` extra
+    - Fixed the Dojo chat losing its routing rules after the first message
 - Added a Reloaded window to Reloaded's Studio viewer, with the terminal's commands and settings, speeds faster than real time, and pausing at a time or step
 - The docs examples now ship with Mojo in `mujoco_mojo.examples`, and run offline
-- Added `mujoco-mojo examples list` and `examples run`, which opens an example in Reloaded and logs where its source is
-- Added the `examples` extra, which installs `mink` for the berthing example
-- Added a tennis racket theorem example guide, with its model to open in MuJoCo Live
-- Added a Custom Signals guide
-- Each feature guide is now in a folder of its own, which changes its address on the docs site
+    - Added `mujoco-mojo examples list` and `examples run`, which opens an example in Reloaded and logs where its source is
+    - Added the `examples` extra, which installs `mink` for the berthing example
+- Docs updates
+    - Added a tennis racket theorem example guide, with its model to open in MuJoCo Live
+    - Added a Custom Signals guide
+    - Each feature guide is now in a folder of its own, which changes its address on the docs site
+- Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
 - Settings, saved profiles and labs, and caches moved from `~/.mujoco-mojo` to the platform's standard folders, and existing files are moved there once
-- Fixed SensAI losing its routing rules after the first message of a chat
+- Fixed unit system conversions
+    - `with_unit_system` turned an angle in degrees into radians, which the Dojo's display unit system did too
+    - The Dojo's display unit system labeled a converted custom signal with the unit it was recorded in
 - Fixed links in Reloaded's log being hard to ctrl+click
-- Fixed `with_unit_system` turning an angle in degrees into radians, which the Dojo's display unit system did too
-- Fixed the Dojo's display unit system labeling a converted custom signal with the unit it was recorded in
 
 > [!WARNING]
 > - **Breaking:** A Reloaded command ending in `?` no longer explains it, since questions for `sensai` end that way. Use `explain <cmd>`
