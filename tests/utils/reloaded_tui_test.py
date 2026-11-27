@@ -105,6 +105,11 @@ def sensai_text(app: ReloadedApp) -> str:
     return "\n".join(line.text for line in app.query_one("#sensai-log", RichLog).lines)
 
 
+def live_text(app: ReloadedApp) -> str:
+    """What shows of the answer SensAI is still writing."""
+    return str(app.query_one("#sensai-live-text", Static).render())
+
+
 def shown_pane(app: ReloadedApp) -> str | None:
     return app.query_one("#panes", ContentSwitcher).current
 
@@ -1133,8 +1138,17 @@ class TestTheSensAIPane:
         """Makes SensAI answer every question with "Use `pause`." (after `release`, when given), and gives the list the questions are put in."""
         questions: list[str] = []
 
-        def ask(question: str, history: object = ()) -> reloaded_sensai.Answer:
+        def ask(
+            question: str,
+            history: object = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
+        ) -> reloaded_sensai.Answer:
             questions.append(question)
+            if on_progress is not None:
+                on_progress('Searching the docs for "pause"...')
+            if on_text is not None:
+                on_text("Use ")
             if release is not None:
                 assert release.wait(5)
             return reloaded_sensai.Answer(
@@ -1174,13 +1188,13 @@ class TestTheSensAIPane:
             app, _ = make_app(tmp_path, sensai=True)
             async with app.run_test(size=(140, 30)) as pilot:
                 await pilot.click("#log", offset=(self.title_offset(app, "SensAI"), 0))
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
                 assert app.focused is app.query_one(CommandInput)
                 assert app.query_one("#command-box").border_title == "Ask SensAI"
                 assert "Ask SensAI how to use Mojo" in sensai_text(app)
 
                 await pilot.click(
-                    "#sensai-log", offset=(self.title_offset(app, "Log"), 0)
+                    "#sensai-pane", offset=(self.title_offset(app, "Log"), 0)
                 )
                 await wait_until(pilot, lambda: shown_pane(app) == "log")
                 assert app.query_one("#command-box").border_title == "Command"
@@ -1195,7 +1209,7 @@ class TestTheSensAIPane:
             async with app.run_test(size=(140, 30)) as pilot:
                 command = app.query_one(CommandInput)
                 await pilot.press("tab")
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
 
                 command.value = "how do I pause?"
                 await pilot.press("tab")
@@ -1209,7 +1223,7 @@ class TestTheSensAIPane:
                 assert shown_pane(app) == "log"
 
                 await pilot.press("tab")
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
 
         run(scenario())
 
@@ -1218,7 +1232,7 @@ class TestTheSensAIPane:
             app, _ = make_app(tmp_path, sensai=True)
             async with app.run_test(size=(140, 30)) as pilot:
                 await self.enter(pilot, app, "sensai")
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
                 await self.enter(pilot, app, "log")
                 await wait_until(pilot, lambda: shown_pane(app) == "log")
 
@@ -1233,7 +1247,7 @@ class TestTheSensAIPane:
             app, session = make_app(tmp_path, sensai=True)
             async with app.run_test(size=(140, 30)) as pilot:
                 await self.enter(pilot, app, "sensai")
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
                 command = app.query_one(CommandInput)
                 assert command.placeholder == "Ask SensAI a question, or type a command"
 
@@ -1262,7 +1276,7 @@ class TestTheSensAIPane:
             app, session = make_app(tmp_path, sensai=True)
             async with app.run_test(size=(140, 30)) as pilot:
                 await self.enter(pilot, app, "sensai")
-                await wait_until(pilot, lambda: shown_pane(app) == "sensai-log")
+                await wait_until(pilot, lambda: shown_pane(app) == "sensai-pane")
                 assert hint_text(app) == "Type a question, or a command."
                 await self.enter(pilot, app, "")
                 await pilot.pause(0.2)
@@ -1288,6 +1302,71 @@ class TestTheSensAIPane:
                 await self.enter(pilot, app, "sensai")
                 await wait_until(pilot, lambda: pane_title_text(app) == "Log · SensAI")
                 assert "Use pause." in sensai_text(app)
+
+        run(scenario())
+
+    def test_an_answer_shows_as_it_is_written_and_then_joins_the_conversation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        release = threading.Event()
+        self.answer_with(monkeypatch, release)
+
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                live = app.query_one("#sensai-live")
+                assert not live.display
+
+                await self.enter(pilot, app, "sensai how do I pause?")
+                await wait_until(pilot, lambda: live_text(app).endswith("Use"))
+                assert live_text(app).splitlines()[0] == (
+                    'Searching the docs for "pause"...'
+                )
+                assert "Use" not in sensai_text(app)
+                # what SensAI did is not kept in the conversation
+                assert "Searching" not in sensai_text(app)
+
+                release.set()
+                await wait_until(pilot, lambda: "Use pause." in sensai_text(app))
+                assert not live.display
+                assert live_text(app) == ""
+                assert "Searching" not in sensai_text(app)
+
+        run(scenario())
+
+    def test_a_finished_answer_is_shown_whole_though_its_reveal_was_not_done(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        text = " ".join(f"word{n}" for n in range(400))
+
+        def ask(
+            question: str,
+            history: object = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
+        ) -> reloaded_sensai.Answer:
+            if on_text is not None:
+                on_text(text)
+            return reloaded_sensai.Answer(
+                text=text,
+                model="model-b",
+                history=[],
+                context=ContextGauge(
+                    used_tokens=1, window_tokens=10_000, known_window=True
+                ),
+            )
+
+        monkeypatch.setattr(reloaded_sensai, "ask", ask)
+
+        async def scenario() -> None:
+            app, _ = make_app(tmp_path, sensai=True)
+            async with app.run_test(size=(140, 30)) as pilot:
+                await self.enter(pilot, app, "sensai how do I pause?")
+                await wait_until(pilot, lambda: "word399" in sensai_text(app))
+                # the reveal is stopped and does not show the answer a second time
+                await pilot.pause(3 * tui_module.REVEAL_SECONDS)
+                assert not app.query_one("#sensai-live").display
+                assert live_text(app) == ""
 
         run(scenario())
 
@@ -1330,6 +1409,24 @@ class TestTheSensAIPane:
         run(scenario())
 
 
+class TestRevealStep:
+    """How fast the answer SensAI is writing is shown."""
+
+    def test_a_tenth_of_what_waits_and_at_least_one_character(self) -> None:
+        assert tui_module.reveal_step(1) == 1
+        assert tui_module.reveal_step(9) == 1
+        assert tui_module.reveal_step(25) == 3
+        assert tui_module.reveal_step(1_000) == 100
+
+    def test_a_burst_of_any_size_is_written_out_in_about_a_second(self) -> None:
+        for burst in (300, 3_000):
+            left, ticks = burst, 0
+            while left:
+                left -= tui_module.reveal_step(left)
+                ticks += 1
+            assert 0.5 < ticks * tui_module.REVEAL_SECONDS < 2.5
+
+
 class TestTheContextGauge:
     """The bottom edge of SensAI's pane says how full the context window is, and its `compact` summarizes the conversation."""
 
@@ -1353,7 +1450,7 @@ class TestTheContextGauge:
         async def scenario() -> None:
             app, _ = make_app(tmp_path, sensai=True)
             async with app.run_test(size=(140, 30)) as pilot:
-                sensai = app.query_one("#sensai-log", RichLog)
+                sensai = app.query_one("#sensai-pane")
                 # nothing is measured until SensAI has answered
                 assert (
                     Content.from_markup(str(sensai.border_subtitle)).plain == "compact"

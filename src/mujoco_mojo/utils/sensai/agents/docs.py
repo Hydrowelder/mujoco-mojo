@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic_ai import Agent
 
 from mujoco_mojo.utils.log import get_logger
@@ -111,3 +113,21 @@ def read_settings(section: str = "") -> str:
     found = _read_settings(section)
     logger.info("SensAI read_settings %r", section)
     return found
+
+
+def progress_label(tool_name: str, args: dict[str, Any]) -> str | None:
+    """What a call of one of the docs agent's tools is doing, in a few words to show while the answer is worked out, or None for a tool that is not the docs agent's."""
+    if tool_name == search_docs.__name__:
+        return f'Searching the docs for "{args.get("query", "")}"...'
+    if tool_name == read_docs.__name__:
+        page = args.get("path", "")
+        section = args.get("section")
+        return f'Reading "{section}" in {page}...' if section else f"Reading {page}..."
+    if tool_name == read_settings.__name__:
+        section = args.get("section")
+        return (
+            f'Looking up "{section}" in the settings...'
+            if section
+            else "Listing the settings..."
+        )
+    return None

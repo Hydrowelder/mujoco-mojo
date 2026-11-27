@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import math
 import os
 import threading
 import time
@@ -23,7 +24,7 @@ from rich.theme import Theme
 from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.content import Content
 from textual.css.query import NoMatches
 from textual.markup import escape as escape_markup
@@ -32,6 +33,7 @@ from textual.screen import ModalScreen
 from textual.selection import Selection
 from textual.strip import Strip
 from textual.suggester import Suggester
+from textual.timer import Timer
 from textual.widget import Widget
 from textual.widgets import Button, ContentSwitcher, Footer, Input, RichLog, Static
 
@@ -53,6 +55,8 @@ from .controller import (
     SensAIClearedEvent,
     SensAIContextEvent,
     SensAIEvent,
+    SensAIProgressEvent,
+    SensAIStreamEvent,
     ShowPaneEvent,
     StatusEvent,
     control_states,
@@ -366,8 +370,22 @@ def format_record(record: logging.LogRecord, width: int | None = None) -> Text:
 PANES: tuple[tuple[Pane, str], ...] = (("log", "Log"), ("sensai", "SensAI"))
 """What the one pane can show, by the name its title gives each."""
 
-PANE_IDS: dict[Pane, str] = {"log": "log", "sensai": "sensai-log"}
-"""The widget that shows each pane's content."""
+PANE_IDS: dict[Pane, str] = {"log": "log", "sensai": "sensai-pane"}
+"""The widget that shows each pane's content, and carries its title."""
+
+SENSAI_LOG = "sensai-log"
+"""The conversation with SensAI, inside its pane."""
+
+SENSAI_LIVE = "sensai-live"
+"""Below the conversation, what SensAI is doing and the answer it is writing, until the answer is whole."""
+
+REVEAL_SECONDS = 1 / 30
+"""How often the answer SensAI is writing shows more of what has come of it."""
+
+
+def reveal_step(backlog: int) -> int:
+    """How many more characters of the answer to show at the next tick, of the `backlog` that has come and is not shown yet: a tenth, and at least one, so a burst of text is written out over about a second, however big it is, and not shown in one jump."""
+    return max(1, math.ceil(backlog / 10))
 
 
 def pane_title(shown: Pane, unread: bool = False) -> str:
@@ -977,6 +995,12 @@ class ReloadedApp(App[None]):
         self._quitting = False
         self._sensai = sensai
         self._sensai_unread = False
+        # what SensAI has done and written of the answer it is working on, how much
+        # of that is shown, and the timer that shows more
+        self._sensai_progress: list[str] = []
+        self._sensai_written = ""
+        self._sensai_shown = 0
+        self._sensai_reveal: Timer | None = None
         controller.sink = self._deliver
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
@@ -1016,10 +1040,16 @@ class ReloadedApp(App[None]):
         )
         # one pane, which shows the log or the conversation with SensAI; its title switches it
         with ContentSwitcher(initial=PANE_IDS["log"], id="panes"):
-            for pane, _name in PANES:
+            yield SelectableLog(
+                id=PANE_IDS["log"], wrap=True, highlight=False, max_lines=10_000
+            )
+            # the log only adds lines, so the answer being written grows below it and joins it once whole
+            with Vertical(id=PANE_IDS["sensai"]):
                 yield SelectableLog(
-                    id=PANE_IDS[pane], wrap=True, highlight=False, max_lines=10_000
+                    id=SENSAI_LOG, wrap=True, highlight=False, max_lines=10_000
                 )
+                with VerticalScroll(id=SENSAI_LIVE):
+                    yield Static(id=f"{SENSAI_LIVE}-text")
         with Horizontal(id="command-row"):
             with Horizontal(id="command-box") as command_box:
                 command_box.border_title = "Command"
@@ -1038,9 +1068,12 @@ class ReloadedApp(App[None]):
         self.set_interval(VIEWER_CHECK_SECONDS, self._check_viewer)
         self._set_explain(self._explain_at_start)
         self._refresh_pane_titles()
-        sensai = self.query_one(f"#{PANE_IDS['sensai']}", SelectableLog)
-        sensai.write(sensai_intro(self._sensai))
-        sensai.border_subtitle = context_subtitle(None)
+        self.query_one(f"#{SENSAI_LOG}", SelectableLog).write(
+            sensai_intro(self._sensai)
+        )
+        self.query_one(f"#{PANE_IDS['sensai']}").border_subtitle = context_subtitle(
+            None
+        )
 
         self._controller.start()
 
@@ -1129,15 +1162,26 @@ class ReloadedApp(App[None]):
                 self.action_show_pane(pane)
             case SensAIEvent():
                 self._write_sensai(message.event)
+            case SensAIProgressEvent(label=label):
+                self._sensai_progress.append(label)
+                self._draw_sensai_live()
+            case SensAIStreamEvent(text=None):
+                self._end_sensai_live()
+            case SensAIStreamEvent(text=str() as text):
+                self._sensai_written += text
+                if self._sensai_reveal is None:
+                    self._sensai_reveal = self.set_interval(
+                        REVEAL_SECONDS, self._reveal_sensai
+                    )
             case SensAIClearedEvent():
-                sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
+                sensai = self._find(SelectableLog, f"#{SENSAI_LOG}")
                 if sensai is not None:
                     sensai.clear()
                     sensai.write(sensai_intro(self._sensai))
             case SensAIContextEvent(fraction=fraction, estimated=estimated):
-                sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
-                if sensai is not None:
-                    sensai.border_subtitle = context_subtitle(fraction, estimated)
+                pane = self._find(Widget, f"#{PANE_IDS['sensai']}")
+                if pane is not None:
+                    pane.border_subtitle = context_subtitle(fraction, estimated)
 
     def on_print(self, event: events.Print) -> None:
         text = event.text.rstrip("\n")
@@ -1289,21 +1333,69 @@ class ReloadedApp(App[None]):
     def _refresh_pane_titles(self) -> None:
         title = pane_title(self._shown_pane(), self._sensai_unread)
         for pane, _name in PANES:
-            widget = self._find(SelectableLog, f"#{PANE_IDS[pane]}")
+            widget = self._find(Widget, f"#{PANE_IDS[pane]}")
             if widget is not None:
                 widget.border_title = title
 
     def _pane_width(self) -> int:
-        """How wide the pane's text is. Both of its widgets share the place, so the one shown has the width and the hidden one has none."""
+        """How wide the pane's text is: its log's, inside the border and beside the scrollbar. Both logs share the place, so the one shown has the width and the hidden one has none."""
         widths = [
             widget.scrollable_content_region.width
-            for pane, _name in PANES
-            if (widget := self._find(SelectableLog, f"#{PANE_IDS[pane]}")) is not None
+            for log in (PANE_IDS["log"], SENSAI_LOG)
+            if (widget := self._find(SelectableLog, f"#{log}")) is not None
         ]
         return max(widths, default=0)
 
+    def _reveal_sensai(self) -> None:
+        backlog = len(self._sensai_written) - self._sensai_shown
+        if backlog <= 0:
+            self._stop_sensai_reveal()
+            return
+        self._sensai_shown += reveal_step(backlog)
+        self._draw_sensai_live()
+
+    def _stop_sensai_reveal(self) -> None:
+        if self._sensai_reveal is not None:
+            self._sensai_reveal.stop()
+            self._sensai_reveal = None
+
+    def _draw_sensai_live(self) -> None:
+        """Shows below SensAI's conversation what it has done for the answer it is working on, a line each, and as much of the answer as is revealed."""
+        live = self._find(VerticalScroll, f"#{SENSAI_LIVE}")
+        shown = self._find(Static, f"#{SENSAI_LIVE}-text")
+        if live is None or shown is None:
+            return
+        if not live.display:
+            live.display = True
+            # the conversation gives up room to the answer, and the question must stay in view
+            sensai = self._find(SelectableLog, f"#{SENSAI_LOG}")
+            if sensai is not None:
+                self.call_after_refresh(sensai.scroll_end, animate=False)
+        lines = [Text(label, style=INK_SECONDARY) for label in self._sensai_progress]
+        if written := self._sensai_written[: self._sensai_shown]:
+            if lines:
+                lines.append(Text(""))
+            width = live.scrollable_content_region.width or self._pane_width()
+            lines.append(render_markdown(written, width))
+        shown.update(Text("\n").join(lines))
+        # the newest of it stays in view while it is longer than the space for it
+        self.call_after_refresh(live.scroll_end, animate=False)
+
+    def _end_sensai_live(self) -> None:
+        """Clears what was shown of the answer SensAI was working on, which gives way to the whole answer at once, or to why there is none, however much of it was still to be revealed."""
+        self._stop_sensai_reveal()
+        self._sensai_progress = []
+        self._sensai_written = ""
+        self._sensai_shown = 0
+        live = self._find(VerticalScroll, f"#{SENSAI_LIVE}")
+        shown = self._find(Static, f"#{SENSAI_LIVE}-text")
+        if live is None or shown is None:
+            return
+        shown.update("")
+        live.display = False
+
     def _write_sensai(self, event: SensAIEvent) -> None:
-        sensai = self._find(SelectableLog, f"#{PANE_IDS['sensai']}")
+        sensai = self._find(SelectableLog, f"#{SENSAI_LOG}")
         if sensai is None:
             return
         width = self._pane_width()

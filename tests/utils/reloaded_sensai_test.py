@@ -4,10 +4,12 @@ Tests for Reloaded's `sensai` command: how the controller reads it and reports t
 No real model is called. The controller's tests replace `ask`, and `ask`'s own tests give the docs agent a scripted `FunctionModel`.
 """
 
+import json
 import re
 import threading
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Sequence
+from typing import Any
 from pathlib import Path
 
 import pytest
@@ -20,7 +22,13 @@ from pydantic_ai.messages import (
     ToolCallPart,
     UserPromptPart,
 )
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.toolsets import FunctionToolset
+from pydantic_ai.models.function import (
+    AgentInfo,
+    DeltaToolCall,
+    DeltaToolCalls,
+    FunctionModel,
+)
 from pydantic_ai.profiles import ModelProfile
 from pydantic_ai.usage import RequestUsage
 from reloaded_fakes import EventLog, FakeBackend, FakeSession, wait_idle
@@ -33,6 +41,7 @@ from mujoco_mojo.utils.sensai.compaction import (
     message_texts,
 )
 from mujoco_mojo.utils.layers.reloaded import sensai
+from mujoco_mojo.utils.sensai.agents.docs import docs_agent, progress_label
 from mujoco_mojo.utils.layers.reloaded.controller import (
     COMMAND_SUGGESTIONS,
     ControllerEvent,
@@ -41,6 +50,8 @@ from mujoco_mojo.utils.layers.reloaded.controller import (
     SensAIClearedEvent,
     SensAIContextEvent,
     SensAIEvent,
+    SensAIProgressEvent,
+    SensAIStreamEvent,
     ShowPaneEvent,
 )
 
@@ -81,10 +92,21 @@ class Asked(BaseModel):
     """When set, what the conversation becomes with the next answer, as a summary would leave it."""
 
     def __call__(
-        self, question: str, history: Sequence[ModelMessage] = ()
+        self,
+        question: str,
+        history: Sequence[ModelMessage] = (),
+        on_text: Callable[[str], None] | None = None,
+        on_progress: Callable[[str], None] | None = None,
     ) -> sensai.Answer:
         self.questions.append(question)
         self.histories.append(message_texts(history))
+        if on_progress is not None:
+            on_progress(f'Searching the docs for "{question}"...')
+        # the answer is written in two pieces before it is whole
+        if on_text is not None:
+            half = len(self.text) // 2
+            on_text(self.text[:half])
+            on_text(self.text[half:])
         if self.release is not None:
             assert self.release.wait(5)
         before = list(history) if self.compacted_to is None else self.compacted_to
@@ -232,6 +254,54 @@ class TestTheCommand:
         assert asked.histories[-1] == ["summary"]
         assert "compact" not in asked.questions
 
+    def test_the_answer_streams_before_it_is_whole_and_the_stream_ends_first(
+        self, controller: ReloadedController, log: EventLog, asked: Asked
+    ) -> None:
+        ask_and_wait(controller, "how do I pause?")
+
+        progress = log.events.index(
+            SensAIProgressEvent('Searching the docs for "how do I pause?"...')
+        )
+        streamed = [e for e in log.events if isinstance(e, SensAIStreamEvent)]
+        assert streamed == [
+            SensAIStreamEvent("Use `p"),
+            SensAIStreamEvent("ause`."),
+            SensAIStreamEvent(None),
+        ]
+        # the end of the stream comes before the answer takes its place
+        end = log.events.index(SensAIStreamEvent(None))
+        answer = log.events.index(SensAIEvent("Use `pause`.", markdown=True))
+        # what SensAI did comes before what it wrote
+        assert progress < log.events.index(streamed[0]) < end < answer
+
+    def test_the_stream_ends_before_why_there_is_no_answer(
+        self,
+        controller: ReloadedController,
+        log: EventLog,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        def refuse(
+            question: str,
+            history: Sequence[ModelMessage] = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
+        ) -> sensai.Answer:
+            if on_text is not None:
+                on_text("Half an ")
+            raise sensai.NoAnswer("503")
+
+        monkeypatch.setattr(sensai, "ask", refuse)
+        controller.submit("sensai hi")
+        wait_for_said(log, "SensAI:")
+
+        end = log.events.index(SensAIStreamEvent(None))
+        reason = next(
+            i
+            for i, e in enumerate(log.events)
+            if isinstance(e, SensAIEvent) and "503" in e.message
+        )
+        assert end < reason
+
     def test_an_answer_reports_how_full_the_context_is(
         self, controller: ReloadedController, log: EventLog, asked: Asked
     ) -> None:
@@ -281,7 +351,10 @@ class TestTheCommand:
         histories: list[list[str]] = []
 
         def refuse(
-            question: str, history: Sequence[ModelMessage] = ()
+            question: str,
+            history: Sequence[ModelMessage] = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
         ) -> sensai.Answer:
             histories.append(message_texts(history))
             raise sensai.NoAnswer("no model")
@@ -359,7 +432,10 @@ class TestTheCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def refuse(
-            question: str, history: Sequence[ModelMessage] = ()
+            question: str,
+            history: Sequence[ModelMessage] = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
         ) -> sensai.Answer:
             raise sensai.NoAnswer("SensAI is off [really].")
 
@@ -375,7 +451,10 @@ class TestTheCommand:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         def broken(
-            question: str, history: Sequence[ModelMessage] = ()
+            question: str,
+            history: Sequence[ModelMessage] = (),
+            on_text: Callable[[str], None] | None = None,
+            on_progress: Callable[[str], None] | None = None,
         ) -> sensai.Answer:
             raise RuntimeError("settings file is broken")
 
@@ -478,6 +557,28 @@ class _Settings(BaseModel):
     sensai: SensAISettings
 
 
+Reply = Callable[[list[ModelMessage], AgentInfo], ModelResponse]
+
+
+def streaming(function: Reply, **kwargs: Any) -> FunctionModel:
+    """`function` as a model that can also stream, which `ask` asks for: each response's text comes as one piece, and its tool calls as calls. A summary request is not streamed and goes to `function`."""
+
+    async def stream(
+        messages: list[ModelMessage], info: AgentInfo
+    ) -> AsyncIterator[str | DeltaToolCalls]:
+        for index, part in enumerate(function(messages, info).parts):
+            if isinstance(part, TextPart):
+                yield part.content
+            elif isinstance(part, ToolCallPart):
+                yield {
+                    index: DeltaToolCall(
+                        name=part.tool_name, json_args=json.dumps(part.args)
+                    )
+                }
+
+    return FunctionModel(function, stream_function=stream, **kwargs)
+
+
 def use(
     monkeypatch: pytest.MonkeyPatch, settings: SensAISettings, model: FunctionModel
 ) -> None:
@@ -501,7 +602,7 @@ class TestAsk:
         use(
             monkeypatch,
             SensAISettings(enabled=True),
-            FunctionModel(reply, model_name="m1"),
+            streaming(reply, model_name="m1"),
         )
 
         answer = sensai.ask("how do I pause?")
@@ -517,13 +618,44 @@ class TestAsk:
         # the search the answer took is not carried on with the conversation
         assert message_texts(answer.history) == ["how do I pause?", "Type pause."]
 
+    def test_each_tool_call_is_reported_as_it_starts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        page = "user-guides/features/reloaded/reloaded.md"
+
+        def reply(messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
+            if len(messages) == 1:
+                return ModelResponse(
+                    parts=[ToolCallPart("search_docs", {"query": "pause a run"})]
+                )
+            if len(messages) == 3:
+                return ModelResponse(parts=[ToolCallPart("read_docs", {"path": page})])
+            return ModelResponse(parts=[TextPart("Type pause.")])
+
+        use(monkeypatch, SensAISettings(enabled=True), streaming(reply))
+        progress: list[str] = []
+        texts: list[str] = []
+
+        def on_progress(label: str) -> None:
+            progress.append(label)
+            # nothing of the answer is written while SensAI still looks
+            assert texts == []
+
+        sensai.ask("how do I pause?", on_text=texts.append, on_progress=on_progress)
+
+        assert progress == [
+            'Searching the docs for "pause a run"...',
+            f"Reading {page}...",
+        ]
+        assert texts == ["Type pause."]
+
     def test_off_is_said_and_no_model_is_asked(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         use(
             monkeypatch,
             SensAISettings(enabled=False),
-            FunctionModel(lambda *_: pytest.fail("asked")),
+            streaming(lambda *_: pytest.fail("asked")),
         )
 
         with pytest.raises(sensai.NoAnswer, match=re.escape("sensai.enabled true")):
@@ -533,7 +665,7 @@ class TestAsk:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         settings = SensAISettings(enabled=True, features=SensAIFeatures(docs=False))
-        use(monkeypatch, settings, FunctionModel(lambda *_: pytest.fail("asked")))
+        use(monkeypatch, settings, streaming(lambda *_: pytest.fail("asked")))
 
         with pytest.raises(
             sensai.NoAnswer, match=re.escape("sensai.features.docs true")
@@ -549,7 +681,7 @@ class TestAsk:
         use(
             monkeypatch,
             SensAISettings(enabled=True, max_requests=2),
-            FunctionModel(loop),
+            streaming(loop),
         )
 
         with pytest.raises(
@@ -567,7 +699,7 @@ class TestAsk:
             sent.append(messages)
             return ModelResponse(parts=[TextPart("Type step.")])
 
-        use(monkeypatch, SensAISettings(enabled=True), FunctionModel(reply))
+        use(monkeypatch, SensAISettings(enabled=True), streaming(reply))
 
         sensai.ask("and step?", exchange("how do I pause?", "Type pause."))
 
@@ -605,7 +737,7 @@ class TestAsk:
             sent.append("answer")
             return ModelResponse(parts=[TextPart("Type step.")])
 
-        return FunctionModel(reply, profile=ModelProfile(context_window=window))
+        return streaming(reply, profile=ModelProfile(context_window=window))
 
     def test_a_conversation_that_fills_the_context_window_is_summarized_first(
         self, monkeypatch: pytest.MonkeyPatch
@@ -662,7 +794,7 @@ class TestAsk:
         use(
             monkeypatch,
             SensAISettings(enabled=True, compact_at=0.5, models=[entry]),
-            FunctionModel(reply),
+            streaming(reply),
         )
         history = [
             message
@@ -758,15 +890,96 @@ class TestAsk:
         assert texts[-2:] == ["question 3", "answer 3"]
         assert "question 1" not in texts
 
+    def test_the_answer_is_handed_over_as_it_is_written(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def stream(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            yield "Type "
+            yield "pause."
+
+        use(
+            monkeypatch,
+            SensAISettings(enabled=True),
+            FunctionModel(stream_function=stream),
+        )
+        pieces: list[str] = []
+
+        answer = sensai.ask("how do I pause?", on_text=pieces.append)
+
+        assert pieces == ["Type ", "pause."]
+        assert answer.text == "Type pause."
+
+    def test_what_was_written_before_a_failure_is_in_its_reason(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def stream(
+            _messages: list[ModelMessage], _info: AgentInfo
+        ) -> AsyncIterator[str]:
+            yield "Type pau"
+            raise RuntimeError("503 overloaded")
+
+        use(
+            monkeypatch,
+            SensAISettings(enabled=True),
+            FunctionModel(stream_function=stream),
+        )
+
+        with pytest.raises(sensai.NoAnswer) as raised:
+            sensai.ask("how do I pause?")
+
+        assert "503 overloaded" in str(raised.value)
+        assert "What the model had written:\n\nType pau" in str(raised.value)
+
     def test_a_model_that_fails_is_reported_in_one_line(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fail(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
             raise RuntimeError("503 overloaded")
 
-        use(monkeypatch, SensAISettings(enabled=True), FunctionModel(fail))
+        use(monkeypatch, SensAISettings(enabled=True), streaming(fail))
 
         with pytest.raises(
             sensai.NoAnswer, match="No answer from the model: 503 overloaded"
         ):
             sensai.ask("hi")
+
+
+class TestProgressLabel:
+    """What the user is told SensAI is doing, a line per tool call of the docs agent."""
+
+    def test_every_tool_of_the_docs_agent_has_one(self) -> None:
+        tools = [
+            name
+            for toolset in docs_agent.toolsets
+            if isinstance(toolset, FunctionToolset)
+            for name in toolset.tools
+        ]
+
+        assert tools
+        assert all(progress_label(name, {}) is not None for name in tools)
+
+    @pytest.mark.parametrize(
+        ("name", "args", "expected"),
+        [
+            ("search_docs", {"query": "pause"}, 'Searching the docs for "pause"...'),
+            ("read_docs", {"path": "a/b.md"}, "Reading a/b.md..."),
+            (
+                "read_docs",
+                {"path": "a/b.md", "section": "Pausing"},
+                'Reading "Pausing" in a/b.md...',
+            ),
+            ("read_settings", {}, "Listing the settings..."),
+            (
+                "read_settings",
+                {"section": "sensai"},
+                'Looking up "sensai" in the settings...',
+            ),
+            ("get_job_summary", {}, None),
+        ],
+    )
+    def test_it_says_what_the_call_reads(
+        self, name: str, args: dict[str, str], expected: str | None
+    ) -> None:
+        assert progress_label(name, args) == expected

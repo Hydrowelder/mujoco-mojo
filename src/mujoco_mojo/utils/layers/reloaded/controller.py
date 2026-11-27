@@ -38,6 +38,8 @@ __all__ = [
     "SensAIClearedEvent",
     "SensAIContextEvent",
     "SensAIEvent",
+    "SensAIProgressEvent",
+    "SensAIStreamEvent",
     "ShowPaneEvent",
     "StatusEvent",
     "connection_lines",
@@ -256,6 +258,20 @@ class SensAIClearedEvent:
 
 
 @dataclass(frozen=True)
+class SensAIStreamEvent:
+    """A piece of SensAI's answer as the model writes it, for the terminal UI to show before the answer is done, or None once it is over: what was shown of it and of SensAI's progress gives way to the whole answer, or to why there is none, which follows."""
+
+    text: str | None
+
+
+@dataclass(frozen=True)
+class SensAIProgressEvent:
+    """What SensAI is doing while it works out an answer, such as a search of the docs or a page it reads, for the terminal UI to show until the answer comes."""
+
+    label: str
+
+
+@dataclass(frozen=True)
 class SensAIContextEvent:
     """How full the context window is with the conversation with SensAI, for the terminal UI to show beside its pane."""
 
@@ -284,6 +300,8 @@ ControllerEvent = (
     | SensAIEvent
     | SensAIClearedEvent
     | SensAIContextEvent
+    | SensAIStreamEvent
+    | SensAIProgressEvent
 )
 EventSink = Callable[[ControllerEvent], None]
 
@@ -941,15 +959,25 @@ class ReloadedController:
         except ImportError:
             self._say(_SENSAI_MISSING)
             return
+        answer = None
+        failure = "[bold red]SensAI failed.[/bold red]"
         try:
-            answer = sensai.ask(question, history)
+            answer = sensai.ask(
+                question,
+                history,
+                on_text=lambda text: self._emit(SensAIStreamEvent(text)),
+                on_progress=lambda label: self._emit(SensAIProgressEvent(label)),
+            )
         except sensai.NoAnswer as exc:
-            self._say(f"[bold red]SensAI:[/bold red] {escape(str(exc))}")
-            return
+            failure = f"[bold red]SensAI:[/bold red] {escape(str(exc))}"
         except Exception as exc:
             # a thread that dies prints its traceback over the terminal UI
             logger.exception(exc)
-            self._say(f"[bold red]SensAI failed:[/bold red] {escape(str(exc))}")
+            failure = f"[bold red]SensAI failed:[/bold red] {escape(str(exc))}"
+        # what was shown as it came gives way to the answer, or to why there is none
+        self._emit(SensAIStreamEvent(None))
+        if answer is None:
+            self._say(failure)
             return
         with self._lock:
             self._sensai_history = answer.history

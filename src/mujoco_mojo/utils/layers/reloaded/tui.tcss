@@ -113,13 +113,29 @@ ParamField.-toggle:hover {
 }
 
 #log,
-#sensai-log {
+#sensai-pane {
     height: 1fr;
     margin: 0 1;
     padding: 0 1;
     border: round $border-blurred;
     border-title-color: $text-muted;
     border-subtitle-color: $text-muted;
+    background: $background;
+}
+
+/* inside SensAI's pane, which draws the border */
+#sensai-log {
+    height: 1fr;
+    border: none;
+    padding: 0;
+    background: $background;
+}
+
+/* the answer being written, below the conversation; hidden while there is none */
+#sensai-live {
+    height: auto;
+    max-height: 50%;
+    display: none;
     background: $background;
 }
 
