@@ -176,7 +176,12 @@ class StudioBackend:
         from mujoco.studio import app as studio_app
         from mujoco.studio import launch_native, launch_web, viewer_protocol
 
-        from .studio_plugins import MojoOverlay, MojoStepControl
+        from .studio_plugins import (
+            MojoCommands,
+            MojoOverlay,
+            MojoPanel,
+            MojoStepControl,
+        )
 
         app_config = studio_app.Config(
             show_info=self.studio.show_info,
@@ -191,7 +196,9 @@ class StudioBackend:
         plugins = [
             studio_app.App(app_config),
             MojoStepControl(self._controls),
+            MojoCommands(self._controls),
             MojoOverlay(),
+            MojoPanel(),
         ]
         banner = io.StringIO()
         # the web viewer prints its own box of addresses from its thread a moment after it starts, and

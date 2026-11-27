@@ -55,6 +55,7 @@ from .controller import (
     SensAIEvent,
     ShowPaneEvent,
     StatusEvent,
+    control_states,
     speed_label,
 )
 from .rain import RainScreen
@@ -222,20 +223,6 @@ def status_fields(status: ControllerStatus) -> list[FieldView]:
         FieldView("last", "last", status.last_command, str(INK_STRONG), "info"),
     ]
     return fields
-
-
-def control_states(state: RunState, has_runtime: bool) -> dict[str, bool]:
-    """Which control buttons apply in `state`, by the command each one types. A button that does not apply is greyed out."""
-    idle = state is RunState.IDLE
-    running = state is RunState.RUNNING
-    paused = state is RunState.PAUSED
-    return {
-        "gen": idle,
-        "run": has_runtime and (idle or paused),
-        "pause": running,
-        "step": running or paused,
-        "stop": running or paused,
-    }
 
 
 def run_summary(status: ControllerStatus) -> Text | None:

@@ -41,6 +41,8 @@ __all__ = [
     "ShowPaneEvent",
     "StatusEvent",
     "connection_lines",
+    "control_states",
+    "read_run_target",
     "speed_label",
 ]
 
@@ -171,6 +173,44 @@ class ControllerStatus:
     record: bool
     last_duration: float | None
     last_outcome: Outcome | None
+    last_detail: str | None = None
+    """What the most recent run's outcome was about: the error that failed it, or the requirement that ended it early."""
+
+
+def control_states(state: RunState, has_runtime: bool) -> dict[str, bool]:
+    """Which control buttons apply in `state`, by the command each one types. A button that does not apply is greyed out."""
+    idle = state is RunState.IDLE
+    running = state is RunState.RUNNING
+    paused = state is RunState.PAUSED
+    return {
+        "gen": idle,
+        "run": has_runtime and (idle or paused),
+        "pause": running,
+        "step": running or paused,
+        "stop": running or paused,
+    }
+
+
+def read_run_target(words: list[str]) -> rt.RunTarget | None:
+    """The target `until time <N>` or `until step <N>` writes, as in `run until time 3`, or `None` if the words are anything else."""
+    if len(words) != 3 or words[0] != "until":
+        return None
+    match words[1]:
+        case "time":
+            kind = rt.TargetKind.TIME
+        case "step" | "steps":
+            kind = rt.TargetKind.STEP
+        case _:
+            return None
+    try:
+        value = float(words[2])
+    except ValueError:
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    if kind is rt.TargetKind.STEP and value != int(value):
+        return None
+    return rt.RunTarget(kind, value)
 
 
 @dataclass(frozen=True)
@@ -309,6 +349,8 @@ class ReloadedController:
     _last_command: str = field(init=False, repr=False)
     _last_duration: float | None = field(default=None, init=False, repr=False)
     _last_outcome: Outcome | None = field(default=None, init=False, repr=False)
+    _last_detail: str | None = field(default=None, init=False, repr=False)
+    _last_position: tuple[float, int] = field(default=(0.0, 0), init=False, repr=False)
     _job_thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _watcher: FileWatcher | None = field(default=None, init=False, repr=False)
     _sensai_thread: threading.Thread | None = field(
@@ -337,6 +379,14 @@ class ReloadedController:
         """The playback speed, which is what a viewer's speed slider shows."""
         return self.session.playback_speed
 
+    @property
+    def position(self) -> tuple[float, int]:
+        """The simulation time and step count of the run in progress, read as `run until` reads them, or where the last run ended when none is going."""
+        with self._lock:
+            if self._state is RunState.IDLE:
+                return self._last_position
+        return self.session.run_control.position
+
     def rerun(self) -> None:
         """Runs the last command again, which is what a viewer's Reset and Reload buttons ask for. A run in progress has to be stopped first."""
         with self._lock:
@@ -361,6 +411,7 @@ class ReloadedController:
                 record=self.session.record,
                 last_duration=self._last_duration,
                 last_outcome=self._last_outcome,
+                last_detail=self._last_detail,
             )
 
     def help_entries(self) -> list[tuple[str, str]]:
@@ -535,7 +586,7 @@ class ReloadedController:
         speed = current_speed if speed_text is None else float(speed_text)
         if not self.has_runtime:
             return "No runtime given, so generates only."
-        target = self._read_target(target_words) if target_words else None
+        target = read_run_target(target_words) if target_words else None
         if speed == 0:
             return "Generates, then steps on Enter."
         if target is not None:
@@ -550,7 +601,7 @@ class ReloadedController:
             return self._describe_speed(speed_text, running=True)
         if paused and speed_text is None and self.session.playback_speed == 0:
             return "Speed is 0, so it steps only on Enter."
-        target = self._read_target(target_words) if target_words else None
+        target = read_run_target(target_words) if target_words else None
         if target is not None and target.reached(*self.session.run_control.position):
             return f"Already at or past {target.label}."
 
@@ -575,7 +626,7 @@ class ReloadedController:
         """Why what follows `run` is not a speed and a target, or `None` if it is."""
         if speed_text is not None and (problem := self._speed_problem(speed_text)):
             return problem
-        if target_words and self._read_target(target_words) is None:
+        if target_words and read_run_target(target_words) is None:
             return "Use: run until time N or step N."
         return None
 
@@ -938,7 +989,7 @@ class ReloadedController:
                 return
         target: rt.RunTarget | None = None
         if target_words:
-            target = self._read_target(target_words)
+            target = read_run_target(target_words)
             if target is None:
                 self._log(_INVALID_TARGET)
                 return
@@ -983,28 +1034,6 @@ class ReloadedController:
         if words and words[0] != "until":
             return words[0], words[1:]
         return None, words
-
-    @staticmethod
-    def _read_target(words: list[str]) -> rt.RunTarget | None:
-        """The target `until time <N>` or `until step <N>` writes, or `None` if the words are anything else."""
-        if len(words) != 3 or words[0] != "until":
-            return None
-        match words[1]:
-            case "time":
-                kind = rt.TargetKind.TIME
-            case "step" | "steps":
-                kind = rt.TargetKind.STEP
-            case _:
-                return None
-        try:
-            value = float(words[2])
-        except ValueError:
-            return None
-        if not math.isfinite(value) or value < 0:
-            return None
-        if kind is rt.TargetKind.STEP and value != int(value):
-            return None
-        return rt.RunTarget(kind, value)
 
     def _start(self, command: str, target: rt.RunTarget | None = None) -> None:
         """Starts a generation, and the runtime too unless `command` is `gen`, and remembers `command` for the next ENTER. A run pauses itself at `target` if there is one."""
@@ -1269,6 +1298,7 @@ class ReloadedController:
     def _job(self, use_runtime: bool) -> None:
         start = time.time()
         outcome = Outcome.FAILED
+        detail: str | None = None
         try:
             new_state = self.session.generate_construct(
                 use_runtime=use_runtime, on_reload_callback=self.backend.on_reload
@@ -1278,25 +1308,32 @@ class ReloadedController:
             message = f"[dim white]Model Reloaded in [bold]{time.time() - start:.2f}s[/bold].[/dim white]"
         except rt.RequirementSatisfied as e:
             outcome = Outcome.SATISFIED
+            detail = str(e)
             message = f"[bold green]Run ended early, requirement satisfied: {escape(str(e))}[/bold green]"
         except rt.RequirementTerminated as e:
             outcome = Outcome.TERMINATED
+            detail = str(e)
             message = f"[bold yellow]Run terminated by requirement: {escape(str(e))}[/bold yellow]"
         except rt.SimulationStopped:
             outcome = Outcome.STOPPED
             message = "[bold yellow]Run stopped by user.[/bold yellow]"
         except Exception as e:
             logger.exception(e)
+            detail = str(e) or type(e).__name__
             message = (
                 f"[bold red]Reload Failed:[/bold red]\n[white]{escape(str(e))}[/white]"
             )
         finally:
             self.session.stop_event.clear()
+            # read before the reset, which puts the position back to the start
+            position = self.session.run_control.position
             self.session.run_control.reset()
             with self._lock:
                 self._state = RunState.IDLE
+                self._last_position = position
                 self._last_duration = time.time() - start
                 self._last_outcome = outcome
+                self._last_detail = detail
 
         self._log(message)
         self._emit_status()

@@ -18,6 +18,7 @@ import numpy as np
 import pytest
 from mujoco.studio import app as studio_app
 from mujoco.studio import launch_native, launch_web, messages, sim
+from mujoco.studio.dear_imgui import dear_imgui as imgui
 from reloaded_fakes import make_state
 
 import mujoco_mojo.utils.layers.reloaded.backends.studio as studio_module
@@ -28,12 +29,30 @@ from mujoco_mojo.utils.layers.reloaded.backends import (
     ViewerUnavailableError,
 )
 from mujoco_mojo.utils.layers.reloaded.backends.studio_plugins import (
+    SPEED_PRESETS,
+    UNTIL_CHOICES,
+    MojoCommandEvent,
+    MojoCommands,
     MojoOverlay,
     MojoOverlaySnapshot,
+    MojoPanel,
+    MojoStatusSnapshot,
     MojoStepControl,
+    _FILL,
+    fit_grid,
     mojo_speed,
+    run_command,
+    seed_command,
+    step_command,
     studio_speed,
+    trial_command,
 )
+from mujoco_mojo.utils.layers.reloaded.controller import (
+    ControllerStatus,
+    Outcome,
+    RunState,
+)
+from mujoco_mojo.utils.layers.reloaded.theme import DANGER, LINK
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
 
 
@@ -49,6 +68,22 @@ def display_works(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(studio_module, "display_problem", lambda: None)
 
 
+def a_status(**overrides: Any) -> ControllerStatus:
+    fields: dict[str, Any] = {
+        "state": RunState.IDLE,
+        "last_command": "run",
+        "seed": None,
+        "trial_num": 0,
+        "playback_speed": 1.0,
+        "watch": False,
+        "record": False,
+        "last_duration": None,
+        "last_outcome": None,
+    }
+    fields.update(overrides)
+    return ControllerStatus(**fields)
+
+
 PAUSED = sim.PauseState.NORMAL_PAUSED
 RUNNING = sim.PauseState.UNPAUSED
 
@@ -59,7 +94,16 @@ class FakeControls:
 
     paused: bool = False
     speed: float = 1.0
+    has_runtime: bool = True
+    state: RunState = RunState.IDLE
+    position: tuple[float, int] = (0.0, 0)
     calls: list[tuple[str, str]] = field(default_factory=list)
+
+    def status(self) -> ControllerStatus:
+        return a_status(state=self.state, playback_speed=self.speed)
+
+    def submit(self, text: str) -> None:
+        self.calls.append(("submit", text))
 
     def pause(self) -> None:
         self.calls.append(("pause", ""))
@@ -278,6 +322,244 @@ def test_a_dropped_model_file_is_refused_because_the_generator_builds_the_model(
 
     assert controls.calls == []
     assert "/tmp/robot.xml" in caplog.text
+
+
+class RecordingCommands(MojoCommands):
+    """Keeps what it would send to the viewer instead of needing one."""
+
+    def __init__(self, controls: FakeControls) -> None:
+        super().__init__(controls)
+        self.sent: list[MojoStatusSnapshot] = []
+
+    def _send(self, snapshot: MojoStatusSnapshot) -> None:
+        self.sent.append(snapshot)
+
+
+def test_a_button_of_reloadeds_window_is_typed_as_its_command(
+    controls: FakeControls,
+) -> None:
+    commands = RecordingCommands(controls)
+
+    assert commands._on_command(MojoCommandEvent("speed inf")) is True
+
+    assert controls.calls == [("submit", "speed inf")]
+
+
+def test_reloadeds_window_is_sent_the_status_only_when_it_changes(
+    controls: FakeControls,
+) -> None:
+    commands = RecordingCommands(controls)
+    event = a_step()
+
+    commands._on_step(event)
+    commands._on_step(event)
+    controls.state = RunState.RUNNING
+    commands._on_step(event)
+
+    assert [s.status.state for s in commands.sent] == [
+        RunState.IDLE,
+        RunState.RUNNING,
+    ]
+
+
+def test_every_speed_preset_is_a_speed_the_terminal_accepts() -> None:
+    """The window sends `speed <X>` with the preset's value, and `inf` is what the terminal calls as fast as possible."""
+    assert [f"{speed:g}" for _, speed in SPEED_PRESETS][-1] == "inf"
+    assert all(speed > 0 for _, speed in SPEED_PRESETS)
+
+
+def test_the_windows_session_section_says_what_the_terminal_says() -> None:
+    snapshot = MojoStatusSnapshot(
+        a_status(
+            state=RunState.PAUSED,
+            playback_speed=float("inf"),
+            last_duration=1.234,
+            last_outcome=Outcome.FAILED,
+            last_detail="division by zero",
+        ),
+        has_runtime=True,
+    )
+
+    rows = {row.label: row for row in snapshot.rows}
+
+    assert rows["State"].value.endswith("PAUSED")
+    assert rows["State"].color is LINK
+    assert rows["Speed"].value == "inf"
+    assert rows["Last command"].value == "run"
+    assert rows["Last run"].value.endswith("1.23s failed")
+    assert rows["Last run"].color is DANGER
+    assert rows["Why"].value == "division by zero"
+
+
+def test_the_window_reads_out_the_time_and_step_the_run_is_at() -> None:
+    rows = MojoStatusSnapshot(
+        a_status(state=RunState.RUNNING), has_runtime=True, position=(12.3456, 61728)
+    ).rows
+
+    shown = {row.label: row.value for row in rows}
+
+    assert shown["Time"] == "12.346 s"
+    assert shown["Step"] == "61,728"
+
+
+def test_reloadeds_window_is_sent_where_the_run_is(controls: FakeControls) -> None:
+    commands = RecordingCommands(controls)
+    event = a_step()
+
+    commands._on_step(event)
+    controls.position = (0.5, 250)
+    commands._on_step(event)
+
+    assert [s.position for s in commands.sent] == [(0.0, 0), (0.5, 250)]
+
+
+def test_the_last_run_shows_only_once_there_has_been_one() -> None:
+    rows = MojoStatusSnapshot(a_status(), has_runtime=True).rows
+
+    assert {row.label for row in rows} == {
+        "State",
+        "Time",
+        "Step",
+        "Speed",
+        "Last command",
+    }
+
+
+def test_a_run_that_ended_without_a_reason_has_no_why() -> None:
+    rows = MojoStatusSnapshot(
+        a_status(last_duration=1.0, last_outcome=Outcome.SUCCESS), has_runtime=True
+    ).rows
+
+    assert "Why" not in {row.label for row in rows}
+
+
+@pytest.mark.parametrize(
+    ("available", "columns", "width"),
+    [
+        (340.0, 5, 60.0),
+        (200.0, 3, 60.0),
+        (220.0, 3, 200 / 3),
+        (30.0, 1, 50.0),
+    ],
+    ids=["all on one line", "exact fit", "stretched", "narrower than a cell"],
+)
+def test_buttons_are_laid_in_equal_cells_that_fill_the_width(
+    available: float, columns: int, width: float
+) -> None:
+    assert fit_grid(5, 50.0, available, 10.0) == (columns, pytest.approx(width))
+
+
+@pytest.mark.parametrize(
+    ("until", "value", "command"),
+    [
+        (None, "", "run"),
+        (None, "junk", "run"),
+        ("time", "2.5", "run until time 2.5"),
+        ("step", "500", "run until step 500"),
+        ("step", "2.5", None),
+        ("time", "", None),
+        ("time", "-1", None),
+    ],
+)
+def test_the_run_button_types_a_target_only_the_terminal_would_take(
+    until: str | None, value: str, command: str | None
+) -> None:
+    assert run_command(until, value) == command
+
+
+def test_every_choice_of_where_to_pause_is_a_word_run_until_takes() -> None:
+    assert [word for _, word, _ in UNTIL_CHOICES] == [None, "time", "step"]
+
+
+@pytest.mark.parametrize("choice", range(len(UNTIL_CHOICES)))
+def test_reloadeds_window_draws_with_every_place_to_pause(
+    imgui_frame: None, choice: int
+) -> None:
+    panel = MojoPanel()
+    panel._until = choice
+    panel._until_value = "2.5"
+    panel._on_status(MojoStatusSnapshot(a_status(), has_runtime=True))
+
+    panel._on_build_gui(messages.BuildGuiEvent())
+
+
+def test_a_field_set_to_fill_reaches_the_edge_of_its_row(imgui_frame: None) -> None:
+    """A width that rounds to 0 in Dear ImGui's 32-bit floats once drew every such field 0 wide."""
+    imgui.SetNextWindowSize(imgui.Vec2(300, 300))
+    imgui.Begin("fill")
+    available = imgui.GetContentRegionAvail().x
+    imgui.SetNextItemWidth(_FILL)
+    imgui.InputText("##field", "", 0)
+    drawn = imgui.GetItemRectSize().x
+    imgui.End()
+
+    assert drawn == pytest.approx(available)
+
+
+@pytest.mark.parametrize(
+    ("typed", "step", "seed", "trial"),
+    [
+        ("3", "step 3", "seed 3", "trial 3"),
+        ("0", None, "seed 0", "trial 0"),
+        ("", None, "seed none", None),
+        ("1.5", None, None, None),
+    ],
+)
+def test_the_windows_fields_type_what_the_terminal_takes(
+    typed: str, step: str | None, seed: str | None, trial: str | None
+) -> None:
+    assert step_command(typed) == step
+    assert seed_command(typed) == seed
+    assert trial_command(typed) == trial
+
+
+@pytest.fixture
+def imgui_frame() -> Iterator[None]:
+    """A Dear ImGui frame with nothing drawing it, so a window's widgets can be submitted without a viewer."""
+    previous = imgui.GetCurrentContext()
+    context = imgui.CreateContext()
+    io = imgui.GetIO()
+    io.DisplaySize = imgui.Vec2(800, 600)
+    # the font atlas is built by the renderer, which a frame with none behind it has to claim
+    io.BackendFlags = int(imgui.BackendFlags.RendererHasTextures)
+    imgui.NewFrame()
+    try:
+        yield
+        imgui.Render()
+    finally:
+        imgui.DestroyContext(context)
+        imgui.SetCurrentContext(previous)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        None,
+        a_status(),
+        a_status(state=RunState.RUNNING, playback_speed=2.0),
+        a_status(
+            state=RunState.PAUSED,
+            playback_speed=0.3,
+            last_duration=2.0,
+            last_outcome=Outcome.STOPPED,
+        ),
+        a_status(
+            last_duration=2.0,
+            last_outcome=Outcome.FAILED,
+            last_detail="a long reason that has to wrap " * 5,
+        ),
+    ],
+)
+@pytest.mark.parametrize("width", [None, 80.0], ids=["default width", "narrow"])
+def test_reloadeds_window_draws_in_every_state(
+    imgui_frame: None, status: ControllerStatus | None, width: float | None
+) -> None:
+    panel = MojoPanel()
+    panel._width = width
+    if status is not None:
+        panel._on_status(MojoStatusSnapshot(status, has_runtime=True))
+
+    panel._on_build_gui(messages.BuildGuiEvent())
 
 
 def an_arrow() -> ArrowConfig:

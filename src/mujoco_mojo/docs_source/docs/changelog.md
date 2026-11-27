@@ -14,6 +14,7 @@
 - SensAI's settings moved from `dojo.sensai` to their own `sensai` section; old settings files still load
 - Reloaded shows SensAI's disclaimer on an icon in the status bar while SensAI is on
 - Reloaded's `explain` now points to `sensai` for an AI answer
+- Added a Reloaded window to Reloaded's Studio viewer, with the terminal's commands and settings, speeds faster than real time, and pausing at a time or step
 - The docs examples now ship with Mojo in `mujoco_mojo.examples`, and run offline
 - Added `mujoco-mojo examples list` and `examples run`, which opens an example in Reloaded and logs where its source is
 - Added the `examples` extra, which installs `mink` for the berthing example

@@ -1,10 +1,13 @@
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from mujoco_mojo.mj_state import MjState
 from mujoco_mojo.visualization import ArrowConfig, LineConfig
+
+if TYPE_CHECKING:
+    from ..controller import ControllerStatus
 
 __all__ = ["ConnectionInfo", "OnReloadCallback", "ViewerBackend", "ViewerControls"]
 
@@ -26,6 +29,22 @@ class ViewerControls(Protocol):
     @property
     def speed(self) -> float:
         """The playback speed: a multiple of real time, 0 for stepping by hand, or `inf`."""
+        ...
+
+    @property
+    def position(self) -> tuple[float, int]:
+        """The simulation time and step count of the run in progress, or where the last run ended."""
+        ...
+
+    @property
+    def has_runtime(self) -> bool:
+        """Whether `run` has a runtime to run, or only generates."""
+        ...
+
+    def status(self) -> "ControllerStatus": ...
+
+    def submit(self, text: str) -> None:
+        """Handles `text` as if it were typed in the terminal."""
         ...
 
     def pause(self) -> None: ...

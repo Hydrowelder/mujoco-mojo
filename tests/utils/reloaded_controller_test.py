@@ -638,12 +638,14 @@ def test_failed_run_is_reported_and_the_controller_stays_usable(
     wait_idle(controller)
 
     assert controller.status().last_outcome is Outcome.FAILED
+    assert controller.status().last_detail == "boom [bold]"
     assert any("Reload Failed" in m and "boom" in m for m in log.messages())
 
     session.generation_behavior = None
     controller.submit("gen")
     wait_idle(controller)
     assert controller.status().last_outcome is Outcome.SUCCESS
+    assert controller.status().last_detail is None
 
 
 @pytest.mark.parametrize(
@@ -667,6 +669,47 @@ def test_requirement_endings_have_their_own_outcome(
     wait_idle(controller)
 
     assert controller.status().last_outcome is outcome
+    assert controller.status().last_detail == str(exception)
+
+
+def test_the_position_is_where_the_last_run_ended_until_a_new_one_starts(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    def advance(s: FakeSession) -> None:
+        s.run_control.wait_while_paused(sim_time=2.5, steps=1250)
+
+    assert controller.position == (0.0, 0)
+
+    session.behavior = advance
+    controller.submit("run")
+    wait_idle(controller)
+    assert controller.position == (2.5, 1250)
+
+    # a generation starts the model over, so nothing has been stepped
+    controller.submit("gen")
+    wait_idle(controller)
+    assert controller.position == (0.0, 0)
+
+
+def test_the_position_follows_a_run_in_progress(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    reached = threading.Event()
+    release = threading.Event()
+
+    def advance(s: FakeSession) -> None:
+        s.run_control.wait_while_paused(sim_time=0.75, steps=300)
+        reached.set()
+        release.wait(5)
+
+    session.behavior = advance
+    controller.submit("run")
+    assert reached.wait(5)
+    try:
+        assert controller.position == (0.75, 300)
+    finally:
+        release.set()
+        wait_idle(controller)
 
 
 def test_file_change_reloads_with_the_last_command(

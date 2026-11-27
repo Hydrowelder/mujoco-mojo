@@ -36,6 +36,7 @@ from mujoco_mojo.utils.layers.reloaded.controller import (
     Outcome,
     ReloadedController,
     RunState,
+    control_states,
 )
 from mujoco_mojo.utils.layers.reloaded.tui import (
     CommandInput,
@@ -52,7 +53,6 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     SelectableLog,
     TuiLogHandler,
     key_label,
-    control_states,
     fit_title,
     render_badge,
     LOCATION_KEY,
