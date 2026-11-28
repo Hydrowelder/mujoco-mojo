@@ -26,7 +26,7 @@ from mujoco_mojo.settings import (
     ReloadedStudioSettings,
 )
 from mujoco_mojo.stochas import DesignValueDict, DistributionDict, NamedValueDict
-from mujoco_mojo.typing import StudioGraphics, UserInterface
+from mujoco_mojo.typing import KeyName, StudioGraphics, UserInterface
 from mujoco_mojo.utils.defaults import (
     DEFAULT_WORKDIR,
     NAMED_VALUES_FNAME,
@@ -71,6 +71,13 @@ from .tui import LogBuffer, ReloadedApp, TuiLogHandler
 
 logger = get_logger(__name__)
 console = Console()
+
+
+def start_key_argument(start_key: str | None) -> KeyName | int | None:
+    """The `key` that `Mujoco.prep_for_sim` takes for the session's `start_key`: an index for a whole number, and a name otherwise."""
+    if start_key is None:
+        return None
+    return int(start_key) if start_key.isdigit() else KeyName(start_key)
 
 
 def recursive_reload(
@@ -198,6 +205,15 @@ class MojoReloaded:
 
     record: bool = False
     """Whether telemetry is recorded to each trial's `telemetry.parquet` and video recorders capture frames. The `record` command turns it on and off during the session."""
+
+    start_key: str | None = None
+    """The key every run starts from, by name, or by index when it is a whole number, or `None` for the model's initial key. The `key` command sets it during the session."""
+
+    key_names: tuple[str, ...] = ()
+    """The name of each key of the last model built, in order, with an empty string for a key without one."""
+
+    initial_key: str | None = None
+    """The name of the last model's key marked `initial`, or `None` if no key is."""
 
     keys: ReloadedKeySettings = field(default_factory=ReloadedKeySettings)
     """The keys that trigger the terminal UI's actions, from the `reloaded.keys` settings."""
@@ -353,7 +369,7 @@ class MojoReloaded:
     def generate_construct(
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
     ) -> MjState:
-        """Helper to run a generation."""
+        """Helper to run a generation. The simulation starts from `start_key` when it is set, and from the model's initial key otherwise."""
         from ..cli import _load_func
 
         project_root = Path.cwd()
@@ -523,12 +539,19 @@ class MojoReloaded:
 
                 try:
                     state = mojo_model.mjcf.prep_for_sim(
-                        save_path=trial_dir / self.xml_name, unit_system=mojo_model.us
+                        save_path=trial_dir / self.xml_name,
+                        unit_system=mojo_model.us,
+                        key=start_key_argument(self.start_key),
                     )
                 except Exception as e:
                     msg = f"Failed to compile with MuJoCo: {e}"
                     logger.error(msg)
                     raise ValueError(msg)
+
+                model = state.model
+                self.key_names = tuple(model.key(i).name for i in range(model.nkey))
+                initial = mojo_model.mjcf.initial_key
+                self.initial_key = initial.name if initial else None
 
             # sync the viewer
             if on_reload_callback:

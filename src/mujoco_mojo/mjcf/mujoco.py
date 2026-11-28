@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 from xml.etree import ElementTree
 from xml.etree.ElementTree import Element, ParseError
 
 import mujoco
+import numpy as np
 from pydantic import Field
 
 import mujoco_mojo.utils.utils as utils
@@ -21,6 +23,8 @@ from mujoco_mojo.mjcf.mujoco_attr.contact import Contact
 from mujoco_mojo.mjcf.mujoco_attr.deformable import Deformable
 from mujoco_mojo.mjcf.mujoco_attr.equality import Equality
 from mujoco_mojo.mjcf.mujoco_attr.keyframe import Keyframe
+from mujoco_mojo.mjcf.mujoco_attr.keyframe_attr.key import Key
+from mujoco_mojo.mjcf.mujoco_attr.keyframe_attr.key_state import KeyVector
 from mujoco_mojo.mjcf.mujoco_attr.option import Option
 from mujoco_mojo.mjcf.mujoco_attr.sensor import Sensor
 from mujoco_mojo.mjcf.mujoco_attr.size import Size
@@ -31,7 +35,7 @@ from mujoco_mojo.mjcf.pose import PoseQuat
 from mujoco_mojo.mjcf.pose_context import HasPose, PoseContext
 from mujoco_mojo.mjcf.xml_model import XMLModel
 from mujoco_mojo.mjcf.xml_reader import read_xml
-from mujoco_mojo.typing import Angle, EulerSeq, ModelName
+from mujoco_mojo.typing import Angle, EulerSeq, KeyName, ModelName
 from mujoco_mojo.utils.log import get_logger
 from mujoco_mojo.utils.utils import is_empty_list, to_pretty_xml
 
@@ -51,6 +55,35 @@ def _compiler_setting(root: Element, name: str) -> str | None:
         logger.error(msg)
         raise ValueError(msg)
     return next(iter(values), None)
+
+
+def _fill_key_elements(
+    element: Element, resolved: Mapping[str, Mapping[KeyVector, np.ndarray]]
+) -> None:
+    """Sets the vectors in `resolved` on the `key` elements of the same name in `element`."""
+    for key_element in element.iter("key"):
+        vectors = resolved.get(key_element.get("name", ""))
+        if vectors is None:
+            continue
+        for vector, values in vectors.items():
+            key_element.set(vector, " ".join(map(str, values.tolist())))
+
+
+def _key_id(model: mujoco.MjModel, key: KeyName | int) -> int:
+    """The ID of `key`, given by name or by index, raising when `model` has no such key."""
+    if isinstance(key, int):
+        if not 0 <= key < model.nkey:
+            msg = f"The model has {model.nkey} keys, so it has no key {key}."
+            logger.error(msg)
+            raise ValueError(msg)
+        return key
+
+    key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, key)
+    if key_id == -1:
+        msg = f"The model has no key named '{key}'."
+        logger.error(msg)
+        raise ValueError(msg)
+    return key_id
 
 
 def _with_compiler_dir(path: Path, directory: Path | None, strippath: bool) -> Path:
@@ -236,6 +269,8 @@ class Mujoco(XMLModel):
         """
         Writes the MuJoCo model to an XML file.
 
+        A key with `states` needs the compiled model to lay its vectors out, so when one has them the model is compiled from `file` once it is written, and the file is written again with the vectors filled in.
+
         Args:
             file (Path): Filepath to save XML.
             exclude_default (bool, optional): Wheter or not to include default values. Values equal to None are always ignored. Attributes which are literals (such as Geom.type) are always included. Defaults to True.
@@ -244,15 +279,60 @@ class Mujoco(XMLModel):
             str: Prettified XML text.
 
         """
-        xml = utils.to_pretty_xml(
-            self.to_xml(
-                exclude_default=exclude_default,
-                compiler_degrees=self.compiler_degree_settings,
-                compiler_eulerseq=self.compiler_eulerseq_settings,
-            )
+        return self._write_xml(file, exclude_default)[0]
+
+    def _write_xml(
+        self, file: Path, exclude_default: bool = True
+    ) -> tuple[str, mujoco.MjModel | None]:
+        """Writes the model as `write_xml` does, and returns the XML with the model compiled to lay out the keys' states, or `None` when no key has states and nothing was compiled."""
+        element = self.to_xml(
+            exclude_default=exclude_default,
+            compiler_degrees=self.compiler_degree_settings,
+            compiler_eulerseq=self.compiler_eulerseq_settings,
         )
+        xml = utils.to_pretty_xml(element)
         file.write_text(xml, encoding="utf-8")
-        return xml
+        if not self._has_key_states():
+            return xml, None
+
+        # compiled from the file, not the text, so assets written relative to it are found
+        model = mujoco.MjModel.from_xml_path(str(file))
+        _fill_key_elements(element, self._resolve_keys(model))
+        xml = utils.to_pretty_xml(element)
+        file.write_text(xml, encoding="utf-8")
+        return xml, model
+
+    def _keys(self) -> list[Key]:
+        return [key for keyframe in self.keyframes for key in keyframe.keys]
+
+    def _has_key_states(self) -> bool:
+        return any(key.states for key in self._keys())
+
+    @property
+    def initial_key(self) -> Key | None:
+        """The key marked `initial`, which `prep_for_sim` starts the simulation from, or `None` if no key is."""
+        marked = [key for key in self._keys() if key.initial]
+        if len(marked) > 1:
+            msg = f"Only one key can be initial, but {', '.join(repr(k.name) for k in marked)} are."
+            logger.error(msg)
+            raise ValueError(msg)
+        return marked[0] if marked else None
+
+    def _resolve_keys(
+        self, model: mujoco.MjModel
+    ) -> dict[str, dict[KeyVector, np.ndarray]]:
+        """Writes the vectors each key's `states` give into that key's row of `model` (`key_qpos`, `key_qvel`, and so on) and returns them by key name."""
+        resolved: dict[str, dict[KeyVector, np.ndarray]] = {}
+        for key in self._keys():
+            if not key.states:
+                continue
+            assert key.name is not None, "checked by Key.check_states"
+            key_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_KEY, key.name)
+            vectors = key.resolve(model)
+            for vector, values in vectors.items():
+                getattr(model, f"key_{vector}")[key_id] = values
+            resolved[key.name] = vectors
+        return resolved
 
     @classmethod
     def from_xml(cls, source: str | Path, *, strict: bool = True) -> Self:
@@ -375,19 +455,19 @@ class Mujoco(XMLModel):
             )
 
     def to_mj_spec(self) -> mujoco.MjSpec:
-        """Creates an MjSpec from the Mujoco instance."""
-        return mujoco.MjSpec.from_string(
-            to_pretty_xml(
-                self.to_xml(
-                    compiler_degrees=self.compiler_degree_settings,
-                    compiler_eulerseq=self.compiler_eulerseq_settings,
-                )
-            )
+        """Creates an MjSpec from the Mujoco instance. A key with `states` is laid out by compiling the model first, so its vectors are in the spec."""
+        element = self.to_xml(
+            compiler_degrees=self.compiler_degree_settings,
+            compiler_eulerseq=self.compiler_eulerseq_settings,
         )
+        if self._has_key_states():
+            model = mujoco.MjModel.from_xml_string(to_pretty_xml(element))
+            _fill_key_elements(element, self._resolve_keys(model))
+        return mujoco.MjSpec.from_string(to_pretty_xml(element))
 
     def to_mj_model(self) -> mujoco.MjModel:
-        """Creates an MjModel from the Mujoco instance."""
-        return mujoco.MjModel.from_xml_string(
+        """Creates an MjModel from the Mujoco instance, with the vectors of each key's `states` in its keyframe arrays."""
+        model = mujoco.MjModel.from_xml_string(
             to_pretty_xml(
                 self.to_xml(
                     compiler_degrees=self.compiler_degree_settings,
@@ -395,6 +475,8 @@ class Mujoco(XMLModel):
                 )
             )
         )
+        self._resolve_keys(model)
+        return model
 
     @property
     def pose_context(self) -> PoseContext:
@@ -421,16 +503,35 @@ class Mujoco(XMLModel):
         return self.pose_context.local_pose(frame, relative_to)
 
     def prep_for_sim(
-        self, save_path: Path | None = None, *, unit_system: UnitSystem | None = None
+        self,
+        save_path: Path | None = None,
+        *,
+        unit_system: UnitSystem | None = None,
+        key: KeyName | int | None = None,
     ) -> MjState:
-        """Creates an MjState (MjModel + MjData) from the Mujoco instance. Pass `unit_system` to attach the model's unit system so that telemetry channels emit concrete unit strings instead of abstract Pint dimension expressions."""
+        """
+        Creates an MjState (MjModel + MjData) from the Mujoco instance.
+
+        The simulation starts from the key marked `initial`, or from the model's default state when no key is.
+
+        Args:
+            save_path: Where to write the model's XML, which is then compiled from that file. Without one the model is compiled from text.
+            unit_system: The model's unit system, attached so that telemetry channels emit concrete unit strings instead of abstract Pint dimension expressions.
+            key: A key to start from in place of the initial one: its name, or its index in the compiled model (what a viewer's key picker gives).
+
+        """
+        initial = self.initial_key
         if save_path:
-            self.write_xml(save_path)
-            model = mujoco.MjModel.from_xml_path(str(save_path))
+            _, model = self._write_xml(save_path)
+            if model is None:
+                model = mujoco.MjModel.from_xml_path(str(save_path))
         else:
             model = self.to_mj_model()
 
         data = mujoco.MjData(model)
+        start = key if key is not None else (initial.name if initial else None)
+        if start is not None:
+            mujoco.mj_resetDataKeyframe(model, data, _key_id(model, start))
         mujoco.mj_forward(model, data)
         mujoco.mj_rnePostConstraint(model, data)
         state = MjState(model, data)

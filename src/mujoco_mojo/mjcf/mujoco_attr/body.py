@@ -18,6 +18,7 @@ from mujoco_mojo.mjcf.mujoco_attr.body_attr.inertial import Inertial
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.joint import Joint
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.light import Light
 from mujoco_mojo.mjcf.mujoco_attr.body_attr.site import AnySite
+from mujoco_mojo.mjcf.mujoco_attr.keyframe_attr.key_state import FreeBodyState
 from mujoco_mojo.mjcf.plugin import Plugin
 from mujoco_mojo.mjcf.pose import AnyPose, PoseQuat
 from mujoco_mojo.mjcf.position import Pos
@@ -668,9 +669,11 @@ class Body(XMLModel):
         reference: AnyPose = PoseQuat(),
     ) -> None:
         """
-        Sets the initial velocity (qvel) for a body with a free joint.
+        Sets the velocity (qvel) of a body with a free joint.
 
-        This method applies a rigid body velocity mapping. If the velocity is defined at a specific point in space (e.g., the center of a rotating system), this calculates the resulting linear velocity at the body's actual position.
+        This method applies a rigid body velocity mapping. If the velocity is defined at a specific point in space (e.g., the center of a rotating system), this calculates the resulting linear velocity at the body's actual position. The angular velocity is then expressed in the body's own frame, which is where MuJoCo keeps a free joint's angular velocity.
+
+        To start a simulation with a velocity, a `Key` with a `FreeBodyState` does the same from the generator, where this method needs the runtime.
 
         Calculates:
             >>> v_world = R_ref @ v_local
@@ -687,37 +690,25 @@ class Body(XMLModel):
             reference (Pose, optional): The global pose where the velocities is defined (this Pose is expressed in the world frame). Defaults to PoseQuat().
 
         Raises:
-            ValueError: If the body does not have a free joint.
+            ValueError: If the body has no name or no free joint. A body attached to its parent by hinge or slide joints moves with its parent, so set the velocity of the free body at the root of its tree, and of each joint with a `JointState`.
 
         """
-        if not self.freejoints:
-            logger.warning(
-                "Attempting to set initial velocity conditions for a body which does not have a free joint."
-            )
+        if self.name is None:
+            msg = "set_initial_velocity needs a named body, to find it in the compiled model."
+            logger.error(msg)
+            raise ValueError(msg)
 
-        # convert from deg to rad
-        w_input = np.asarray(angular_velocity, dtype=float)
+        w = np.asarray(angular_velocity, dtype=float)
         if angle == Angle.DEGREE:
-            w_input = np.deg2rad(w_input)
+            w = np.deg2rad(w)
 
-        # coordinate transformation
-        r_mat = reference.as_matrix()
-        v_ref_world = r_mat @ np.asarray(linear_velocity, dtype=float)
-        w_world = r_mat @ w_input
-
-        # translate the velocity to the body origin
-        r_body_world = self.rt_pos(state)
-        r_ref_world = reference.pos
-
-        v_body_linear = v_ref_world + np.cross(w_world, (r_body_world - r_ref_world))
-
-        # apply to state.data.qvel
-        bid = self.get_id(state.model)
-        jnt_adr = state.model.body_jntadr[bid]
-        qvel_adr = state.model.jnt_dofadr[jnt_adr]
-
-        state.data.qvel[qvel_adr : qvel_adr + 3] = v_body_linear
-        state.data.qvel[qvel_adr + 3 : qvel_adr + 6] = w_world
+        FreeBodyState(
+            body=self.name,
+            linear_velocity=np.asarray(linear_velocity, dtype=float),
+            angular_velocity=w,
+            reference=reference,
+        ).write(state)
+        state.invalidate_rne_post_constraint()
 
 
 # Frame's body/geom/site/etc. fields are annotated with these real types, but Frame

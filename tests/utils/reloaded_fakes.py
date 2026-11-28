@@ -46,11 +46,16 @@ class FakeSession:
     stop_event: threading.Event = field(default_factory=threading.Event)
     run_control: rt.RunControl = field(default_factory=rt.RunControl)
     output_sink: Callable[[str], None] | None = None
+    start_key: str | None = None
+    key_names: tuple[str, ...] = ()
+    initial_key: str | None = None
 
     generation_behavior: Callable[["FakeSession"], object] | None = None
     behavior: Callable[["FakeSession"], object] | None = None
     calls: list[bool] = field(default_factory=list)
     """The `use_runtime` flag of every call, in order."""
+    started_from: list[str | None] = field(default_factory=list)
+    """The `start_key` each call was made with, in order."""
     started: threading.Event = field(default_factory=threading.Event)
     """Set each time a call has published its model."""
 
@@ -58,6 +63,7 @@ class FakeSession:
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
     ) -> MjState:
         self.calls.append(use_runtime)
+        self.started_from.append(self.start_key)
         state = make_state()
         if on_reload_callback is not None:
             on_reload_callback(state)

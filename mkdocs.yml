@@ -46,6 +46,7 @@ nav:
           - Reloaded: user-guides/features/reloaded/reloaded.md
           - SensAI: user-guides/features/sensai/sensai.md
           - Pose Context: user-guides/features/pose-context/pose-context.md
+          - Keyframes: user-guides/features/keyframes/keyframes.md
           - Requirements: user-guides/features/requirements/requirements.md
           - Proximity: user-guides/features/proximity/proximity.md
           - Video Recording: user-guides/features/video-recording/video-recording.md

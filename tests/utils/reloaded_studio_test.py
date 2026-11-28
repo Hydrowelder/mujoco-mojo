@@ -310,6 +310,16 @@ def test_reset_and_reload_run_the_last_command_again_instead_of_touching_the_mod
     assert controls.calls == [("rerun", ""), ("rerun", ""), ("rerun", "")]
 
 
+def test_reset_with_a_key_picked_sets_the_key_then_runs_again(
+    step_control: RecordingStepControl, controls: FakeControls
+) -> None:
+    """A negative key is Studio's way of saying no key is picked, which leaves the `key` setting as it is."""
+    assert step_control._on_reset(messages.ResetEvent(key=2)) is True
+    assert step_control._on_reset(messages.ResetEvent(key=-1)) is True
+
+    assert controls.calls == [("submit", "key 2"), ("rerun", ""), ("rerun", "")]
+
+
 def test_a_dropped_model_file_is_refused_because_the_generator_builds_the_model(
     step_control: RecordingStepControl,
     controls: FakeControls,

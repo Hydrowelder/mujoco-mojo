@@ -754,3 +754,58 @@ def test_a_real_run_pauses_itself_at_its_target_and_the_controller_is_told(
     run.join(30)
     assert not run.is_alive()
     assert steps_taken(stepping_module) == 1000
+
+
+_KEYED_GENERATOR = """
+import mujoco_mojo as mojo
+
+
+def generate(mojo_model: mojo.MojoModel, *args, **kwargs) -> mojo.MojoModel:
+    mojo_model.us = mojo.UnitSystem.si()
+    mojo_model.mjcf.worldbody = mojo.WorldBody(
+        bodies=[
+            mojo.Body(
+                name=mojo.BodyName("arm"),
+                joints=[mojo.Joint(name=mojo.JointName("hinge"))],
+                geoms=[mojo.GeomSphere(size=0.1)],
+            )
+        ]
+    )
+    hinge = mojo.JointName("hinge")
+    mojo_model.mjcf.keyframes = [
+        mojo.Keyframe(
+            keys=[
+                mojo.Key(
+                    name=mojo.KeyName("rest"),
+                    initial=True,
+                    states=[mojo.JointState(joint=hinge, qpos=0.1)],
+                ),
+                mojo.Key(
+                    name=mojo.KeyName("raised"),
+                    states=[mojo.JointState(joint=hinge, qpos=1.2)],
+                ),
+            ]
+        )
+    ]
+    return mojo_model
+"""
+
+
+def test_a_generation_starts_from_the_session_key_and_records_the_model_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "keyed_generator.py").write_text(_KEYED_GENERATOR)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    session = make_session(tmp_path, UserInterface.OPENGL)
+    session.generator = "keyed_generator.generate"
+
+    state = session.generate_construct(use_runtime=False, on_reload_callback=None)
+    assert session.key_names == ("rest", "raised")
+    assert session.initial_key == "rest"
+    np.testing.assert_allclose(state.data.qpos, (0.1,))
+
+    for start_key in ("raised", "1"):
+        session.start_key = start_key
+        state = session.generate_construct(use_runtime=False, on_reload_callback=None)
+        np.testing.assert_allclose(state.data.qpos, (1.2,))

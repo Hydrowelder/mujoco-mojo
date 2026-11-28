@@ -29,13 +29,22 @@ from textual.content import Content
 from textual.css.query import NoMatches
 from textual.markup import escape as escape_markup
 from textual.message import Message
+from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.selection import Selection
 from textual.strip import Strip
 from textual.suggester import Suggester
 from textual.timer import Timer
 from textual.widget import Widget
-from textual.widgets import Button, ContentSwitcher, Footer, Input, RichLog, Static
+from textual.widgets import (
+    Button,
+    ContentSwitcher,
+    Footer,
+    Input,
+    RichLog,
+    Select,
+    Static,
+)
 
 from mujoco_mojo.settings import SENSAI_DISCLOSURE, ReloadedKeySettings
 from mujoco_mojo.utils.log import TerminalFilter
@@ -60,6 +69,7 @@ from .controller import (
     ShowPaneEvent,
     StatusEvent,
     control_states,
+    key_options,
     speed_label,
 )
 from .rain import RainScreen
@@ -130,6 +140,7 @@ _EXTRA_KEY_HELP = [
     ),
     ("Up / Down", "Previous and next command"),
     ("Click seed, trial, speed", "Edit it. Enter applies and Esc cancels"),
+    ("Click key", "Pick the key every run starts from"),
     ("Click watch, record", "Switch it on or off"),
     ("Click Log, SensAI", "Show the log or the conversation with SensAI"),
 ]
@@ -648,6 +659,60 @@ class ParamField(Horizontal):
         self.app.query_one(CommandInput).focus()
 
 
+class KeyField(Horizontal):
+    """
+    The status bar's picker of the key every run starts from: the model's initial key, or one of the keys of the last model built.
+
+    Like `ParamField`, it only reports what was picked. The app passes it on to the controller, which refuses it during a run.
+    """
+
+    class Picked(Message):
+        """A key was picked, given as what follows `key` in the command."""
+
+        def __init__(self, value: str) -> None:
+            super().__init__()
+            self.value = value
+
+    # a `Select` redraws the choice it shows only when its value changes, so one whose labels change under the same value would show a stale label, and each change builds it again instead
+    choices: reactive[tuple[tuple[str, str], ...]] = reactive(
+        (("default", "none"),), recompose=True
+    )
+    """The picker's choices, from `key_options`."""
+
+    chosen: reactive[str] = reactive("none", recompose=True)
+    """The value of the choice the session has, `none` for the initial key."""
+
+    locked: reactive[bool] = reactive(False, recompose=True)
+    """Whether the picker is disabled, which it is during a run."""
+
+    def __init__(self) -> None:
+        super().__init__(id="field-key")
+
+    def compose(self) -> ComposeResult:
+        yield Static(Text("key ", style=INK_SECONDARY), classes="label")
+        yield Select(
+            list(self.choices),
+            value=self.chosen,
+            allow_blank=False,
+            compact=True,
+            disabled=self.locked,
+            tooltip="The key every run starts from",
+        )
+
+    def show(self, status: ControllerStatus) -> None:
+        self.choices = tuple(key_options(status))
+        self.chosen = "none" if status.key is None else status.key
+        self.locked = status.state is not RunState.IDLE
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        event.stop()
+        # a `Select` reports the value it is built with too, which is the session's and not a pick
+        if not isinstance(event.value, str) or event.value == self.chosen:
+            return
+        self.post_message(self.Picked(event.value))
+        self.app.query_one(CommandInput).focus()
+
+
 SENSAI_ICON = "✦"
 """The mark at the right end of the status bar while SensAI is on, whose tooltip is `SENSAI_DISCLOSURE`. A sparkle, as on the Dojo's SensAI button."""
 
@@ -684,6 +749,9 @@ class StatusBar(Horizontal):
         yield Static(id="badge")
         for key, kind in self.LAYOUT:
             yield ParamField(key, kind)
+            # beside the other settings that choose what a run starts from
+            if key == "trial":
+                yield KeyField()
         yield Static(id="title")
         if self._sensai:
             icon = Static(SENSAI_ICON, id="sensai")
@@ -702,6 +770,7 @@ class StatusBar(Horizontal):
         views = {view.key: view for view in status_fields(status)}
         for param in self.query(ParamField):
             param.show(views[param.key])
+        self.query_one(KeyField).show(status)
         # the fields just changed width, which changes how much room the title has
         self.call_after_refresh(self._fit_title)
 
@@ -1142,6 +1211,9 @@ class ReloadedApp(App[None]):
                 self._controller.set_trial(message.text)
             case "speed":
                 self._controller.set_speed(message.text)
+
+    def on_key_field_picked(self, message: KeyField.Picked) -> None:
+        self._controller.set_key(message.value)
 
     def on_param_field_toggled(self, message: ParamField.Toggled) -> None:
         match message.key:

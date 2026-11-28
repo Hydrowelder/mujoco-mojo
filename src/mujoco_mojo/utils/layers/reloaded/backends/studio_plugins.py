@@ -15,6 +15,7 @@ from ..controller import (
     Outcome,
     RunState,
     control_states,
+    key_options,
     read_run_target,
     speed_label,
 )
@@ -99,6 +100,7 @@ _ICON_DOT = "\uf111"
 _ICON_DOT_RING = "\uf192"
 _ICON_RANDOM = "\uf074"
 _ICON_HASHTAG = "\uf292"
+_ICON_KEY = "\uf084"
 _ICON_EYE = "\uf06e"
 _ICON_VIDEO = "\uf03d"
 _ICON_HISTORY = "\uf1da"
@@ -319,7 +321,10 @@ class MojoStepControl(plugin.SimPlugin):
         return True
 
     @messages.handler
-    def _on_reset(self, _: messages.ResetEvent) -> bool:
+    def _on_reset(self, event: messages.ResetEvent) -> bool:
+        # no key, or a negative one, is what Studio sends when no key is picked, which leaves the `key` setting alone
+        if event.key is not None and event.key >= 0:
+            self._controls.submit(f"key {event.key}")
         self._controls.rerun()
         return True
 
@@ -576,6 +581,9 @@ class MojoPanel(plugin.ViewerPlugin):
             trial = self._setting_field("trial", str(status.trial_num))
             if trial is not None and (command := trial_command(trial)) is not None:
                 self._send(command)
+            _label_cell(_ICON_KEY, "Key")
+            if (picked := self._key_combo(status)) is not None:
+                self._send(f"key {picked}")
             _label_cell(_ICON_EYE, "Watch")
             self._toggle("watch", status.watch, "Reload when a *.py file changes")
             _label_cell(_ICON_VIDEO, "Record")
@@ -584,6 +592,24 @@ class MojoPanel(plugin.ViewerPlugin):
         imgui.EndDisabled()
         if not idle:
             imgui.TextDisabled("These change between runs.")
+
+    @staticmethod
+    def _key_combo(status: ControllerStatus) -> str | None:
+        """Draws the picker of the key runs start from, and returns the `key` command's argument for a choice that changes it, or `None` when nothing new was picked."""
+        options = key_options(status)
+        chosen = "none" if status.key is None else status.key
+        shown = next(label for label, value in options if value == chosen)
+        picked = None
+        imgui.SetNextItemWidth(_FILL)
+        if imgui.BeginCombo("##key", shown):
+            for label, value in options:
+                selected = value == chosen
+                if imgui.Selectable(label, selected) and not selected:
+                    picked = value
+                if selected:
+                    imgui.SetItemDefaultFocus()
+            imgui.EndCombo()
+        return picked
 
     def _setting_field(self, name: str, shown: str, hint: str = "") -> str | None:
         """

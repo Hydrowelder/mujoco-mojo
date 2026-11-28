@@ -86,7 +86,15 @@ from .equality_attr import (
     EqualityWeldSite,
 )
 from .keyframe import Keyframe
-from .keyframe_attr import Key
+from .keyframe_attr import (
+    ActuatorState,
+    AnyKeyState,
+    FreeBodyState,
+    JointState,
+    Key,
+    KeyStateBase,
+    MocapState,
+)
 from .option import Option
 from .option_attr import Flag
 from .sensor import Sensor
@@ -176,10 +184,12 @@ __all__ = [
     "ActuatorPid",
     "ActuatorPlugin",
     "ActuatorPosition",
+    "ActuatorState",
     "ActuatorVelocity",
     "AnyEqualityConnect",
     "AnyEqualityWeld",
     "AnyGeom",
+    "AnyKeyState",
     "AnyMesh",
     "AnySite",
     "Asset",
@@ -202,6 +212,7 @@ __all__ = [
     "Fixed",
     "Flag",
     "FlexComp",
+    "FreeBodyState",
     "FreeJoint",
     "GeomBox",
     "GeomCapsule",
@@ -215,7 +226,9 @@ __all__ = [
     "HField",
     "Inertial",
     "Joint",
+    "JointState",
     "Key",
+    "KeyStateBase",
     "Keyframe",
     "Layer",
     "LengthRange",
@@ -235,6 +248,7 @@ __all__ = [
     "MeshSupersphere",
     "MeshTorus",
     "MeshWedge",
+    "MocapState",
     "Model",
     "Option",
     "Pair",

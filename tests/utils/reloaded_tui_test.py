@@ -20,7 +20,7 @@ from rich.text import Text
 from textual.pilot import Pilot
 from textual.strip import Strip
 from textual.content import Content
-from textual.widgets import ContentSwitcher, RichLog, Static
+from textual.widgets import ContentSwitcher, OptionList, RichLog, Select, Static
 
 import mujoco_mojo.utils.layers.reloaded.tui as tui_module
 
@@ -43,6 +43,7 @@ from mujoco_mojo.utils.layers.reloaded.tui import (
     ExplainButton,
     FieldEditor,
     HelpScreen,
+    KeyField,
     ParamField,
     CommandSuggester,
     CONTROL_ICONS,
@@ -941,6 +942,45 @@ def test_clicking_a_status_value_edits_it_and_enter_applies_it(tmp_path: Path) -
             await wait_until(pilot, lambda: session.trial_num == 12)
             assert not editing("trial")
             assert app.focused is app.query_one(CommandInput)
+
+    run(scenario())
+
+
+def test_the_key_picker_lists_the_keys_and_sets_the_one_picked(tmp_path: Path) -> None:
+    app, session = make_app(
+        tmp_path,
+        session=FakeSession(key_names=("rest", "tossed"), initial_key="tossed"),
+    )
+
+    def select() -> Select[str]:
+        # each change of the session builds the picker again, so it is looked up each time
+        return app.query_one("#field-key", KeyField).query_one(Select)
+
+    def shown() -> str:
+        return str(select().query_one("#label", Static).render())
+
+    async def scenario() -> None:
+        async with app.run_test(size=(140, 30)) as pilot:
+            await wait_until(pilot, lambda: shown() == "initial (1: tossed)")
+            listed = select().query_one(OptionList)
+            assert [
+                str(listed.get_option_at_index(i).prompt)
+                for i in range(listed.option_count)
+            ] == ["initial (1: tossed)", "0: rest", "1: tossed"]
+            # building the picker is not a pick
+            assert session.start_key is None
+            assert "initial key again" not in log_text(app)
+
+            # a pick sets the key, and focus goes back to the command line
+            select().value = "rest"
+            await wait_until(pilot, lambda: session.start_key == "rest")
+            await wait_until(pilot, lambda: shown() == "0: rest")
+            assert app.focused is app.query_one(CommandInput)
+
+            # a key set by typing shows in the picker
+            await pilot.press(*"key none", "enter")
+            await wait_until(pilot, lambda: shown() == "initial (1: tossed)")
+            assert session.start_key is None
 
     run(scenario())
 

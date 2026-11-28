@@ -53,6 +53,7 @@ COMMAND_SUGGESTIONS = (
     "run",
     "seed ",
     "trial ",
+    "key ",
     "watch",
     "record",
     "dojo",
@@ -95,6 +96,7 @@ _COMMAND_WORDS = (
     "run",
     "seed",
     "trial",
+    "key",
     "watch",
     "record",
     "dojo",
@@ -109,7 +111,7 @@ _COMMAND_WORDS = (
     "sensai",
     "log",
 )
-_TAKES_ARGUMENT = ("run", "step", "speed", "seed", "trial")
+_TAKES_ARGUMENT = ("run", "step", "speed", "seed", "trial", "key")
 """The commands that read what follows them. Any other command is only itself."""
 _ALIASES = {
     "gen": ("g", "generate"),
@@ -177,6 +179,36 @@ class ControllerStatus:
     last_outcome: Outcome | None
     last_detail: str | None = None
     """What the most recent run's outcome was about: the error that failed it, or the requirement that ended it early."""
+    key: str | None = None
+    """The key every run starts from, by name (or by index for a key without one), or `None` for the model's initial key."""
+    key_names: tuple[str, ...] = ()
+    """The name of each key of the last model built, in order, with an empty string for a key without one."""
+    initial_key: str | None = None
+    """The name of the last model's key marked `initial`, or `None` if no key is."""
+
+
+def key_options(status: ControllerStatus) -> list[tuple[str, str]]:
+    """
+    The choices of a key picker, as (label, value) pairs whose value is what follows `key` in the command.
+
+    `none` comes first, for the model's initial key (or its default state when no key is initial), then each key of the last model built, labeled with its number. The chosen key is added at the end when that model does not have it, so a picker can always show what is chosen.
+    """
+
+    def numbered(index: int, name: str) -> str:
+        return f"{index}: {name or '(no name)'}"
+
+    names = status.key_names
+    initial = status.initial_key
+    if initial is not None and initial in names:
+        first = f"initial ({numbered(names.index(initial), initial)})"
+    else:
+        first = "default"
+    options = [(first, "none")]
+    for index, name in enumerate(names):
+        options.append((numbered(index, name), name or str(index)))
+    if status.key is not None and all(value != status.key for _, value in options):
+        options.append((f"{status.key} (not in the model)", status.key))
+    return options
 
 
 def control_states(state: RunState, has_runtime: bool) -> dict[str, bool]:
@@ -319,6 +351,9 @@ class ReloadedSession(Protocol):
     stop_event: threading.Event
     run_control: rt.RunControl
     output_sink: Callable[[str], None] | None
+    start_key: str | None
+    key_names: tuple[str, ...]
+    initial_key: str | None
 
     def generate_construct(
         self, use_runtime: bool, on_reload_callback: OnReloadCallback | None
@@ -430,6 +465,9 @@ class ReloadedController:
                 last_duration=self._last_duration,
                 last_outcome=self._last_outcome,
                 last_detail=self._last_detail,
+                key=self.session.start_key,
+                key_names=self.session.key_names,
+                initial_key=self.session.initial_key,
             )
 
     def help_entries(self) -> list[tuple[str, str]]:
@@ -465,6 +503,10 @@ class ReloadedController:
         entries += [
             ("seed <N>", "Set the seed (seed none clears it)"),
             ("trial <N>", "Set the trial number"),
+            (
+                "key <name>",
+                "Start every run from this key, by name or number (key none goes back to the one marked initial)",
+            ),
             (_words("watch"), "Toggle reloading when *.py files change"),
             (
                 _words("record"),
@@ -559,6 +601,8 @@ class ReloadedController:
                 return self._describe_seed(arg)
             case ("trial", _):
                 return self._describe_trial(arg)
+            case ("key", _):
+                return self._describe_key(self._original_argument(text))
             case _:
                 return self._describe_unknown(raw)
 
@@ -688,6 +732,25 @@ class ReloadedController:
         except ValueError:
             return "Trial must be an integer."
 
+    def _describe_key(self, arg: str) -> str:
+        if arg == "":
+            return "Sets the key runs start from, e.g. key tossed or key none."
+        if arg.lower() in ("none", "null"):
+            return "Starts runs from the initial key."
+        return f"Starts runs from key {self._key_name(arg)}."
+
+    @staticmethod
+    def _original_argument(text: str) -> str:
+        """What follows the command word in `text`, as typed. Commands are matched in lower case, but a key's name keeps its case."""
+        return text.strip().partition(" ")[2].strip()
+
+    def _key_name(self, arg: str) -> str:
+        """The key `arg` names: the last model's name for that key when `arg` is the index of a key that has one, and `arg` itself otherwise."""
+        names = self.session.key_names
+        if arg.isdigit() and int(arg) < len(names) and names[int(arg)]:
+            return names[int(arg)]
+        return arg
+
     @staticmethod
     def _describe_unknown(raw: str) -> str:
         matches = [word for word in _COMMAND_WORDS if word.startswith(raw)]
@@ -772,6 +835,8 @@ class ReloadedController:
                 self.set_seed(arg)
             case ("trial", _) if arg:
                 self.set_trial(arg)
+            case ("key", _) if arg:
+                self.set_key(self._original_argument(text))
             case ("", ""):
                 with self._lock:
                     last_command = self._last_command
@@ -1097,6 +1162,30 @@ class ReloadedController:
                 )
                 return
             self._log(f"[dim]Seed set to {self.session.seed}.[/dim]")
+        self._emit_status()
+
+    def set_key(self, arg: str) -> None:
+        """Sets the key every run starts from, by name or by index (which becomes the last model's name for that key when it has one). An empty string, `none`, or `null` goes back to the model's initial key. Refused while a run is in progress."""
+        if not self._idle_or_hint():
+            return
+        arg = arg.strip()
+        if arg.lower() in ("", "none", "null"):
+            self.session.start_key = None
+            self._log("[dim]Runs start from the initial key again.[/dim]")
+            self._emit_status()
+            return
+
+        key = self._key_name(arg)
+        self.session.start_key = key
+        self._log(f"[dim]Runs start from key [bold]{escape(key)}[/bold].[/dim]")
+        names = self.session.key_names
+        known = key in names or (key.isdigit() and int(key) < len(names))
+        if not known:
+            listed = ", ".join(n or str(i) for i, n in enumerate(names)) or "none"
+            self._log(
+                f"[bold yellow]The last model built has no key {escape(key)}.[/bold yellow] Its keys: {escape(listed)}. "
+                "The next run fails unless the generator adds it."
+            )
         self._emit_status()
 
     def set_trial(self, arg: str) -> None:

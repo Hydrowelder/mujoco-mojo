@@ -108,6 +108,22 @@ ParamField.-toggle:hover {
     background: $border-blurred;
 }
 
+/* the key picker: a one-row Select whose list opens over the log */
+KeyField {
+    width: auto;
+    height: 1;
+    padding: 0 1;
+}
+
+KeyField .label {
+    width: auto;
+    height: 1;
+}
+
+KeyField Select {
+    width: 22;
+}
+
 #panes {
     height: 1fr;
 }

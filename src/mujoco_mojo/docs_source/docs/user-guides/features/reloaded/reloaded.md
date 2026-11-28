@@ -56,6 +56,7 @@ Type a command and press ++enter++. Press ++tab++ to complete the one you are ty
 | `speed 0.5`, `speed 0`, `speed inf` | Set the playback speed for the next run, or for the one in progress: 1 is real time, `0` steps by hand, and `inf` runs as fast as it can. It does not start a run. |
 | `seed 42`                           | Set the seed. `seed none` clears it.                                                                                                                               |
 | `trial 3`                           | Set the trial number.                                                                                                                                              |
+| `key tossed`, `key 2`               | Start every run from that key, by name or number, until you change it. `key none` goes back to the key marked initial.                                             |
 | `watch`, `w`                        | Turn reloading on or off when your `*.py` files change.                                                                                                            |
 | `record`, `rec`                     | Turn telemetry and video recording on or off.                                                                                                                      |
 | `dojo`                              | Print the command that opens the Dojo for this session.                                                                                                            |
@@ -135,6 +136,7 @@ The buttons under the status bar (Gen, Run, Pause, Step, and Stop) do the same a
 You can also click a value in the status bar:
 
 - Click the seed, trial, or speed to type a new one. ++enter++ applies it and ++esc++ cancels.
+- Pick the key every run starts from in the key dropdown, which lists the keys of the last model built.
 - Click watch or record to switch it on or off.
 
 Closing the viewer window also closes Reloaded.
@@ -176,7 +178,7 @@ With `-ui studio` or `-ui web` the model is shown in MuJoCo Studio, and Studio's
 | Pause and play   | `pause` and `run`. The terminal's status bar changes too, and so does Studio's button when you pause in the terminal.                                                             |
 | Step             | `step`.                                                                                                                                                                           |
 | Speed slider     | `speed`. The slider runs from 0.1% to 100% of real time, so a speed above real time, `inf`, and manual stepping all show as 100%. Moving the slider sets a speed up to real time. |
-| Reset and Reload | ++enter++: runs the last command again once nothing is running. During a run they only remind you to `stop` it first.                                                             |
+| Reset and Reload | ++enter++: runs the last command again once nothing is running. During a run they only remind you to `stop` it first. Reset with a key picked in the Options panel also sets `key` to it. |
 
 Your generator builds the model, so a model file dropped onto Studio is ignored, and Studio's control noise setting has no effect.
 

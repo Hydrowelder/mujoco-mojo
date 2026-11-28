@@ -20,8 +20,13 @@
 - Docs updates
     - Added a tennis racket theorem example guide, with its model to open in MuJoCo Live
     - Added a Custom Signals guide
+    - Added a Keyframes guide
     - Each feature guide is now in a folder of its own, which changes its address on the docs site
 - Added `Mujoco.from_xml`, which reads a model from MJCF text or a file
+- Added key states (`JointState`, `FreeBodyState`, `ActuatorState`, `MocapState`), which set a `Key` by naming what it sets instead of by position in `qpos`
+    - `Key.initial` starts every run from that key
+    - Added a `key` command and key dropdown to Reloaded, which pick the key every run starts from
+- Fixed `Body.set_initial_velocity` spinning a rotated body about the wrong axis, and crashing on a body without a free joint
 - Settings, saved profiles and labs, and caches moved from `~/.mujoco-mojo` to the platform's standard folders, and existing files are moved there once
 - Fixed unit system conversions
     - `with_unit_system` turned an angle in degrees into radians, which the Dojo's display unit system did too

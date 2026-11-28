@@ -24,6 +24,7 @@ from mujoco_mojo.utils.layers.reloaded.controller import (
     RunState,
     StatusEvent,
     connection_lines,
+    key_options,
     speed_label,
 )
 
@@ -121,6 +122,87 @@ def test_rerun_starts_the_last_command_when_nothing_is_running(
 
     assert len(session.calls) == started + 1
     assert session.calls[-1] == session.calls[started - 1]
+
+
+def test_key_command_sets_the_key_every_run_starts_from(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    """The key keeps its case, though commands are matched in lower case, and stays set from one run to the next."""
+    session.key_names = ("rest", "Tossed")
+    controller.submit("key Tossed")
+    assert session.start_key == "Tossed"
+    assert controller.status().key == "Tossed"
+
+    controller.submit("gen")
+    wait_idle(controller)
+    controller.rerun()
+    wait_idle(controller)
+    assert session.started_from[-2:] == ["Tossed", "Tossed"]
+
+    controller.submit("key none")
+    assert session.start_key is None
+
+
+def test_key_by_index_becomes_the_name_of_that_key(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    session.key_names = ("rest", "", "tossed")
+    controller.set_key("2")
+    assert session.start_key == "tossed"
+
+    controller.set_key("1")
+    assert session.start_key == "1"
+
+
+def test_key_the_last_model_lacks_is_kept_with_a_warning(
+    controller: ReloadedController, session: FakeSession, log: EventLog
+) -> None:
+    """The generator may be about to add it, so it is set anyway, and the warning lists the keys there are."""
+    session.key_names = ("rest", "tossed")
+    controller.set_key("flipped")
+
+    assert session.start_key == "flipped"
+    assert any("no key flipped" in m and "rest, tossed" in m for m in log.messages())
+
+
+def test_key_is_refused_during_a_run(
+    controller: ReloadedController,
+    session: FakeSession,
+    stepping: SteppingRuntime,
+    log: EventLog,
+) -> None:
+    controller.set_key("tossed")
+
+    assert session.start_key is None
+
+
+def test_key_options_offer_the_initial_key_then_every_key(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    session.key_names = ("rest", "", "tossed")
+    session.initial_key = "tossed"
+    assert key_options(controller.status()) == [
+        ("initial (2: tossed)", "none"),
+        ("0: rest", "rest"),
+        ("1: (no name)", "1"),
+        ("2: tossed", "tossed"),
+    ]
+
+    session.initial_key = None
+    session.start_key = "flipped"
+    assert key_options(controller.status())[0] == ("default", "none")
+    assert key_options(controller.status())[-1] == (
+        "flipped (not in the model)",
+        "flipped",
+    )
+
+
+def test_explain_key_names_the_key_it_would_set(
+    controller: ReloadedController, session: FakeSession
+) -> None:
+    session.key_names = ("rest", "tossed")
+    assert controller.describe("key 1") == "Starts runs from key tossed."
+    assert controller.describe("key none") == "Starts runs from the initial key."
 
 
 def test_rerun_leaves_a_run_in_progress_alone_and_says_how_to_end_it(
